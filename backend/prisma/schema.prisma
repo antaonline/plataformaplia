@@ -1,0 +1,192 @@
+generator client {
+  provider = "prisma-client-js"
+  url      = env("DATABASE_URL")
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model Order {
+  id        Int      @id @default(autoincrement())
+  userId    Int?
+  email     String?
+  planId    Int
+  amount    Decimal
+  currency  String
+  status    OrderStatus @default(PENDING)
+  transactionId String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  payment   Payment?
+  plan      plan     @relation(fields: [planId], references: [id], map: "Order_planId_fkey")
+  user      user?    @relation(fields: [userId], references: [id], map: "Order_userId_fkey")
+
+  projects Project[]
+
+  @@index([planId], map: "Order_planId_fkey")
+  @@index([userId], map: "Order_userId_fkey")
+}
+
+model plan {
+  id           Int                   @id @default(autoincrement())
+  name         String
+  description  String
+  price        Float
+  hostingYear  Boolean               @default(true)
+  createdAt    DateTime              @default(now())
+  order        Order[]
+  subscription HostingSubscription[]
+}
+
+enum ProjectType {
+  LANDING
+  WEB
+}
+
+enum ProjectStatus {
+  WAITING_INFO
+  IN_PROGRESS
+  READY
+  DELIVERED
+}
+
+model Project {
+  id          Int       @id @default(autoincrement())
+  name        String
+  completed   Boolean   @default(false)
+  completedAt DateTime?
+  userId      Int
+  orderId     Int       @unique
+
+  type           ProjectType
+  status         ProjectStatus @default(WAITING_INFO)
+  onboardingData Json?
+  onboardingStep Int           @default(1)
+
+  startedAt DateTime?
+  deadline  DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  subscription HostingSubscription? @relation(fields: [hostingSubscriptionId], references: [id])
+
+  user                  user  @relation(fields: [userId], references: [id])
+  order                 Order @relation(fields: [orderId], references: [id])
+  hostingSubscriptionId Int?
+}
+
+model HostingSubscription {
+  id        Int       @id @default(autoincrement())
+  projectId Int
+  userId    Int
+  planId    Int
+  startDate DateTime  @default(now())
+  endDate   DateTime
+  status    String
+  nextBillingAt DateTime
+  lastChargedAt DateTime?
+  plan      plan      @relation(fields: [planId], references: [id], map: "Subscription_planId_fkey")
+  user      user      @relation(fields: [userId], references: [id], map: "Subscription_userId_fkey")
+  projects  Project[]
+
+  @@index([planId], map: "Subscription_planId_fkey")
+  @@index([userId], map: "Subscription_userId_fkey")
+}
+
+enum HostingSubscriptionStatus {
+  ACTIVE
+  FAILED
+  CANCELED
+}
+
+model user {
+  id            Int                   @id @default(autoincrement())
+  name          String
+  email         String                @unique(map: "User_email_key")
+  password      String
+  createdAt     DateTime              @default(now())
+  role          user_role             @default(USER)
+  order         Order[]
+  subscription  HostingSubscription[]
+  refreshTokens RefreshToken[]
+  email2faCodes Email2FACode[]
+  projects      Project[]
+  passwordSetupTokens PasswordSetupToken[]
+}
+
+model RefreshToken {
+  id          Int      @id @default(autoincrement())
+  token       String   @unique
+  userId      Int
+  fingerprint String
+  userAgent   String?
+  ip          String?
+  user        user     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  revoked     Boolean  @default(false)
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+
+  @@map("refreshtoken")
+}
+
+model Email2FACode {
+  id        String   @id @default(uuid())
+  userId    Int
+  code      String   @db.Char(6)
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user user @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model Payment {
+  id        Int      @id @default(autoincrement())
+  orderId   Int      @unique
+  amount    Float
+  transactionId    String?  @unique
+  authorizationCode String?
+  status    String
+  provider  String
+  providerResponse Json?   
+  createdAt DateTime @default(now())
+  rawResponse      Json
+  paidAt           DateTime?
+
+  order Order @relation(fields: [orderId], references: [id])
+}
+
+model PasswordSetupToken {
+  id        String   @id @default(uuid())
+  userId    Int
+  token     String   @unique
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user user @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+enum OrderStatus {
+  PENDING
+  PROCESSING
+  PAID
+  APPROVED
+  DECLINED
+  FAILED
+  CANCELLED
+}
+
+enum user_role {
+  USER
+  ADMIN
+}
