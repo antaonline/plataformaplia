@@ -36,10 +36,14 @@ export class AuthController {
   
   @Post('login')
   async login(
+
     @Body() body: { email: string; password: string },
     @Req() req: any,
     @Res({ passthrough: true }) res: Response,
   ) {
+
+    console.log('RAW BODY:', body); // 👈 AQUÍ
+    
     const fingerprint = generateFingerprint(req);
 
     const result = await this.authService.login(

@@ -49,9 +49,10 @@ export const VideoBackground = ({
         loop
         muted
         playsInline
-        preload="metadata"
+        preload="auto"
         poster={poster}
-        onLoadedData={() => setIsLoaded(true)}
+        onLoadedMetadata={() => setIsLoaded(true)}
+        onCanPlay={() => setIsLoaded(true)}
       >
         <source src={src} type="video/mp4" />
       </motion.video>

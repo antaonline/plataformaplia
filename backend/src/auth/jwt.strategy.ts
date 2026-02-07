@@ -16,6 +16,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       id: payload.sub,
       email: payload.email,
       role: payload.role, // 👈 ESTO ES OBLIGATORIO
+      name: payload.name,
       /*user: {
         id: payload.sub,
         email: payload.email,

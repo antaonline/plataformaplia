@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { SaveOnboardingDto } from './dto/save-onboarding.dto';
 import { ProjectStatus } from '@prisma/client';
 import { Prisma } from '@prisma/client';
+import { addDays, addHours } from 'date-fns';
 
 @Injectable()
 export class ProjectsService {
@@ -26,16 +27,30 @@ export class ProjectsService {
       ...dto.data,
     };
 
+    const shouldStart = dto.completed === true;
+    const startedAt = project.startedAt ?? (shouldStart ? new Date() : null);
+    let deadline = project.deadline ?? null;
+
+    if (shouldStart && project.order?.planId) {
+      const planId = project.order.planId;
+      if (planId === 1) {
+        deadline = addHours(new Date(), 48);
+      } else {
+        deadline = addDays(new Date(), 7);
+      }
+    }
+
     return this.prisma.project.update({
       where: { id: projectId },
       data: {
         onboardingData: mergedData,
         onboardingStep: dto.step,
         status: dto.completed
-          ? ProjectStatus.READY
+          ? ProjectStatus.IN_PROGRESS
           : ProjectStatus.IN_PROGRESS,
-        startedAt: project.startedAt ?? new Date(),
-        completedAt: dto.completed ? new Date() : null,
+        startedAt,
+        deadline,
+        completedAt: null,
       } as Prisma.ProjectUpdateInput,
     });
 
@@ -67,6 +82,93 @@ export class ProjectsService {
         order: {
           connect: { id: order.id },
         },
+      },
+    });
+  }
+
+  async findByUser(userId: number) {
+    return this.prisma.project.findFirst({
+      where: { userId },
+      include: {
+        order: {
+          include: {
+            plan: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async listForAdmin() {
+    return this.prisma.project.findMany({
+      include: {
+        user: true,
+        order: {
+          include: { plan: true },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async findForAdmin(id: number) {
+    return this.prisma.project.findUnique({
+      where: { id },
+      include: {
+        user: true,
+        order: {
+          include: { plan: true },
+        },
+      },
+    });
+  }
+
+  async publishProject(id: number, data: { publicUrl?: string }) {
+    const project = await this.prisma.project.findUnique({
+      where: { id },
+    });
+    if (!project) {
+      throw new NotFoundException('Project no encontrado.');
+    }
+
+    const mergedData = {
+      ...(project.onboardingData as any || {}),
+      ...(data.publicUrl ? { publicUrl: data.publicUrl } : {}),
+      publishedAt: new Date().toISOString(),
+    };
+
+    return this.prisma.project.update({
+      where: { id },
+      data: {
+        onboardingData: mergedData,
+        status: ProjectStatus.DELIVERED,
+        completed: true,
+        completedAt: new Date(),
+      },
+    });
+  }
+
+  async configureDb(id: number, data: { dbName?: string; dbUser?: string; dbPassword?: string }) {
+    const project = await this.prisma.project.findUnique({
+      where: { id },
+    });
+    if (!project) {
+      throw new NotFoundException('Project no encontrado.');
+    }
+
+    const mergedData = {
+      ...(project.onboardingData as any || {}),
+      dbConfigured: true,
+      dbName: data.dbName ?? null,
+      dbUser: data.dbUser ?? null,
+      dbPassword: data.dbPassword ?? null,
+    };
+
+    return this.prisma.project.update({
+      where: { id },
+      data: {
+        onboardingData: mergedData,
       },
     });
   }

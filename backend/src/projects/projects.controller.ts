@@ -5,6 +5,8 @@ import {
   Body,
   ParseIntPipe,
   UseGuards,
+  Get,
+  Req,
 } from '@nestjs/common';
 import { ProjectsService } from './projects.service';
 import { SaveOnboardingDto } from './dto/save-onboarding.dto';
@@ -28,6 +30,12 @@ export class ProjectsController {
         completed: body.completed ?? false,
       },
     );
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('me')
+  async me(@Req() req: any) {
+    return this.projectsService.findByUser(req.user.id);
   }
 
 }

@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { apiFetch } from '@/src/lib/api'
+import { apiFetch } from '@/lib/api'
 
 export default function Verify2FAPage() {
   const router = useRouter()
@@ -17,7 +17,7 @@ export default function Verify2FAPage() {
 
     const userId = Number(localStorage.getItem('2fa_userId'))
     if (!userId) {
-      setError('Sesión inválida')
+      setError('Sesion invalida')
       return
     }
 
@@ -32,13 +32,19 @@ export default function Verify2FAPage() {
         }),
       })
 
-      if (!res?.access_token) {
-        throw new Error('Código inválido o expirado')
+      const data = await res.json().catch(() => ({}))
+
+      if (!res.ok) {
+        throw new Error(data?.message || 'Codigo invalido o expirado')
       }
 
       localStorage.removeItem('2fa_userId')
-      localStorage.setItem('access_token', res.access_token)
-      localStorage.setItem('refresh_token', res.refresh_token)
+      if (data.access_token) {
+        localStorage.setItem('access_token', data.access_token)
+      }
+      if (data.refresh_token) {
+        localStorage.setItem('refresh_token', data.refresh_token)
+      }
 
       router.push('/dashboard')
 
@@ -51,10 +57,10 @@ export default function Verify2FAPage() {
 
   return (
     <form onSubmit={handleVerify}>
-      <h1>Verificación 2FA</h1>
+      <h1>Verificacion 2FA</h1>
 
       <input
-        placeholder="Código"
+        placeholder="Codigo"
         value={code}
         onChange={e => setCode(e.target.value)}
       />

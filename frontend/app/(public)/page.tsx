@@ -73,14 +73,15 @@ const plans = [
     originalPrice: 560,
     discount: 30,
     description: "Perfecto para empezar con una página sencilla y efectiva.",
+    detalle: "Pago único por desarrollo. Se renueva por S/. 135/anual",
     freeHosting: "Hosting gratis por 1 año",
     features: [
-      "Página de una sola sección",
+      "Una sola página enfocada a ventas",
       "Diseño profesional y moderno",
       "Optimizada para celulares",
       "Formulario de contacto",
       "Certificado de seguridad (HTTPS)",
-      "Entrega en 5 días hábiles",
+      "Entrega en 48 Horas!",
     ],
   },
   {
@@ -89,9 +90,10 @@ const plans = [
     originalPrice: 990,
     discount: 30,
     description: "Todo lo que necesitas para una presencia web completa.",
+    detalle: "Pago único por desarrollo. Se renueva por S/. 165/anual",
     freeHosting: "Hosting gratis por 1 año",
     features: [
-      "Hasta 5 páginas personalizadas",
+      "Web con hasta 5 páginas internas",
       "Diseño premium exclusivo",
       "Galería de fotos y videos",
       "Integración con WhatsApp",
@@ -99,6 +101,7 @@ const plans = [
       "Certificado de seguridad (HTTPS)",
       "Optimizado para Google",
       "Soporte prioritario por 3 meses",
+      "Entrega de 5 a 7 días hábiles!",
     ],
     isPopular: true,
   },
@@ -108,6 +111,7 @@ const plans = [
     originalPrice: 33,
     discount: 24,
     description: "Desarrolla tu web con inteligencia artificial y publícala en minutos.",
+    detalle: "Pago mensual, incluye hosting",
     freeHosting: "",
     features: [
       "Generación automática con IA",
@@ -192,7 +196,7 @@ export default function Home() {
     offset: ["start start", "end start"],
   });
   
-  const heroOpacity = useTransform(scrollYProgress, [0, 0.5, 0.2], [1, 1, 0.6]);
+  const heroOpacity = useTransform(scrollYProgress, [0, 0.5, 1], [1, 1, 0.6]);
   /*const heroOpacity = useTransform(scrollYProgress, [0, 0.5], [1, 0]);*/
   const heroScale = useTransform(scrollYProgress, [0, 0.5], [1, 1.1]);
   const heroY = useTransform(scrollYProgress, [0, 0.5], [0, 100]);
@@ -516,6 +520,7 @@ export default function Home() {
                 originalPrice={plan.originalPrice}
                 discount={plan.discount}
                 description={plan.description}
+                detalle={plan.detalle}
                 features={plan.features}
                 freeHosting={plan.freeHosting}
                 isPopular={plan.isPopular}

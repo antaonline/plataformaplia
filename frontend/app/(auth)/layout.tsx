@@ -46,7 +46,7 @@ export default function LoginLayout({
 
         <div className="min-h-screen flex flex-col">
           
-            <main style={{ padding: "0px" }}>
+            <main className="flex-1" style={{ padding: "0px" }}>
               {children}
             </main>
           

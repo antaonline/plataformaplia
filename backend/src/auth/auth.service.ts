@@ -73,6 +73,7 @@ export class AuthService {
           sub: safeUser.id,
           email: safeUser.email,
           role: safeUser.role,
+          name: safeUser.name,
         }
 
         const accessToken = this.jwtService.sign(payload, {
@@ -123,6 +124,7 @@ export class AuthService {
         sub: user.id,
         email: user.email,
         role: user.role,
+        name: user.name,
       },
       { expiresIn: '15m' },
     );
@@ -181,6 +183,7 @@ export class AuthService {
         sub: user.id,
         email: user.email,
         role: user.role,
+        name: user.name,
       },
       { expiresIn: '15m' },
     );
@@ -214,6 +217,7 @@ export class AuthService {
         sub: user.id,
         email: user.email,
         role: user.role,
+        name: user.name,
       },
       { expiresIn: '15m' },
     );

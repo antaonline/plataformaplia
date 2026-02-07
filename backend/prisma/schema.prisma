@@ -24,9 +24,21 @@ model Order {
   user      user?    @relation(fields: [userId], references: [id], map: "Order_userId_fkey")
 
   projects Project[]
+  domainSelection DomainSelection?
 
   @@index([planId], map: "Order_planId_fkey")
   @@index([userId], map: "Order_userId_fkey")
+}
+
+model DomainSelection {
+  id        Int      @id @default(autoincrement())
+  orderId   Int      @unique
+  domain    String
+  price     Decimal
+  currency  String
+  createdAt DateTime @default(now())
+
+  order Order @relation(fields: [orderId], references: [id])
 }
 
 model plan {

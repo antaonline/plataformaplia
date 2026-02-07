@@ -9,6 +9,7 @@ interface PlanCardProps {
   originalPrice: number;
   discount: number;
   description: string;
+  detalle: string;
   features: string[];
   freeHosting?: string;
   isPopular?: boolean;
@@ -23,6 +24,7 @@ export const PlanCard = ({
   originalPrice,
   discount,
   description,
+  detalle,
   features,
   freeHosting,
   isPopular = false,
@@ -33,7 +35,7 @@ export const PlanCard = ({
   return (
     <AnimatedSection delay={delay} direction="up">
       <div
-        className={`relative rounded-3xl p-8 h-full flex flex-col transition-all duration-300 ${
+        className={`relative rounded-2xl p-8 h-full flex flex-col transition-all duration-300 ${
           isDisabled 
             ? "bg-muted/50 border border-border/50 opacity-70"
             : isPopular
@@ -95,7 +97,11 @@ export const PlanCard = ({
             </span>
           </div>
           <p className={`text-sm mt-1 ${isPopular && !isDisabled ? "text-primary-foreground/70" : isDisabled ? "text-muted-foreground/70" : "text-muted-foreground"}`}>
-            Pago único
+            {isDisabled ? (
+              "Pago Mensual"
+            ) : (
+              "Pago único"
+            )}
           </p>
 
         </div>
@@ -103,20 +109,29 @@ export const PlanCard = ({
         <Button
           variant={isDisabled ? "outline" : isPopular ? "cta" : "dark"}
           size="lg"
-          className={`w-full ${isDisabled ? "cursor-not-allowed opacity-50" : ""}`}
+          className={`w-full ${isDisabled ? "cursor-not-allowed opacity-50 botoncomprar-home" : ""}`}
           disabled={isDisabled}
           asChild={!isDisabled}
         >
           {isDisabled ? (
             <span>Próximamente</span>
           ) : (
-            <Link className="botoncomprar-home" href="/contacto">Elegir este plan</Link>
+            <Link
+              className="botoncomprar-home"
+              href={name.toLowerCase().includes("landing") ? "/checkout?plan=landing" : "/checkout?plan=web"}
+            >
+              Elegir este plan
+            </Link>
           )}
         </Button>
 
+        <p className={`text-xs mb-4 ${isPopular && !isDisabled ? "text-primary-foreground/70" : isDisabled ? "text-muted-foreground/70" : "text-muted-foreground"}`}>
+            {detalle}
+        </p>
+
         {/* Free hosting badge */}
         {freeHosting && !isDisabled && (
-          <div className={`flex items-center gap-2 mb-6 p-3 rounded-xl ${isPopular ? "bg-cta/20" : "bg-cta/10"}`}>
+          <div className={`flex items-center gap-2 mb-4 p-3 rounded-xl ${isPopular ? "bg-cta/20" : "bg-cta/10"}`}>
             <Gift className={`w-5 h-5 ${isPopular ? "text-cta" : "text-cta"}`} />
             <span className={`text-sm font-medium ${isPopular ? "text-cta" : "text-foreground"}`}>
               {freeHosting}
@@ -124,11 +139,11 @@ export const PlanCard = ({
           </div>
         )}
 
-        <ul className="space-y-4 mb-8 flex-1">
+        <ul className="space-y-2 mb-8 flex-1">
           {features.map((feature, index) => (
             <li key={index} className="flex items-start gap-3">
               <div
-                className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${
+                className={`w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${
                   isDisabled 
                     ? "bg-muted-foreground/20" 
                     : isPopular 

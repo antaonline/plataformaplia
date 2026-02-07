@@ -11,6 +11,8 @@ export async function POST(req: Request) {
     body: JSON.stringify(body),
   })
 
+  console.log('API_URL:', API_URL)
+
   const data = await res.json()
   return NextResponse.json(data, { status: res.status })
 }

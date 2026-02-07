@@ -14,6 +14,8 @@ import { ProjectsService } from './projects/projects.service';
 import { OrdersModule } from './orders/orders.module';
 import { PaymentsModule } from './payments/payments.module';
 import { ScheduleModule } from '@nestjs/schedule';
+import { DomainsModule } from './domains/domains.module';
+import { CheckoutModule } from './checkout/checkout.module';
 
 import { ThrottlerModule } from '@nestjs/throttler'
 
@@ -36,6 +38,8 @@ import { ThrottlerModule } from '@nestjs/throttler'
     ProjectsModule,
     OrdersModule,
     PaymentsModule,
+    DomainsModule,
+    CheckoutModule,
   ],
   controllers: [AppController, OrdersController],
   providers: [AppService, ProjectsService],
