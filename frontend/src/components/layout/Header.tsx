@@ -33,42 +33,44 @@ export default function Header() {
 
   return (
     <header
-      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
+      className={`section-container mx-4 md:mx-auto lg:mx-auto rounded-sm fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
         isScrolled
-          ? "bg-white/95 backdrop-blur-md shadow-sm py-3"
+          ? "bg-customheader backdrop-blur-xl shadow-sm py-3"
           : "bg-transparent py-5"
       }`}
     >
-      <div className="section-container">
+      <div className="main-menu">
         <nav className="flex items-center justify-between">
-          {/* Logo */}
-          <Link href="/" className="flex items-center gap-2">
-            <div className="w-10 h-10 bg-cta rounded-xl flex items-center justify-center">
-              <span className="font-black text-cta-foreground text-xl">P</span>
-            </div>
-            <span className="font-bold text-2xl text-foreground">PLIA</span>
-          </Link>
+          <div className="flex items-center justify-start"> 
+            {/* Logo */}
+            <Link href="/" className="pr-10 flex items-center gap-2">
+              <div className="w-10 h-10 bg-cta rounded-xl flex items-center justify-center">
+                <span className="font-black text-cta-foreground text-xl">P</span>
+              </div>
+              <span className="font-bold text-2xl text-foreground">PLIA</span>
+            </Link>
 
-          {/* Desktop Navigation */}
-          <div className="hidden lg:flex items-center gap-8">
-            {navLinks.map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                className={`text-sm font-medium transition-colors hover:text-foreground ${
-                  pathname === link.href
-                    ? "text-foreground"
-                    : "text-muted-foreground"
-                }`}
-              >
-                {link.name}
-              </Link>
-            ))}
+            {/* Desktop Navigation */}
+            <div className="content-menu hidden lg:flex items-center gap-8">
+              {navLinks.map((link) => (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className={`item-menu text-sm font-medium transition-colors hover:text-foreground ${
+                    pathname === link.href
+                      ? "text-foreground"
+                      : "text-muted-foreground"
+                  }`}
+                >
+                  {link.name}
+                </Link>
+              ))}
+            </div>
           </div>
 
           {/* CTA Buttons */}
           <div className="hidden lg:flex items-center gap-3">
-            <Button variant="ghost" asChild>
+            <Button className="hablarsoporte" variant="ghost" asChild>
               <Link href="/contacto">Hablar con soporte</Link>
             </Button>
             <Button variant="cta" asChild>
@@ -79,7 +81,7 @@ export default function Header() {
           {/* Mobile Menu Button */}
           <button
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            className="lg:hidden p-2 text-foreground"
+            className="lg:hidden p-2 text-background"
           >
             {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
           </button>
@@ -93,7 +95,7 @@ export default function Header() {
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
-            className="lg:hidden bg-white border-t border-border"
+            className="lg:hidden mt-4 rounded-sm bg-white border-t border-border"
           >
             <div className="section-container py-6 flex flex-col gap-4">
               {navLinks.map((link) => (

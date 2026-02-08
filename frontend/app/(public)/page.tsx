@@ -14,6 +14,7 @@ import { FeatureCard } from "@/components/shared/FeatureCard";
 import { MagneticButton } from "@/components/shared/MagneticButton";
 import { ParallaxSection } from "@/components/shared/ParallaxSection";
 import { TestimonialCarousel } from "@/components/shared/TestimonialCarousel";
+import { LogosGrid } from '@/components/shared/LogosGrid';
 import { useSmoothScroll } from "@/hooks/useSmoothScroll";
 import { motion, useScroll, useTransform } from "framer-motion";
 import { useRef } from "react";
@@ -30,6 +31,7 @@ import {
 
 const heroVideo = "/videos/hero-video.mp4";
 const heroImage = "/imagenes/hero-main.jpg";
+const stepsVideo = "/videos/steps-video.mp4";
 const illustrationWebBuild = "/imagenes/illustration-web-build.png";
 const testimonialsBg = "/imagenes/testimonials-bg.jpg";
 
@@ -172,7 +174,7 @@ const steps = [
   {
     number: 1,
     title: "Cuéntanos sobre tu negocio",
-    description: "Nos escribes por WhatsApp o correo y nos cuentas qué hace tu negocio y qué necesitas. Es una conversación simple.",
+    description: "Ingresas a PLIA, nos cuentas sobre tu negocio y qué necesitas llenando un sencillo formulario.",
   },
   {
     number: 2,
@@ -182,7 +184,7 @@ const steps = [
   {
     number: 3,
     title: "¡Tu web está lista!",
-    description: "Publicamos tu página y te enseñamos cómo funciona. Ya puedes compartirla con tus clientes.",
+    description: "Publicamos tu página y la dejamos lista para que la vea el mundo. Ya puedes compartirla con tus clientes.",
   },
 ];
 
@@ -200,7 +202,6 @@ export default function Home() {
   /*const heroOpacity = useTransform(scrollYProgress, [0, 0.5], [1, 0]);*/
   const heroScale = useTransform(scrollYProgress, [0, 0.5], [1, 1.1]);
   const heroY = useTransform(scrollYProgress, [0, 0.5], [0, 100]);
-
   return (
     <>
     
@@ -471,16 +472,64 @@ export default function Home() {
             description="No necesitas saber nada de tecnología. Nosotros hacemos todo el trabajo pesado."
           />
           
-          <div className="max-w-2xl mx-auto mt-16 space-y-12">
-            {steps.map((step, index) => (
-              <StepCard
-                key={step.number}
-                number={step.number}
-                title={step.title}
-                description={step.description}
-                delay={index * 0.15}
-              />
-            ))}
+          <div className="mt-16 grid gap-12 lg:grid-cols-[1.15fr_0.85fr] items-start">
+
+            <div className="hidden lg:block space-y-0">
+              {steps.map((step, index) => (
+                <div key={step.number} className="min-h-[70vh] lg:min-h-screen flex items-center">
+                  <motion.div
+                    initial={{ opacity: 0, y: 40 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ amount: 0.6, once: true }}
+                    transition={{ duration: 0.6, delay: index * 0.1 }}
+                    className="w-full"
+                  >
+                    <StepCard
+                      number={step.number}
+                      title={step.title}
+                      description={step.description}
+                      delay={0}
+                    />
+                  </motion.div>
+                </div>
+              ))}
+            </div>
+
+            <div className="block md:hidden space-y-0">
+              {steps.map((step, index) => (
+                <div key={step.number} className="!mb-6 flex items-center">
+                  <motion.div
+                    initial={{ opacity: 0, y: 40 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ amount: 0.6, once: true }}
+                    transition={{ duration: 0.6, delay: index * 0.1 }}
+                    className="w-full"
+                  >
+                    <StepCard
+                      number={step.number}
+                      title={step.title}
+                      description={step.description}
+                      delay={0}
+                    />
+                  </motion.div>
+                </div>
+              ))}
+            </div>
+
+            <div className="lg:sticky lg:top-24">
+              <div className="relative overflow-hidden rounded-2xl border border-border bg-foreground/5 aspect-[4/5]">
+                <VideoBackground
+                  src={stepsVideo}
+                  poster={heroImage}
+                  overlayOpacity={0.25}
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-foreground/40 via-transparent to-transparent" />
+                <div className="absolute bottom-6 left-6 right-6 text-white">
+                  <p className="text-sm uppercase tracking-wide text-white/70">Tu web en marcha</p>
+                  <p className="text-xl font-semibold">Acompañamos cada paso</p>
+                </div>
+              </div>
+            </div>
           </div>
           
           <motion.div
@@ -547,6 +596,20 @@ export default function Home() {
           </motion.div>
         </div>
       </section>
+
+
+      {/* Logos Section */}
+      <section className="py-20 md:py-28">
+        <div className="full">
+          <SectionHeader
+            badge="Stack Profesional"
+            title="Trabajamos con la mejor tecnología"
+            description="Usamos herramientas modernas desde el desarrollo hasta el hosting, para que tu web funcione rápido, segura y sin complicaciones."
+          />
+          <LogosGrid />
+        </div>
+      </section>
+
 
       {/* Testimonials Section with Glassmorphism Carousel */}
       <section className="py-20 md:py-28 relative overflow-hidden">
@@ -641,3 +704,8 @@ export default function Home() {
     </>
   );
 }
+
+
+
+
+

@@ -99,7 +99,7 @@ export default function SetPasswordPage() {
             <div className="grid lg:grid-cols-5 gap-10 w-full h-full">
 
 
-              <div className="lg:col-span-2 bg-white rounded-3xl border border-border shadow-card p-8 md:p-10 h-full flex flex-col justify-center">
+              <div className="lg:col-span-2 bg-white rounded-2xl border border-border shadow-card p-8 md:p-10 h-full flex flex-col justify-center">
                 <div className="flex items-center justify-between mb-10">
                   <div className="flex items-center gap-2">
                     <div className="w-10 h-10 bg-cta rounded-xl flex items-center justify-center">
@@ -173,7 +173,7 @@ export default function SetPasswordPage() {
                 </div>
               </div>
 
-              <div className="lg:col-span-3 relative rounded-3xl overflow-hidden border border-border h-full hidden lg:block">
+              <div className="lg:col-span-3 relative rounded-2xl overflow-hidden border border-border h-full hidden lg:block">
                 <video
                   className="absolute inset-0 h-full w-full object-cover"
                   src="/videos/hero-video.mp4"

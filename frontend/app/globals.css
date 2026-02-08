@@ -141,6 +141,29 @@
 }
 
 /* Smooth scrolling base */
+
+header.bg-transparent .content-menu .item-menu {
+  color: hsl(var(--primary-foreground));
+}
+
+header.bg-customheader {
+  margin-top: 10px;
+  background-color: #0000004d;
+}
+
+header.bg-customheader .item-menu.text-muted-foreground {
+  color: hsl(var(--primary-foreground));
+}
+
+.content-menu .item-menu.text-foreground {
+  color: hsl(var(--cta));
+}
+
+header.bg-transparent .hablarsoporte, header.bg-customheader .hablarsoporte {
+  color: hsl(var(--primary-foreground));
+}
+
+
 html.lenis {
   height: auto;
 }
@@ -164,6 +187,7 @@ html.lenis {
 
 @layer components {
 
+  
   .loginform {
     margin-bottom: 15px;
   }
