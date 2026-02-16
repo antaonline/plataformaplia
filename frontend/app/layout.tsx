@@ -1,19 +1,16 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+/*import { Sansation } from "next/font/google";*/
 import Script from "next/script";
 import "./globals.css";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+/*const sansationfont = Sansation ({
   subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+  variable: "--font-sansation",
+  weight: ["300", "400", "700"], // ← OBLIGATORIO
+  display: "swap",
+});*/
 
 export const metadata: Metadata = {
   title: "Lovable App",
@@ -41,9 +38,12 @@ export default function RootLayout({
   return (
     <html lang="es">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={` antialiased`}
       >
-
+        <link
+          href="https://fonts.googleapis.com/css2?family=Sansation:ital,wght@0,300;0,400;0,700;1,300;1,400;1,700&display=swap"
+          rel="stylesheet"
+        />
         <Script
           src="https://sandbox-checkout.izipay.pe/payments/v1/js/index.js"
           strategy="afterInteractive"

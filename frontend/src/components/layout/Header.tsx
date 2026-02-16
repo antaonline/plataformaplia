@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import Image from "next/image";
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "framer-motion";
@@ -14,10 +15,17 @@ const navLinks = [
   { name: "Contacto", href: "/contacto" },
 ];
 
+
 export default function Header() {
+
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const pathname = usePathname();
+
+  /* SECCIÓN QUE PONE FONDO EN PÁGINAS INTERNAS */
+  const pagesWithSolidBg = ["/planes", "/como-funciona", "/sobre-nosotros", "/contacto"]
+  const hasSolidBg = pagesWithSolidBg.includes(pathname)
+  /* FIN - SECCIÓN QUE PONE FONDO EN PÁGINAS INTERNAS */
 
   useEffect(() => {
     const handleScroll = () => {
@@ -33,21 +41,28 @@ export default function Header() {
 
   return (
     <header
-      className={`section-container mx-4 md:mx-auto lg:mx-auto rounded-sm fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
+      className={`section-container mt-2 mx-4 md:mx-auto lg:mx-auto rounded-sm fixed top-0 left-0 right-0 z-50 transition-all duration-300 
+      ${
         isScrolled
+          ? "bg-customheader !mt-4 backdrop-blur-xl shadow-sm py-3"
+          : hasSolidBg
           ? "bg-customheader backdrop-blur-xl shadow-sm py-3"
           : "bg-transparent py-5"
       }`}
+
     >
       <div className="main-menu">
         <nav className="flex items-center justify-between">
           <div className="flex items-center justify-start"> 
-            {/* Logo */}
             <Link href="/" className="pr-10 flex items-center gap-2">
-              <div className="w-10 h-10 bg-cta rounded-xl flex items-center justify-center">
-                <span className="font-black text-cta-foreground text-xl">P</span>
-              </div>
-              <span className="font-bold text-2xl text-foreground">PLIA</span>
+              <Image
+                src="/plia-logo-white.svg"
+                alt="PLIA"
+                width={120}
+                height={32}
+                priority
+                className="h-8 w-auto"
+              />
             </Link>
 
             {/* Desktop Navigation */}

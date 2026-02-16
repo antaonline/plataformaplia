@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import Image from "next/image";
 
 const footerLinks = {
   producto: [
@@ -24,12 +25,14 @@ export default function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-10">
           {/* Brand */}
           <div className="lg:col-span-1">
-            <Link href="/" className="flex items-center gap-2 mb-4">
-              <div className="w-10 h-10 bg-cta rounded-xl flex items-center justify-center">
-                <span className="font-black text-cta-foreground text-xl">P</span>
-              </div>
-              <span className="font-bold text-2xl">PLIA</span>
-            </Link>
+            <Image
+              src="/plia-logo-white.svg"
+              alt="PLIA"
+              width={150}
+              height={32}
+              priority
+              className="h-10 w-auto mb-6"
+            />
             <p className="text-primary-foreground/70 text-sm leading-relaxed mb-6">
               Tu web lista sin complicaciones. Nosotros nos encargamos de todo para que tú solo te preocupes por tu negocio.
             </p>

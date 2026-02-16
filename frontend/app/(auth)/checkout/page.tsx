@@ -6,6 +6,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
+import Link from "next/link";
+import Image from "next/image";
+
 const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
 const apiBase = apiUrl.endsWith('/api') ? apiUrl : `${apiUrl}/api`;
 
@@ -267,10 +270,14 @@ export default function CheckoutPage() {
     <section className="bg-muted/30 py-10 md:py-16">
       <div className="section-container w-full max-w-5xl mx-auto px-4">
         <div className="flex items-center gap-3 mb-6">
-          <div className="w-10 h-10 bg-cta rounded-xl flex items-center justify-center">
-            <span className="font-black text-cta-foreground text-xl">P</span>
-          </div>
-          <span className="font-bold text-2xl text-foreground">PLIA</span>
+          <Image
+            src="/plia-logo-black.svg"
+            alt="PLIA"
+            width={120}
+            height={32}
+            priority
+            className="h-8 w-auto"
+          />
         </div>
 
         <div className="flex items-center justify-between">

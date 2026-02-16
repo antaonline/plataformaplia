@@ -4,8 +4,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import Link from 'next/link';
 import { User as UserIcon, Settings, CreditCard, LifeBuoy, LogOut } from 'lucide-react';
+
+import Image from "next/image";
+import Link from "next/link";
 
 const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
 const apiBase = apiUrl.endsWith('/api') ? apiUrl : `${apiUrl}/api`;
@@ -245,12 +247,17 @@ export default function DashboardPage() {
       <div className="grid lg:grid-cols-[260px_1fr]">
         <aside className="hidden lg:flex flex-col border-r border-border bg-white/80 backdrop-blur-sm min-h-screen px-4 py-6">
           <div className="flex items-center gap-2 mb-2">
-            <div className="w-9 h-9 bg-cta rounded-xl flex items-center justify-center">
-              <span className="font-black text-cta-foreground text-lg">P</span>
+            <div className="w-9 h-9 flex items-center justify-center">
+              <Image
+                src="/iconplia.svg"
+                alt="Icono PLIA"
+                width={44}
+                height={44}
+                className="w-10 h-10 sm:w-11 sm:h-11"
+              />
             </div>
             <div>
-              <div className="text-sm text-muted-foreground">PLIA</div>
-              <div className="font-semibold">Tu Web Facil</div>
+              <div className="font-semibold">Tu Web Fácil</div>
             </div>
           </div>
 

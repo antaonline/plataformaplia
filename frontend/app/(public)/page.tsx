@@ -11,10 +11,15 @@ import { VideoBackground } from "@/components/shared/VideoBackground";
 import { SplitText } from "@/components/shared/SplitText";
 import { ScrollIndicator } from "@/components/shared/ScrollIndicator";
 import { FeatureCard } from "@/components/shared/FeatureCard";
+import { StackingCards } from "@/components/shared/StackingCards";
 import { MagneticButton } from "@/components/shared/MagneticButton";
 import { ParallaxSection } from "@/components/shared/ParallaxSection";
 import { TestimonialCarousel } from "@/components/shared/TestimonialCarousel";
 import { LogosGrid } from '@/components/shared/LogosGrid';
+import { ComparisonTable } from "@/components/shared/ComparisonTable";
+
+/*import { DeepParticleField } from "@/components/shared/DeepParticleField";*/
+
 import { useSmoothScroll } from "@/hooks/useSmoothScroll";
 import { motion, useScroll, useTransform } from "framer-motion";
 import { useRef } from "react";
@@ -29,44 +34,21 @@ import {
   CheckCircle2
 } from "lucide-react";
 
+import dynamic from "next/dynamic"
+
+const DeepParticleField = dynamic(
+  () => import("@/components/shared/DeepParticleField").then(mod => mod.DeepParticleField),
+  { ssr: false }
+)
+
+
 const heroVideo = "/videos/hero-video.mp4";
 const heroImage = "/imagenes/hero-main.jpg";
 const stepsVideo = "/videos/steps-video.mp4";
+const ejemplo1 = "/videos/videotop-ejemplo.mp4";
 const illustrationWebBuild = "/imagenes/illustration-web-build.png";
-const testimonialsBg = "/imagenes/testimonials-bg.jpg";
+const testimonialsBg = "/imagenes/testimonials-bg.png";
 
-const features = [
-  {
-    icon: Zap,
-    title: "Tu web lista en días",
-    description: "Sin esperar semanas o meses. Diseñamos y publicamos tu página rápidamente para que empieces a vender.",
-  },
-  {
-    icon: Shield,
-    title: "Todo incluido",
-    description: "Dominio, diseño y soporte. No te preocupes por términos técnicos, nosotros nos encargamos de todo.",
-  },
-  {
-    icon: Headphones,
-    title: "Soporte en español",
-    description: "Equipo local que entiende tus necesidades. Te acompañamos paso a paso, sin complicaciones.",
-  },
-  {
-    icon: Globe,
-    title: "Tu negocio en internet",
-    description: "Presencia profesional online para que tus clientes te encuentren fácilmente desde cualquier dispositivo.",
-  },
-  {
-    icon: Palette,
-    title: "Diseño profesional",
-    description: "Páginas modernas y atractivas que generan confianza en tus clientes y reflejan la calidad de tu negocio.",
-  },
-  {
-    icon: Clock,
-    title: "Atención personalizada",
-    description: "No eres un número más. Te escuchamos y creamos la web perfecta para tu tipo de negocio.",
-  },
-];
 
 const plans = [
   {
@@ -206,26 +188,24 @@ export default function Home() {
     <>
     
       {/* Hero Section with Video Background - Left Aligned */}
-      <section ref={heroRef} className="relative min-h-screen flex items-center overflow-hidden">
+      <section ref={heroRef} className="relative min-h-screen flex overflow-hidden">
         {/* Video Background */}
         <motion.div
           className="absolute inset-0"
           style={{ opacity: heroOpacity, scale: heroScale }}
         >
-          <VideoBackground
-            src={heroVideo}
-            poster={heroImage}
-            overlayOpacity={0.6}
-          />
+          <DeepParticleField />
         </motion.div>
         
+        
+
         <motion.div
-          className="section-container w-full grid grid-cols-3 max-w-7xl z-10 pt-24 pb-20"
+          className="lg:bg-transparent bg-primary/60 section-container w-full grid grid-cols-1 lg:grid-cols-3 max-w-7xl z-10 pt-24 pb-20 gap-10"
           style={{ y: heroY }}
         >
-          <div className="col-span-2 items-center items-center">
-            {/* Left Content */}
-            <div className="text-left">
+          {/* IZQUIERDA – TEXTO */}
+          <div className="col-span-full lg:col-span-2 flex flex-col h-full items-center lg:items-start text-center  lg:text-left">
+            <div className="lg:text-left mt-auto">
               {/* Badge */}
               <motion.span
                 initial={{ opacity: 0, y: 20, scale: 0.9 }}
@@ -235,141 +215,152 @@ export default function Home() {
               >
                 🇵🇪 Hecho para emprendedores peruanos
               </motion.span>
-              
-              {/* Main Title with Split Text Animation */}
+
+              {/* Título */}
               <h1 className="text-4xl md:text-5xl lg:text-7xl font-bold text-white mb-8 leading-tight">
-                <SplitText
-                  text="Tu web lista,"
-                  delay={0.4}
-                  staggerDelay={0.04}
-                />
+                <SplitText text="Tu web lista," delay={0.4} staggerDelay={0.04} />
                 <br />
                 <span className="text-cta">
-                  <SplitText
-                    text="sin complicaciones"
-                    delay={0.8}
-                    staggerDelay={0.04}
-                  />
+                  <SplitText text="sin complicaciones" delay={0.8} staggerDelay={0.04} />
                 </span>
               </h1>
-              
-              {/* Subtitle */}
+
+              {/* Subtítulo */}
               <motion.p
                 initial={{ opacity: 0, y: 30 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.8, delay: 1.2 }}
-                className="text-lg md:text-xl text-white/80 mb-10 leading-relaxed max-w-xl"
+                className="text-lg md:text-xl text-white/80 leading-relaxed max-w-xl"
               >
-                Nosotros nos encargamos de todo: dominio, diseño y publicación. 
+                Nosotros nos encargamos de todo: dominio, diseño y publicación.
                 Tú solo preocúpate de atender a tus clientes.
               </motion.p>
-              
-              {/* CTA Buttons */}
-              <motion.div
-                initial={{ opacity: 0, y: 30 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.8, delay: 1.4 }}
-                className="flex flex-col sm:flex-row gap-4 mb-10"
-              >
-                <MagneticButton>
-                  <Button variant="cta" size="xl" asChild className="group">
-                    <Link href="/planes">
-                      Ver Planes desde S/ 390
-                      <motion.span
-                        className="inline-block ml-2"
-                        animate={{ x: [0, 5, 0] }}
-                        transition={{ duration: 1.5, repeat: Infinity }}
-                      >
-                        <ArrowRight className="w-5 h-5" />
-                      </motion.span>
-                    </Link>
-                  </Button>
-                </MagneticButton>
-                <MagneticButton>
-                  <Button variant="outline" size="xl" asChild className="bg-white/10 border-white/30 text-white hover:bg-white/20 backdrop-blur-sm">
-                    <Link href="/como-funciona">¿Cómo funciona?</Link>
-                  </Button>
-                </MagneticButton>
-              </motion.div>
-              
-              {/* Trust Indicators */}
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 0.8, delay: 1.6 }}
-                className="flex flex-wrap gap-6 text-sm text-white/70"
-              >
-                {[
-                  "Sin conocimientos técnicos",
-                  "Lista en días",
-                  "Soporte incluido",
-                ].map((item, index) => (
-                  <motion.div
-                    key={item}
-                    className="flex items-center gap-2"
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 1.8 + index * 0.1 }}
+            </div>
+          </div>
+
+          {/* DERECHA – BULLETS + CTA */}
+          <div className="col-span-full lg:col-span-1 flex flex-col h-full items-center lg:items-end text-center lg:text-right">
+            {/* Badge + texto */}
+            <div className="flex items-center gap-4 mb-6 justify-center lg:justify-end">
+              <div className="relative w-24 h-24 sm:w-28 sm:h-28">
+                <svg
+                  viewBox="0 0 200 200"
+                  className="absolute inset-0 w-full h-full badge-spin"
+                  aria-hidden="true"
+                >
+                  <defs>
+                    <path
+                      id="badge-text-circle"
+                      d="M 100, 100 m -72, 0 a 72,72 0 1,1 144,0 a 72,72 0 1,1 -144,0"
+                    />
+                  </defs>
+                  <text
+                    fill="currentColor"
+                    fontSize="14"
+                    letterSpacing="3"
+                    className="text-white/80"
                   >
-                    <CheckCircle2 className="w-5 h-5 text-cta" />
-                    <span>{item}</span>
-                  </motion.div>
-                ))}
-              </motion.div>
+                    <textPath
+                      className="font-semibold"
+                      href="#badge-text-circle"
+                      startOffset="0%"
+                    >
+                      WEB RÁPIDA Y SIMPLE • WEB RÁPIDA Y SIMPLE •
+                    </textPath>
+                  </text>
+                </svg>
+
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <Image
+                    src="/iconplia.svg"
+                    alt="Icono PLIA"
+                    width={44}
+                    height={44}
+                    className="w-10 h-10 sm:w-11 sm:h-11"
+                  />
+                </div>
+              </div>
+
+              <div className="text-sm sm:text-base text-white/90 leading-snug max-w-[150px] text-center lg:text-right">
+                Velocidad real para
+                <br />
+                negocios reales
+              </div>
             </div>
 
-            {/* Right Side - Empty for visual balance with video background */}
-            <div className="hidden lg:block" />
+            {/* Bullets */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.8, delay: 1.6 }}
+              className="flex-col gap-2 mb-6 text-sm text-white/80 mt-auto items-center lg:items-end"
+            >
+              {[
+                "Sin conocimientos técnicos",
+                "Lista en días",
+                "Soporte incluido",
+              ].map((item, index) => (
+                <motion.div
+                  key={item}
+                  className="flex items-center gap-2 justify-center lg:justify-end"
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 1.8 + index * 0.1 }}
+                >
+                  <CheckCircle2 className="w-5 h-5 text-cta" />
+                  <span>{item}</span>
+                </motion.div>
+              ))}
+            </motion.div>
+
+            {/* Botones */}
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.8, delay: 1.4 }}
+              className="flex-col sm:flex-row gap-4 items-center"
+            >
+              <MagneticButton>
+                <Button variant="cta" size="xl" asChild className="group mb-4">
+                  <Link href="/planes">
+                    Ver Planes desde S/ 390
+                    <motion.span
+                      className="inline-block ml-2"
+                      animate={{ x: [0, 5, 0] }}
+                      transition={{ duration: 1.5, repeat: Infinity }}
+                    >
+                      <ArrowRight className="w-5 h-5" />
+                    </motion.span>
+                  </Link>
+                </Button>
+              </MagneticButton>
+
+              <MagneticButton>
+                <Button
+                  variant="outline"
+                  size="xl"
+                  asChild
+                  className="bg-white/10 border-white/30 text-white hover:bg-white/20 backdrop-blur-sm"
+                >
+                  <Link href="/como-funciona">¿Cómo funciona?</Link>
+                </Button>
+              </MagneticButton>
+            </motion.div>
           </div>
         </motion.div>
+
         
         {/* Scroll Indicator */}
         <div className="absolute bottom-8 left-8 z-10">
           <ScrollIndicator />
         </div>
-      </section>
 
-      {/* Trust Badges */}
-      <section className="py-16 bg-secondary/50 border-y border-border relative overflow-hidden">
-        <ParallaxSection speed={0.3}>
-          <div className="section-container">
-            <motion.div
-              initial={{ opacity: 0 }}
-              whileInView={{ opacity: 1 }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.8 }}
-              className="flex flex-wrap justify-center items-center gap-8 md:gap-16 text-muted-foreground"
-            >
-              {[
-                { value: "500+", label: "Webs creadas" },
-                { value: "98%", label: "Clientes satisfechos" },
-                { value: "5 días", label: "Tiempo promedio" },
-                { value: "24/7", label: "Soporte disponible" },
-              ].map((stat, index) => (
-                <motion.div
-                  key={stat.label}
-                  className="text-center"
-                  initial={{ opacity: 0, y: 30 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: index * 0.1, duration: 0.6 }}
-                >
-                  <motion.p
-                    className="text-3xl md:text-4xl font-bold text-foreground"
-                    initial={{ scale: 0.5 }}
-                    whileInView={{ scale: 1 }}
-                    viewport={{ once: true }}
-                    transition={{ delay: index * 0.1 + 0.2, type: "spring", stiffness: 200 }}
-                  >
-                    {stat.value}
-                  </motion.p>
-                  <p className="text-sm">{stat.label}</p>
-                </motion.div>
-              ))}
-            </motion.div>
-          </div>
-        </ParallaxSection>
       </section>
+      
+
+       {/* Stacking Cards Section */}
+      <StackingCards />
+
 
       {/* Problem/Solution Section */}
       <section className="py-20 md:py-28 relative overflow-hidden">
@@ -381,19 +372,34 @@ export default function Home() {
               viewport={{ once: true }}
               transition={{ duration: 0.8 }}
               style={{ perspective: 1000 }}
+             
             >
-              <img
-                src={illustrationWebBuild}
-                alt="Ilustración de creación de páginas web"
-                className="w-full max-w-lg mx-auto"
-              />
+              
+
+                <div className="relative overflow-hidden rounded-2xl border border-border bg-foreground/5 aspect-[4/4]">
+                  <VideoBackground
+                    src={ejemplo1}
+                    poster={heroImage}
+                    overlayOpacity={0.25}
+                  />
+        
+                  <div className="absolute inset-0 bg-gradient-to-t via-transparent to-transparent" />
+                    <div className="absolute bottom-6 left-6 right-6 text-white">
+                      <p className="text-sm uppercase tracking-wide text-white/70">Déjalo en nuestras manos</p>
+                      <p className="text-xl font-semibold">Tener tu web nunca fue más rápido y fácil.</p>
+                    </div>
+                  </div>
+
+              
+
+
             </motion.div>
             
             <div>
               <SectionHeader
                 badge="El problema"
                 title="¿Crear una web te parece complicado?"
-                description="Sabemos que pensar en dominios, hosting, diseño y todo eso puede ser abrumador. No tienes tiempo para aprender cosas técnicas cuando lo que quieres es hacer crecer tu negocio."
+                description="Sabemos que pensar en dominios, hosting, diseño y todo eso puede ser abrumador. Te ofrecemos todo en uno y en tiempo record para que te enfoques en hacer crecer tu negocio."
                 centered={false}
               />
               
@@ -441,7 +447,7 @@ export default function Home() {
       </section>
 
       {/* Features Section - Without Videos */}
-      <section className="py-20 md:py-28 bg-secondary/30 relative overflow-hidden">
+      {/*<section className="py-20 md:py-28 bg-secondary/30 relative overflow-hidden">
         <div className="section-container">
           <SectionHeader
             badge="¿Por qué PLIA?"
@@ -459,6 +465,22 @@ export default function Home() {
                 delay={index * 0.1}
               />
             ))}
+          </div>
+
+        </div>
+      </section>*/}
+
+      {/* Comparison Section */}
+      <section className="py-20 md:py-28">
+        <div className="section-container">
+          <SectionHeader
+            badge="La diferencia PLIA"
+            title="¿Por qué elegirnos?"
+            description="Compara y descubre por qué somos la mejor opción para tu negocio."
+          />
+          
+          <div className="mt-12">
+            <ComparisonTable />
           </div>
         </div>
       </section>
@@ -518,11 +540,12 @@ export default function Home() {
 
             <div className="lg:sticky lg:top-24">
               <div className="relative overflow-hidden rounded-2xl border border-border bg-foreground/5 aspect-[4/5]">
-                <VideoBackground
+                {/*<VideoBackground
                   src={stepsVideo}
                   poster={heroImage}
                   overlayOpacity={0.25}
-                />
+                /> */}
+                <DeepParticleField />
                 <div className="absolute inset-0 bg-gradient-to-t from-foreground/40 via-transparent to-transparent" />
                 <div className="absolute bottom-6 left-6 right-6 text-white">
                   <p className="text-sm uppercase tracking-wide text-white/70">Tu web en marcha</p>
@@ -599,7 +622,7 @@ export default function Home() {
 
 
       {/* Logos Section */}
-      <section className="py-20 md:py-28">
+      {/*<section className="py-20 md:py-28">
         <div className="full">
           <SectionHeader
             badge="Stack Profesional"
@@ -608,6 +631,48 @@ export default function Home() {
           />
           <LogosGrid />
         </div>
+      </section>*/}
+
+      {/* Trust Badges */}
+      <section className="py-16 bg-secondary/50 border-y border-border relative overflow-hidden">
+        <ParallaxSection speed={0.3}>
+          <div className="section-container">
+            <motion.div
+              initial={{ opacity: 0 }}
+              whileInView={{ opacity: 1 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.8 }}
+              className="flex flex-wrap justify-center items-center gap-8 md:gap-16 text-muted-foreground"
+            >
+              {[
+                { value: "500+", label: "Webs creadas" },
+                { value: "98%", label: "Clientes satisfechos" },
+                { value: "5 días", label: "Tiempo promedio" },
+                { value: "24/7", label: "Soporte disponible" },
+              ].map((stat, index) => (
+                <motion.div
+                  key={stat.label}
+                  className="text-center"
+                  initial={{ opacity: 0, y: 30 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: index * 0.1, duration: 0.6 }}
+                >
+                  <motion.p
+                    className="text-3xl md:text-4xl font-bold text-foreground"
+                    initial={{ scale: 0.5 }}
+                    whileInView={{ scale: 1 }}
+                    viewport={{ once: true }}
+                    transition={{ delay: index * 0.1 + 0.2, type: "spring", stiffness: 200 }}
+                  >
+                    {stat.value}
+                  </motion.p>
+                  <p className="text-sm">{stat.label}</p>
+                </motion.div>
+              ))}
+            </motion.div>
+          </div>
+        </ParallaxSection>
       </section>
 
 
@@ -704,7 +769,6 @@ export default function Home() {
     </>
   );
 }
-
 
 
 
