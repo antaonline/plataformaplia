@@ -14,13 +14,13 @@ export const metadata: Metadata = {
     description: "Tu Plataforma de soluciones web sin complicaciones",
     images: [
       {
-        url: "https://lovable.dev/opengraph-image-p98pqg.png",
+        url: "/pliaportadaurl.png",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    images: ["https://lovable.dev/opengraph-image-p98pqg.png"],
+    images: ["/pliaportadaurl.png"],
   },
 };
 

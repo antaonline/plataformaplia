@@ -13,20 +13,20 @@ import Footer from "@/components/layout/Footer";
 });*/
 
 export const metadata: Metadata = {
-  title: "Lovable App",
-  description: "Lovable Generated Project",
+  title: "Plia",
+  description: "Plataforma de soluciones web sin complicaciones",
   openGraph: {
-    title: "Lovable App",
-    description: "Lovable Generated Project",
+    title: "Plia Platform",
+    description: "Tu Plataforma de soluciones web sin complicaciones",
     images: [
       {
-        url: "https://lovable.dev/opengraph-image-p98pqg.png",
+        url: "/pliaportadaurl.png",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    images: ["https://lovable.dev/opengraph-image-p98pqg.png"],
+    images: ["/pliaportadaurl.png"],
   },
 };
 
