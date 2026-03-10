@@ -7,6 +7,8 @@ import { MailService } from '../mail/mail.service'
 import { PrismaService } from '../prisma/prisma.service'
 
 import * as bcrypt from 'bcrypt'
+import { randomUUID } from 'crypto'
+import { addHours } from 'date-fns'
 
 @Injectable()
 export class AuthService {
@@ -256,6 +258,25 @@ export class AuthService {
       data: { used: true },
     })
 
+    return { ok: true }
+  }
+
+  async requestPasswordReset(email: string) {
+    const user = await this.usersService.findByEmail(email)
+    if (!user) {
+      return { ok: true }
+    }
+
+    const token = randomUUID()
+    await this.prisma.passwordSetupToken.create({
+      data: {
+        userId: user.id,
+        token,
+        expiresAt: addHours(new Date(), 24),
+      },
+    })
+
+    await this.mailService.sendAccountSetup(email, token)
     return { ok: true }
   }
  

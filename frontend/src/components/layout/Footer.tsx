@@ -101,7 +101,7 @@ export default function Footer() {
           </p>
           <div className="flex items-center gap-6">
             <a
-              href="https://wa.me/51999999999"
+              href="https://wa.me/51958617185?text=Hola%20%F0%9F%91%8B%20quiero%20empezar%20con%20PLIA%20y%20me%20gustar%C3%ADa%20que%20me%20ayuden%20a%20activar%20mi%20p%C3%A1gina%20lo%20antes%20posible.%20%C2%BFC%C3%B3mo%20comenzamos%3F"
               target="_blank"
               rel="noopener noreferrer"
               className="text-primary-foreground/70 hover:text-cta text-sm transition-colors"

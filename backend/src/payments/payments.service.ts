@@ -59,7 +59,7 @@ export class PaymentsService {
     return session;
   }
 
-  async approveOrder(orderId: number) {
+  async approveOrder(orderId: number, cardToken?: string) {
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
       include: { user: true },
@@ -79,6 +79,7 @@ export class PaymentsService {
 
     let user = order.user;
     let createdUser = false;
+    let passwordSetupToken: string | null = null;
 
     if (!user) {
       if (!order.email) {
@@ -136,8 +137,22 @@ export class PaymentsService {
       await this.subscriptionsService.createAnnual(
         project.id,
         order.planId === 1 ? 'LANDING' : 'WEB',
-        '',
+        cardToken,
       );
+    } else {
+      const nextPlanId = order.planId === 1 ? existingSubscription.planId : 2;
+      const update: any = {
+        ...(cardToken ? { cardToken } : {}),
+      };
+      if (nextPlanId && nextPlanId !== existingSubscription.planId) {
+        update.planId = nextPlanId;
+      }
+      if (Object.keys(update).length) {
+        await this.prisma.hostingSubscription.update({
+          where: { id: existingSubscription.id },
+          data: update,
+        });
+      }
     }
 
     if (createdUser) {
@@ -151,11 +166,13 @@ export class PaymentsService {
       });
 
       await this.mailService.sendAccountSetup(order.email!, token);
+      passwordSetupToken = token;
     }
 
     return {
       message: 'Pago aprobado y proyecto creado',
       project,
+      passwordSetupToken,
     };
   }
 
@@ -204,5 +221,137 @@ export class PaymentsService {
   async handleWebhook(body: any) {
     console.log('Webhook Izipay recibido:', body);
     return { ok: true };
+  }
+
+  async createIzipaySession(orderId: number, payload: any = {}) {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+    });
+
+    if (!order) {
+      throw new NotFoundException('Order not found');
+    }
+
+    if (order.status !== OrderStatus.PENDING) {
+      throw new BadRequestException('Order no esta pendiente');
+    }
+
+    const transactionId = order.transactionId ?? `TRX-${Date.now()}`;
+    if (!order.transactionId) {
+      await this.prisma.order.update({
+        where: { id: order.id },
+        data: { transactionId },
+      });
+    }
+
+    const orderNumber = order.id.toString().padStart(5, '0');
+    const session = await this.izipay.createSession({
+      amount: Number(order.amount),
+      orderNumber,
+      transactionId,
+    });
+
+    if (session?.status && session.status !== 'SUCCESS') {
+      const message =
+        session?.answer?.detailedErrorMessage ??
+        session?.answer?.errorMessage ??
+        'Error al crear sesion en Micuentaweb';
+      throw new BadRequestException(message);
+    }
+
+    const existingPayment = await this.prisma.payment.findFirst({
+      where: { orderId: order.id },
+    });
+    if (!existingPayment) {
+      await this.prisma.payment.create({
+        data: {
+          orderId: order.id,
+          amount: Number(order.amount),
+          status: 'PENDING',
+          provider: 'IZIPAY',
+          transactionId: session.transactionId ?? transactionId,
+          rawResponse: JSON.stringify(session),
+          providerResponse: JSON.stringify(session),
+        },
+      });
+    }
+
+    return {
+      orderId: order.id,
+      amount: Number(order.amount),
+      currency: order.currency,
+      email: payload?.email ?? order.email,
+      session: {
+        ...session,
+        orderNumber: session?.orderNumber ?? orderNumber,
+        formToken: session?.answer?.formToken ?? session?.formToken,
+        publicKey: session?.publicKey ?? process.env.IZIPAY_PUBLIC_KEY,
+      },
+    };
+  }
+
+  async confirmIzipayPayment(payload: any) {
+    const rawAnswer =
+      payload?.['kr-answer'] ??
+      payload?.answer ??
+      payload?.response ??
+      payload;
+    const response =
+      typeof rawAnswer === 'string'
+        ? (() => {
+            try {
+              return JSON.parse(rawAnswer);
+            } catch {
+              return rawAnswer;
+            }
+          })()
+        : rawAnswer;
+    const signature =
+      payload?.signature ?? payload?.hash ?? payload?.['kr-hash'] ?? '';
+    if (signature && !this.izipay.validateResponse(rawAnswer, signature)) {
+      throw new BadRequestException('Firma invalida');
+    }
+
+    const orderNumber =
+      response?.orderDetails?.orderId ??
+      response?.orderId ??
+      response?.order?.[0]?.orderNumber ??
+      response?.orderNumber ??
+      response?.order?.orderNumber;
+
+    if (!orderNumber) {
+      throw new BadRequestException('Order no identificada');
+    }
+
+    const orderId = Number(orderNumber);
+    const state =
+      response?.orderStatus ??
+      response?.order?.[0]?.status ??
+      response?.status ??
+      response?.responseCode;
+    const successCodes = ['00', 'AUTHORIZED', 'APPROVED', 'PAID', 'SUCCESS'];
+    if (state && !successCodes.includes(state)) {
+      await this.prisma.order.update({
+        where: { id: orderId },
+        data: { status: OrderStatus.DECLINED },
+      });
+      throw new BadRequestException('Pago rechazado');
+    }
+
+    const cardToken = response?.token?.cardToken ?? response?.cardToken ?? null;
+
+    await this.prisma.payment.updateMany({
+      where: { orderId },
+      data: {
+        status: 'PAID',
+        providerResponse: JSON.stringify(response),
+        rawResponse: JSON.stringify(response),
+        paidAt: new Date(),
+      },
+    });
+
+    const approval = await this.approveOrder(orderId, cardToken ?? undefined);
+
+    return { ok: true, passwordSetupToken: approval?.passwordSetupToken ?? null };
   }
 }

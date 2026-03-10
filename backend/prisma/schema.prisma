@@ -100,9 +100,15 @@ model HostingSubscription {
   status    String
   nextBillingAt DateTime
   lastChargedAt DateTime?
+  cardToken String?
+  renewalDueAt DateTime?
+  renewalNoticeSentAt DateTime?
+  renewalReminderSentAt DateTime?
+  renewalFinalNoticeSentAt DateTime?
   plan      plan      @relation(fields: [planId], references: [id], map: "Subscription_planId_fkey")
   user      user      @relation(fields: [userId], references: [id], map: "Subscription_userId_fkey")
   projects  Project[]
+  renewals  HostingRenewal[]
 
   @@index([planId], map: "Subscription_planId_fkey")
   @@index([userId], map: "Subscription_userId_fkey")
@@ -196,6 +202,31 @@ enum OrderStatus {
   DECLINED
   FAILED
   CANCELLED
+}
+
+enum RenewalStatus {
+  PENDING
+  PAID
+  FAILED
+}
+
+model HostingRenewal {
+  id             Int      @id @default(autoincrement())
+  subscriptionId Int
+  amount         Float
+  currency       String   @default("PEN")
+  status         RenewalStatus @default(PENDING)
+  transactionId  String?
+  cardToken      String?
+  provider       String?
+  providerResponse Json?
+  rawResponse    Json?
+  createdAt      DateTime @default(now())
+  paidAt         DateTime?
+
+  subscription HostingSubscription @relation(fields: [subscriptionId], references: [id])
+
+  @@index([subscriptionId])
 }
 
 enum user_role {

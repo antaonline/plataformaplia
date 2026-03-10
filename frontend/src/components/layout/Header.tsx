@@ -4,7 +4,7 @@ import Image from "next/image";
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "framer-motion";
-import { Menu, X } from "lucide-react";
+import { Menu, X, User } from "lucide-react";
 import { usePathname } from "next/navigation";
 
 const navLinks = [
@@ -23,7 +23,7 @@ export default function Header() {
   const pathname = usePathname();
 
   /* SECCIÓN QUE PONE FONDO EN PÁGINAS INTERNAS */
-  const pagesWithSolidBg = ["/planes", "/como-funciona", "/sobre-nosotros", "/contacto"]
+  const pagesWithSolidBg = ["/planes", "/como-funciona", "/sobre-nosotros", "/contacto", "/terminos", "/privacidad"]
   const hasSolidBg = pagesWithSolidBg.includes(pathname)
   /* FIN - SECCIÓN QUE PONE FONDO EN PÁGINAS INTERNAS */
 
@@ -91,6 +91,12 @@ export default function Header() {
             <Button variant="cta" asChild>
               <Link href="/planes">Ver Planes</Link>
             </Button>
+            <Button variant="outline" asChild>
+              <Link href="/login" className="inline-flex items-center gap-2">
+                <User size={16} />
+                Ingresar
+              </Link>
+            </Button>
           </div>
 
           {/* Mobile Menu Button */}
@@ -127,6 +133,12 @@ export default function Header() {
                 </Link>
               ))}
               <div className="flex flex-col gap-3 pt-4 border-t border-border">
+                <Button variant="outline" asChild className="w-full">
+                  <Link href="/login" className="inline-flex items-center justify-center gap-2">
+                    <User size={16} />
+                    Ingresar
+                  </Link>
+                </Button>
                 <Button variant="outline" asChild className="w-full">
                   <Link href="/contacto">Hablar con soporte</Link>
                 </Button>

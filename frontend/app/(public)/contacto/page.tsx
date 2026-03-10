@@ -10,13 +10,16 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { MessageCircle, Mail, Phone, MapPin, Clock, Send } from "lucide-react";
 
+const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";
+const apiBase = apiUrl.endsWith("/api") ? apiUrl : `${apiUrl}/api`;
+
 const contactMethods = [
   {
     icon: MessageCircle,
     title: "WhatsApp",
     description: "La forma más rápida de contactarnos",
-    value: "+51 999 999 999",
-    href: "https://wa.me/51999999999",
+    value: "+51 958 617185",
+    href: "https://wa.me/51958617185?text=Hola%20%F0%9F%91%8B%20quiero%20empezar%20con%20PLIA%20y%20me%20gustar%C3%ADa%20que%20me%20ayuden%20a%20activar%20mi%20p%C3%A1gina%20lo%20antes%20posible.%20%C2%BFC%C3%B3mo%20comenzamos%3F",
     cta: "Escribir por WhatsApp",
   },
   {
@@ -31,8 +34,8 @@ const contactMethods = [
     icon: Phone,
     title: "Teléfono",
     description: "Llámanos en horario de oficina",
-    value: "(01) 234-5678",
-    href: "tel:+5112345678",
+    value: "-",
+    href: "tel:-",
     cta: "Llamar ahora",
   },
 ];
@@ -57,22 +60,39 @@ const Contacto = () => {
     e.preventDefault();
     setIsSubmitting(true);
 
-    // Simulate form submission
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    try {
+      const res = await fetch(`${apiBase}/contact`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formData),
+      });
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : null;
+      if (!res.ok) {
+        throw new Error(data?.message || "No se pudo enviar el mensaje.");
+      }
 
-    toast({
-      title: "¡Mensaje enviado!",
-      description: "Nos pondremos en contacto contigo muy pronto.",
-    });
+      toast({
+        title: "??Mensaje enviado!",
+        description: "Nos pondremos en contacto contigo muy pronto.",
+      });
 
-    setFormData({
-      name: "",
-      email: "",
-      phone: "",
-      business: "",
-      message: "",
-    });
-    setIsSubmitting(false);
+      setFormData({
+        name: "",
+        email: "",
+        phone: "",
+        business: "",
+        message: "",
+      });
+    } catch (err: any) {
+      toast({
+        title: "No se pudo enviar",
+        description: err.message ?? "Intenta nuevamente en unos minutos.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -250,7 +270,7 @@ const Contacto = () => {
                     Es la forma más rápida de contactarnos. Te respondemos en minutos durante horario de oficina.
                   </p>
                   <Button variant="cta" asChild className="w-full">
-                    <a href="https://wa.me/51999999999" target="_blank" rel="noopener noreferrer">
+                    <a href="https://wa.me/51958617185?text=Hola%20%F0%9F%91%8B%20quiero%20empezar%20con%20PLIA%20y%20me%20gustar%C3%ADa%20que%20me%20ayuden%20a%20activar%20mi%20p%C3%A1gina%20lo%20antes%20posible.%20%C2%BFC%C3%B3mo%20comenzamos%3F" target="_blank" rel="noopener noreferrer">
                       <MessageCircle className="w-4 h-4" />
                       Escribir por WhatsApp
                     </a>
@@ -286,7 +306,7 @@ const Contacto = () => {
                 <div className="bg-white rounded-xl p-5 border border-border">
                   <p className="font-semibold text-foreground mb-2">¿Cuánto tiempo toma?</p>
                   <p className="text-sm text-muted-foreground">
-                    Una página landing está lista en 5 días. Una web completa en 7-10 días.
+                    Una página landing está lista en 2 días. Una web completa en 5 días.
                   </p>
                 </div>
               </AnimatedSection>
@@ -304,7 +324,7 @@ const Contacto = () => {
                 <div className="bg-white rounded-xl p-5 border border-border">
                   <p className="font-semibold text-foreground mb-2">¿Qué formas de pago aceptan?</p>
                   <p className="text-sm text-muted-foreground">
-                    Transferencia bancaria, Yape, Plin y tarjetas de crédito/débito.
+                    tarjetas de crédito/débito y próximamente yape y plin.
                   </p>
                 </div>
               </AnimatedSection>

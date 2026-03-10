@@ -210,13 +210,49 @@ export default function AdminProjectDetailPage() {
                 <div><strong>Publico:</strong> {(project.onboardingData?.audience || []).join(', ') || '-'}</div>
                 <div><strong>Colores:</strong> {project.onboardingData?.colors || '-'}</div>
                 <div><strong>Referencias:</strong> {project.onboardingData?.references || '-'}</div>
-                <div><strong>Logo:</strong> {project.onboardingData?.logoUrl || 'No'}</div>
+                <div>
+                  <strong>Logo:</strong>{' '}
+                  {project.onboardingData?.logoUrl ? (
+                    <a className="text-cta underline" href={project.onboardingData.logoUrl} target="_blank" rel="noreferrer">
+                      Ver logo
+                    </a>
+                  ) : (
+                    'No'
+                  )}
+                </div>
                 <div><strong>Instagram:</strong> {project.onboardingData?.instagram || '-'}</div>
                 <div><strong>Facebook:</strong> {project.onboardingData?.facebook || '-'}</div>
                 <div><strong>WhatsApp:</strong> {project.onboardingData?.whatsapp || '-'}</div>
                 <div><strong>Correo:</strong> {project.onboardingData?.contactEmail || '-'}</div>
+                {project.onboardingData?.logoUrl && (
+                  <div className="md:col-span-2">
+                    <img
+                      src={project.onboardingData.logoUrl}
+                      alt="Logo del cliente"
+                      className="h-20 w-auto rounded-md border border-border bg-white object-contain p-2"
+                    />
+                  </div>
+                )}
               </CardContent>
             </Card>
+
+            {Array.isArray(project.onboardingData?.revisionRequests) && project.onboardingData.revisionRequests.length > 0 && (
+              <Card className="rounded-lg">
+                <CardHeader>
+                  <CardTitle>Solicitudes de cambios</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3 text-sm">
+                  {project.onboardingData.revisionRequests.map((req: any, index: number) => (
+                    <div key={index} className="rounded-lg border border-border bg-white p-3">
+                      <p className="text-xs text-muted-foreground">
+                        {req.createdAt ? new Date(req.createdAt).toLocaleString() : 'Fecha no disponible'}
+                      </p>
+                      <p className="mt-1">{req.message}</p>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            )}
 
             <div className="grid gap-6 lg:grid-cols-2">
               <Card className="rounded-lg">

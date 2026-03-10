@@ -13,6 +13,9 @@ import Footer from "@/components/layout/Footer";
 });*/
 
 export const metadata: Metadata = {
+  metadataBase: process.env.NEXT_PUBLIC_SITE_URL 
+  ? new URL(process.env.NEXT_PUBLIC_SITE_URL) 
+  : null,
   title: "Plia",
   description: "Plataforma de soluciones web sin complicaciones",
   openGraph: {

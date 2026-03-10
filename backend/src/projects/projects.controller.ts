@@ -7,10 +7,18 @@ import {
   UseGuards,
   Get,
   Req,
+  UseInterceptors,
+  UploadedFile,
+  UploadedFiles,
+  BadRequestException,
 } from '@nestjs/common';
 import { ProjectsService } from './projects.service';
 import { SaveOnboardingDto } from './dto/save-onboarding.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
+import { diskStorage } from 'multer';
+import { extname, join } from 'path';
+import * as fs from 'fs';
 
 @Controller('projects')
 export class ProjectsController {
@@ -32,10 +40,117 @@ export class ProjectsController {
     );
   }
 
+
+  @UseGuards(JwtAuthGuard)
+  @Get('list')
+  async list(@Req() req: any) {
+    return this.projectsService.listByUser(req.user.id);
+  }
+
   @UseGuards(JwtAuthGuard)
   @Get('me')
   async me(@Req() req: any) {
     return this.projectsService.findByUser(req.user.id);
   }
 
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/logo')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: diskStorage({
+        destination: (_req, _file, cb) => {
+          const dest = join(process.cwd(), 'uploads', 'logos');
+          fs.mkdirSync(dest, { recursive: true });
+          cb(null, dest);
+        },
+        filename: (_req, file, cb) => {
+          const safeExt = extname(file.originalname) || '.png';
+          const name = `logo-${Date.now()}-${Math.round(Math.random() * 1e9)}${safeExt}`;
+          cb(null, name);
+        },
+      }),
+      fileFilter: (_req, file, cb) => {
+        const allowed = ['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml'];
+        if (!allowed.includes(file.mimetype)) {
+          return cb(new BadRequestException('Formato de logo no permitido.'), false);
+        }
+        cb(null, true);
+      },
+      limits: { fileSize: 5 * 1024 * 1024 },
+    }),
+  )
+  async uploadLogo(
+    @Param('id', ParseIntPipe) id: number,
+    @UploadedFile() file: any,
+    @Req() req: any,
+  ) {
+    if (!file) {
+      throw new BadRequestException('No se recibio ningun archivo.');
+    }
+
+    const appUrl =
+      (process.env.APP_URL && process.env.APP_URL.replace(/\/$/, '')) ||
+      `${req.protocol}://${req.get('host')}`;
+
+    const publicUrl = `${appUrl}/uploads/logos/${file.filename}`;
+    return this.projectsService.saveLogo(id, req.user.id, publicUrl);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/media')
+  @UseInterceptors(
+    FilesInterceptor('files', 5, {
+      storage: diskStorage({
+        destination: (_req, _file, cb) => {
+          const dest = join(process.cwd(), 'uploads', 'media');
+          fs.mkdirSync(dest, { recursive: true });
+          cb(null, dest);
+        },
+        filename: (_req, file, cb) => {
+          const safeExt = extname(file.originalname) || '.png';
+          const name = `media-${Date.now()}-${Math.round(Math.random() * 1e9)}${safeExt}`;
+          cb(null, name);
+        },
+      }),
+      fileFilter: (_req, file, cb) => {
+        const allowed = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/svg+xml', 'image/gif'];
+        if (!allowed.includes(file.mimetype)) {
+          return cb(new BadRequestException('Formato de imagen no permitido.'), false);
+        }
+        cb(null, true);
+      },
+      limits: { fileSize: 3 * 1024 * 1024, files: 5 },
+    }),
+  )
+  async uploadMedia(
+    @Param('id', ParseIntPipe) id: number,
+    @UploadedFiles() files: any[],
+    @Req() req: any,
+  ) {
+    if (!files || files.length === 0) {
+      throw new BadRequestException('No se recibieron imagenes.');
+    }
+
+    const appUrl =
+      (process.env.APP_URL && process.env.APP_URL.replace(/\/$/, '')) ||
+      `${req.protocol}://${req.get('host')}`;
+
+    const urls = files.map((file) => `${appUrl}/uploads/media/${file.filename}`);
+    return this.projectsService.saveMedia(id, req.user.id, urls);
+  }
+
+
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/revisions')
+  async requestRevision(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { message?: string },
+    @Req() req: any,
+  ) {
+    const message = (body?.message || '').trim();
+    if (!message) {
+      throw new BadRequestException('Debes indicar los cambios.');
+    }
+    return this.projectsService.requestRevision(id, req.user.id, message);
+  }
 }

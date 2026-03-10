@@ -1,0 +1,69 @@
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;600;700&family=Sora:wght@400;600;700&display=swap');
+
+:root {
+  --primary: #0f172a;
+  --accent: #38bdf8;
+  --bg: #f8fafc;
+  --text: #0f172a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: 'Manrope', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.page {
+  min-height: 100vh;
+}
+
+.hero {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 32px;
+  padding: 72px 24px;
+  align-items: center;
+  background: linear-gradient(135deg, var(--primary), #1d4ed8);
+  color: #fff;
+}
+
+.hero-image {
+  width: 100%;
+  border-radius: 28px;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
+}
+
+.cta {
+  display: inline-block;
+  margin-top: 16px;
+  padding: 12px 28px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #0b1220;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.section {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 48px 24px;
+}
+
+.section h2 {
+  font-family: 'Sora', sans-serif;
+  font-size: 28px;
+}
+
+.subtitle {
+  color: rgba(15, 23, 42, 0.7);
+}
+
+ul {
+  padding-left: 20px;
+}

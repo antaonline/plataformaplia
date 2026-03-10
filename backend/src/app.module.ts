@@ -16,6 +16,13 @@ import { PaymentsModule } from './payments/payments.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { DomainsModule } from './domains/domains.module';
 import { CheckoutModule } from './checkout/checkout.module';
+import { AiModule } from './ai/ai.module';
+import { CyberpanelModule } from './integrations/cyberpanel/cyberpanel.module';
+import { NextExportModule } from './integrations/next-export/next-export.module';
+import { RenewHostingCron } from './cron/renew-hosting.cron';
+import { PublishProjectsCron } from './cron/publish-projects.cron';
+import { MailModule } from './mail/mail.module';
+import { ContactModule } from './contact/contact.module';
 
 import { ThrottlerModule } from '@nestjs/throttler'
 
@@ -40,9 +47,14 @@ import { ThrottlerModule } from '@nestjs/throttler'
     PaymentsModule,
     DomainsModule,
     CheckoutModule,
+    AiModule,
+    CyberpanelModule,
+    NextExportModule,
+    MailModule,
+    ContactModule,
   ],
   controllers: [AppController, OrdersController],
-  providers: [AppService, ProjectsService],
+  providers: [AppService, ProjectsService, RenewHostingCron, PublishProjectsCron],
 })
 export class AppModule {}
 

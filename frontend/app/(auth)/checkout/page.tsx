@@ -29,6 +29,12 @@ type DomainResult = {
   currency: string;
 };
 
+declare global {
+  interface Window {
+    KR?: any;
+  }
+}
+
 function Content() {
   // 1. TODOS los hooks deben ir AQUÍ adentro
 
@@ -53,15 +59,15 @@ function Content() {
   const [fullName, setFullName] = useState('');
   const [department, setDepartment] = useState('Lima');
   const [address, setAddress] = useState('');
-  const [cardNumber, setCardNumber] = useState('');
-  const [cardExpiry, setCardExpiry] = useState('');
-  const [cardCvv, setCardCvv] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState<'card' | 'yape' | null>('card');
   const [cardError, setCardError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const [payLoading, setPayLoading] = useState(false);
   const [payError, setPayError] = useState<string | null>(null);
   const [payResult, setPayResult] = useState<any>(null);
+  const [formToken, setFormToken] = useState<string | null>(null);
+  const [publicKey, setPublicKey] = useState<string | null>(null);
 
 
   // 2. TODAS tus funciones de lógica (handleNext, etc.) van AQUÍ
@@ -162,15 +168,31 @@ function Content() {
 
     const handlePay = async () => {
       if (!selectedPlanId || !email) return;
-      if (!validateCheckout()) return;
+      if (formToken) {
+        window.KR?.submit?.();
+        return;
+      }
+      if (paymentMethod === 'yape') {
+        setPayError('Yape estará disponible próximamente.');
+        return;
+      }
+      if (paymentMethod !== 'yape' && !validateCheckout()) return;
+      if (!paymentMethod) {
+        setPayError('Selecciona una forma de pago.');
+        return;
+      }
       setPayLoading(true);
       setPayError(null);
       setPayResult(null);
-
+      setFormToken(null);
       try {
-        const prepareRes = await fetch(`${apiBase}/checkout/prepare`, {
+        const accessToken = localStorage.getItem('access_token');
+        const prepareUrl = accessToken ? `${apiBase}/checkout/prepare-auth` : `${apiBase}/checkout/prepare`;
+        const prepareHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (accessToken) prepareHeaders.Authorization = `Bearer ${accessToken}`;
+        const prepareRes = await fetch(prepareUrl, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: prepareHeaders,
           body: JSON.stringify({
             planId: selectedPlanId,
             email,
@@ -185,10 +207,17 @@ function Content() {
         const prepared = await prepareRes.json();
         const orderId = prepared.orderId;
 
-        const payRes = await fetch(`${apiBase}/payments`, {
+        const payRes = await fetch(`${apiBase}/payments/izipay/session`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ orderId: String(orderId) }),
+          headers: prepareHeaders,
+          body: JSON.stringify({
+            orderId: String(orderId),
+            email,
+            fullName,
+            address,
+            department,
+            country: 'PE',
+          }),
         });
 
         if (!payRes.ok) {
@@ -196,75 +225,126 @@ function Content() {
         }
 
         const payData = await payRes.json();
-        setPayResult(payData);
-      } catch (err: any) {
+
+        const session = payData.session ?? payData;
+        const formTokenValue = session.formToken ?? session.answer?.formToken ?? null;
+        const pubKey = session.publicKey ?? process.env.NEXT_PUBLIC_MCW_PUBLIC_KEY ?? null;
+
+        if (!formTokenValue) {
+          throw new Error('No se obtuvo formToken de pago.');
+        }
+        if (!pubKey) {
+          throw new Error('No se obtuvo publicKey de Izipay.');
+        }
+
+        setFormToken(formTokenValue);
+        setPublicKey(pubKey);      } catch (err: any) {
         setPayError(err.message ?? 'Error en el pago');
       } finally {
         setPayLoading(false);
       }
     };
 
-    const onlyDigits = (value: string) => value.replace(/\D/g, '');
+    useEffect(() => {
+      if (!formToken) return;
+      let cancelled = false;
 
-    const formatCardNumber = (value: string) => {
-      const digits = onlyDigits(value).slice(0, 16);
-      return digits.replace(/(.{4})/g, '$1 ').trim();
-    };
-
-    const formatExpiry = (value: string) => {
-      const digits = onlyDigits(value).slice(0, 4);
-      if (digits.length <= 2) return digits;
-      return `${digits.slice(0, 2)}/${digits.slice(2)}`;
-    };
-
-    const getCardType = (value: string) => {
-      const digits = onlyDigits(value);
-      if (/^4/.test(digits)) return 'visa';
-      if (/^(5[1-5]|2[2-7])/.test(digits)) return 'mastercard';
-      if (/^3[47]/.test(digits)) return 'amex';
-      return 'unknown';
-    };
-
-    const isValidLuhn = (value: string) => {
-      const digits = onlyDigits(value);
-      let sum = 0;
-      let shouldDouble = false;
-      for (let i = digits.length - 1; i >= 0; i -= 1) {
-        let digit = Number(digits[i]);
-        if (shouldDouble) {
-          digit *= 2;
-          if (digit > 9) digit -= 9;
+      const attachForm = () => {
+        if (cancelled) return;
+        if (!window.KR) {
+          setTimeout(attachForm, 200);
+          return;
         }
-        sum += digit;
-        shouldDouble = !shouldDouble;
-      }
-      return digits.length >= 13 && sum % 10 === 0;
-    };
 
-    const isValidExpiry = (value: string) => {
-      const digits = onlyDigits(value);
-      if (digits.length !== 4) return false;
-      const month = Number(digits.slice(0, 2));
-      const year = Number(digits.slice(2));
-      if (month < 1 || month > 12) return false;
-      const now = new Date();
-      const currentYear = Number(String(now.getFullYear()).slice(2));
-      const currentMonth = now.getMonth() + 1;
-      if (year < currentYear) return false;
-      if (year === currentYear && month < currentMonth) return false;
-      return true;
-    };
+        try {
+          window.KR.setFormConfig({
+            formToken,
+            publicKey,
+            'kr-language': 'es-ES',
+            'kr-theme': 'classic',
+            'kr-hide-debug-toolbar': 'true',
+          });
 
-    const isValidCvv = (value: string) => {
-      const digits = onlyDigits(value);
-      return digits.length === 3 || digits.length === 4;
-    };
+          window.KR.attachForm('#micuentawebstd_rest_wrapper')
+            .then((result: any) => {              setPayError(null);
+            })
+            .catch((error: any) => {
+              console.error('KR.attachForm error', error);
+              const message =
+                error?.message ??
+                error?.errorMessage ??
+                'No se pudo cargar el formulario de pago.';
+              setPayError(message);            });
+
+          window.KR.onError?.((error: any) => {
+            console.error('KR.onError', error);
+            const message =
+              error?.detailedMessage ??
+              error?.errorMessage ??
+              error?.message ??
+              'Error en el formulario de pago.';
+            setPayError(message);
+          });
+
+          window.KR.onSubmit(async (paymentData: any) => {
+            try {
+              const payload = {
+                'kr-answer':
+                  paymentData?.rawClientAnswer ??
+                  paymentData?.clientAnswer ??
+                  paymentData?.answer ??
+                  paymentData,
+                'kr-hash':
+                  paymentData?.hash ??
+                  paymentData?.signature ??
+                  paymentData?.['kr-hash'] ??
+                  '',
+              };
+              const confirmHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+              const accessToken = localStorage.getItem('access_token');
+              if (accessToken) confirmHeaders.Authorization = `Bearer ${accessToken}`;
+              const confirmRes = await fetch(`${apiBase}/payments/izipay/confirm`, {
+                method: 'POST',
+                headers: confirmHeaders,
+                body: JSON.stringify(payload),
+              });
+              if (!confirmRes.ok) {
+                const txt = await confirmRes.text();
+                throw new Error(txt || 'No se pudo confirmar el pago.');
+              }
+              const confirmData = await confirmRes.json().catch(() => ({}));
+              setPayResult({ ok: true });
+              const setupToken = confirmData?.passwordSetupToken ?? '';
+              const access = localStorage.getItem('access_token');
+              if (setupToken) {
+                localStorage.setItem('password_setup_token', setupToken);
+              }
+              const tokenParam = setupToken ? `token=${encodeURIComponent(setupToken)}` : '';
+              const emailParam = email ? `email=${encodeURIComponent(email)}` : '';
+              const query = [tokenParam, emailParam, 'status=success'].filter(Boolean).join('&');
+              if (access) {
+                window.location.href = '/dashboard';
+              } else {
+                window.location.href = `/set-password${query ? `?${query}` : ''}`;
+              }
+            } catch (err: any) {
+              setPayError(err.message ?? 'Error en la confirmacion de pago');
+            }
+            return false;
+          });
+        } catch (err) {
+          console.error('KR init error', err);
+          setPayError('No se pudo inicializar el pago.');        }
+      };
+
+      attachForm();
+      return () => {
+        cancelled = true;
+      };
+    }, [formToken, publicKey]);
 
     const validateCheckout = () => {
       const errors: Record<string, string> = {};
-      if (!isValidLuhn(cardNumber)) errors.cardNumber = 'Numero de tarjeta invalido.';
-      if (!isValidExpiry(cardExpiry)) errors.cardExpiry = 'Fecha de vencimiento invalida.';
-      if (!isValidCvv(cardCvv)) errors.cardCvv = 'CVV invalido.';
       if (!fullName.trim()) errors.fullName = 'Nombre completo requerido.';
       if (!address.trim()) errors.address = 'Direccion requerida.';
       if (!email.trim()) errors.email = 'Correo requerido.';
@@ -427,57 +507,59 @@ function Content() {
                     <CardTitle className="text-xl">Forma de pago</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-6">
-                    <div className="space-y-3">
-                      <label className="text-sm font-medium text-muted-foreground">Numero de tarjeta</label>
-                      <div className="relative">
-                        <Input
-                          placeholder="1234 1234 1234 1234"
-                          value={cardNumber}
-                          onChange={(e) => setCardNumber(formatCardNumber(e.target.value))}
-                        />
-                        <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2 text-xs text-muted-foreground">
-                          {(() => {
-                            const type = getCardType(cardNumber);
-                            return (
-                              <>
-                                <span className={`px-2 py-1 rounded-md border ${type === 'visa' ? 'border-cta text-cta' : 'border-border'} bg-muted`}>VISA</span>
-                                <span className={`px-2 py-1 rounded-md border ${type === 'mastercard' ? 'border-cta text-cta' : 'border-border'} bg-muted`}>MC</span>
-                                <span className={`px-2 py-1 rounded-md border ${type === 'amex' ? 'border-cta text-cta' : 'border-border'} bg-muted`}>AMEX</span>
-                              </>
-                            );
-                          })()}
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <button
+                        type="button"
+                        className={`h-28 rounded-2xl border text-left px-4 py-4 transition ${
+                          paymentMethod === 'card'
+                            ? 'border-cta bg-cta text-cta-foreground'
+                            : 'border-border bg-white'
+                        }`}
+                        onClick={() => setPaymentMethod('card')}
+                      >
+                        <p className="text-sm text-muted-foreground">Pago con</p>
+                        <p className="text-lg font-semibold">Tarjeta</p>
+                      </button>
+                      <button
+                        type="button"
+                        disabled
+                        className="h-28 rounded-2xl border border-border/60 bg-muted/30 text-left px-4 py-4 text-muted-foreground"
+                        onClick={() => setPaymentMethod('yape')}
+                      >
+                        <p className="text-sm text-muted-foreground">Pago con</p>
+                        <p className="text-lg font-semibold">Yape (Próximamente)</p>
+                      </button>
+                    </div>
+
+                    {paymentMethod === 'card' && formToken && publicKey && (
+                      <div className="rounded-2xl border border-border bg-white p-4">
+                        <div id="micuentawebstd_rest_wrapper" className="plia-izipay">
+                          <div
+                            className="kr-embedded"
+                            kr-form-token={formToken ?? undefined}
+                            kr-public-key={publicKey ?? undefined}
+                          >
+                            <div className="grid gap-4">
+                              <div className="space-y-2">
+                                <label className="text-sm font-medium text-muted-foreground">Numero de tarjeta</label>
+                                <div className="kr-pan border border-input rounded-md px-3 py-2" />
+                              </div>
+                              <div className="space-y-2">
+                                <label className="text-sm font-medium text-muted-foreground">Fecha de vencimiento</label>
+                                <div className="kr-expiry border border-input rounded-md px-3 py-2" />
+                              </div>
+                              <div className="space-y-2">
+                                <label className="text-sm font-medium text-muted-foreground">Codigo de seguridad (CVV)</label>
+                                <div className="kr-security-code border border-input rounded-md px-3 py-2" />
+                              </div>
+                            </div>
+                            <div className="kr-form-error text-sm text-destructive mt-3" />
+                          </div>
                         </div>
                       </div>
-                      {fieldErrors.cardNumber && (
-                        <p className="text-xs text-destructive">{fieldErrors.cardNumber}</p>
-                      )}
-                    </div>
+                    )}
 
-                    <div className="grid md:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium text-muted-foreground">Fecha de vencimiento</label>
-                        <Input
-                          placeholder="MM/AA"
-                          value={cardExpiry}
-                          onChange={(e) => setCardExpiry(formatExpiry(e.target.value))}
-                        />
-                        {fieldErrors.cardExpiry && (
-                          <p className="text-xs text-destructive">{fieldErrors.cardExpiry}</p>
-                        )}
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium text-muted-foreground">Codigo de seguridad (CVV)</label>
-                        <Input
-                          placeholder="CVV"
-                          value={cardCvv}
-                          onChange={(e) => setCardCvv(onlyDigits(e.target.value).slice(0, 4))}
-                        />
-                        {fieldErrors.cardCvv && (
-                          <p className="text-xs text-destructive">{fieldErrors.cardCvv}</p>
-                        )}
-                      </div>
-                    </div>
-
+                    {!formToken && (
                     <div className="pt-2">
                       <h3 className="text-sm font-semibold text-foreground mb-3">Direccion de facturacion</h3>
                       <div className="space-y-4">
@@ -533,8 +615,11 @@ function Content() {
                         </div>
                       </div>
                     </div>
+                    )}
 
-                    {cardError && <p className="text-sm text-destructive">{cardError}</p>}
+                    {cardError && paymentMethod === 'card' && (
+                      <p className="text-sm text-destructive">{cardError}</p>
+                    )}
                     {payError && <p className="text-sm text-destructive">{payError}</p>}
 
                     <Button
@@ -547,9 +632,6 @@ function Content() {
                         !email ||
                         !fullName.trim() ||
                         !address.trim() ||
-                        !cardNumber ||
-                        !cardExpiry ||
-                        !cardCvv ||
                         !!Object.keys(fieldErrors).length
                       }
                       onClick={handlePay}

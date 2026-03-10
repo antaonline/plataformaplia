@@ -4,10 +4,18 @@ import { SaveOnboardingDto } from './dto/save-onboarding.dto';
 import { ProjectStatus } from '@prisma/client';
 import { Prisma } from '@prisma/client';
 import { addDays, addHours } from 'date-fns';
+import { AiService } from '../ai/ai.service';
+import { CyberpanelService } from '../integrations/cyberpanel/cyberpanel.service';
+import { MailService } from '../mail/mail.service';
 
 @Injectable()
 export class ProjectsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private aiService: AiService,
+    private cyberpanelService: CyberpanelService,
+    private mailService: MailService,
+  ) {}
 
   // ✅ ONBOARDING POR PASOS (CORRECTO)
   async saveOnboarding(projectId: number, dto: SaveOnboardingDto) {
@@ -36,11 +44,11 @@ export class ProjectsService {
       if (planId === 1) {
         deadline = addHours(new Date(), 48);
       } else {
-        deadline = addDays(new Date(), 7);
+        deadline = addDays(new Date(), 5);
       }
     }
 
-    return this.prisma.project.update({
+    const updated = await this.prisma.project.update({
       where: { id: projectId },
       data: {
         onboardingData: mergedData,
@@ -53,6 +61,13 @@ export class ProjectsService {
         completedAt: null,
       } as Prisma.ProjectUpdateInput,
     });
+
+    if (shouldStart) {
+      await this.cyberpanelService.ensureSite(projectId);
+      void this.aiService.generateForProject(projectId);
+    }
+
+    return updated;
 
   }
 
@@ -86,6 +101,18 @@ export class ProjectsService {
     });
   }
 
+
+  async listByUser(userId: number) {
+    return this.prisma.project.findMany({
+      where: { userId },
+      include: {
+        order: { include: { plan: true } },
+        subscription: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
   async findByUser(userId: number) {
     return this.prisma.project.findFirst({
       where: { userId },
@@ -95,6 +122,7 @@ export class ProjectsService {
             plan: true,
           },
         },
+        subscription: true,
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -127,15 +155,22 @@ export class ProjectsService {
   async publishProject(id: number, data: { publicUrl?: string }) {
     const project = await this.prisma.project.findUnique({
       where: { id },
+      include: { order: true },
     });
     if (!project) {
       throw new NotFoundException('Project no encontrado.');
     }
 
+    const publishedAt = new Date();
+    const revisionsAllowed = project.order?.planId === 1 ? 1 : 2;
+    const revisionWindowEndsAt = addHours(publishedAt, 48);
+
     const mergedData = {
       ...(project.onboardingData as any || {}),
       ...(data.publicUrl ? { publicUrl: data.publicUrl } : {}),
-      publishedAt: new Date().toISOString(),
+      publishedAt: publishedAt.toISOString(),
+      revisionsAllowed,
+      revisionWindowEndsAt: revisionWindowEndsAt.toISOString(),
     };
 
     return this.prisma.project.update({
@@ -144,7 +179,7 @@ export class ProjectsService {
         onboardingData: mergedData,
         status: ProjectStatus.DELIVERED,
         completed: true,
-        completedAt: new Date(),
+        completedAt: publishedAt,
       },
     });
   }
@@ -173,4 +208,140 @@ export class ProjectsService {
     });
   }
 
+  async saveLogo(projectId: number, userId: number, logoUrl: string) {
+    const project = await this.prisma.project.findUnique({
+      where: { id: projectId },
+    });
+    if (!project) {
+      throw new NotFoundException('Project no encontrado.');
+    }
+    if (project.userId !== userId) {
+      throw new BadRequestException('No tienes acceso a este proyecto.');
+    }
+
+    const mergedData = {
+      ...(project.onboardingData as any || {}),
+      logoUrl,
+    };
+
+    return this.prisma.project.update({
+      where: { id: projectId },
+      data: {
+        onboardingData: mergedData,
+      },
+    });
+  }
+
+  async saveMedia(projectId: number, userId: number, urls: string[]) {
+    const project = await this.prisma.project.findUnique({
+      where: { id: projectId },
+    });
+    if (!project) {
+      throw new NotFoundException('Project no encontrado.');
+    }
+    if (project.userId !== userId) {
+      throw new BadRequestException('No tienes acceso a este proyecto.');
+    }
+
+    const data = (project.onboardingData as any) || {};
+    const existing = Array.isArray(data.images) ? data.images : [];
+    const total = existing.length + urls.length;
+    if (total > 5) {
+      throw new BadRequestException('Solo puedes subir hasta 5 imagenes en total.');
+    }
+    const combined = [...existing, ...urls];
+    const mergedData = {
+      ...data,
+      images: combined,
+    };
+
+    return this.prisma.project.update({
+      where: { id: projectId },
+      data: {
+        onboardingData: mergedData,
+      },
+    });
+  }
+
+  async requestRevision(projectId: number, userId: number, message: string) {
+    const project = await this.prisma.project.findUnique({
+      where: { id: projectId },
+      include: { order: true },
+    });
+    if (!project) {
+      throw new NotFoundException('Project no encontrado.');
+    }
+    if (project.userId !== userId) {
+      throw new BadRequestException('No tienes acceso a este proyecto.');
+    }
+
+    const data = (project.onboardingData as any) || {};
+    const publishedAtRaw = data.publishedAt;
+    if (!publishedAtRaw) {
+      throw new BadRequestException('El proyecto aun no esta publicado.');
+    }
+
+    const publishedAt = new Date(publishedAtRaw);
+    const windowEndsAt = addHours(publishedAt, 48);
+    if (new Date() > windowEndsAt) {
+      throw new BadRequestException('El periodo de cambios ya vencio.');
+    }
+
+    const allowed = project.order?.planId === 1 ? 1 : 2;
+    const existing = Array.isArray(data.revisionRequests) ? data.revisionRequests : [];
+    if (existing.length >= allowed) {
+      throw new BadRequestException('Ya alcanzaste el limite de revisiones.');
+    }
+
+    const next = [
+      ...existing,
+      {
+        message,
+        createdAt: new Date().toISOString(),
+      },
+    ];
+
+    const mergedData = {
+      ...data,
+      revisionRequests: next,
+      revisionWindowEndsAt: windowEndsAt.toISOString(),
+      revisionsAllowed: allowed,
+    };
+
+    const updated = await this.prisma.project.update({
+      where: { id: projectId },
+      data: {
+        onboardingData: mergedData,
+      },
+    });
+
+    void this.aiService.generateForProject(projectId, message);
+
+    return updated;
+  }
+
+  async autoPublishReadyProjects() {
+    const ready = await this.prisma.project.findMany({
+      where: {
+        status: ProjectStatus.IN_PROGRESS,
+        deadline: { lte: new Date() },
+      },
+      include: {
+        user: true,
+      },
+    });
+
+    for (const project of ready) {
+      const data = (project.onboardingData as any) || {};
+      const publicUrl = data.publicUrl;
+      await this.publishProject(project.id, { publicUrl });
+      if (project.user?.email) {
+        const loginUrl = `${process.env.APP_URL ?? 'http://localhost:3000'}/login`;
+        await this.mailService.sendProjectReady(project.user.email, {
+          projectName: project.name,
+          loginUrl,
+        });
+      }
+    }
+  }
 }

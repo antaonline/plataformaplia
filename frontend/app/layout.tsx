@@ -5,14 +5,11 @@ import "./globals.css";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 
-/*const sansationfont = Sansation ({
-  subsets: ["latin"],
-  variable: "--font-sansation",
-  weight: ["300", "400", "700"], // ← OBLIGATORIO
-  display: "swap",
-});*/
 
 export const metadata: Metadata = {
+  metadataBase: process.env.NEXT_PUBLIC_SITE_URL 
+  ? new URL(process.env.NEXT_PUBLIC_SITE_URL) 
+  : null,
   title: "Plia",
   description: "Plataforma de soluciones web sin complicaciones",
   openGraph: {
@@ -38,15 +35,28 @@ export default function RootLayout({
   return (
     <html lang="es">
       <body
-        className={` antialiased`}
+        className={`antialiased`}
       >
         <link
           href="https://fonts.googleapis.com/css2?family=Sansation:ital,wght@0,300;0,400;0,700;1,300;1,400;1,700&display=swap"
           rel="stylesheet"
         />
+        <link
+          rel="stylesheet"
+          href="https://static.micuentaweb.pe/static/js/krypton-client/V4.0/ext/classic-reset.css"
+        />
+        <link
+          rel="stylesheet"
+          href="https://static.micuentaweb.pe/static/js/krypton-client/V4.0/ext/classic.css"
+        />
+        <link
+          rel="stylesheet"
+          href="/izipay-embedded.css"
+        />
         <Script
-          src="https://sandbox-checkout.izipay.pe/payments/v1/js/index.js"
+          src="https://static.micuentaweb.pe/static/js/krypton-client/V4.0/stable/kr-payment-form.min.js"
           strategy="afterInteractive"
+          data-public-key={process.env.NEXT_PUBLIC_MCW_PUBLIC_KEY}
         />
 
         <div className="min-h-screen flex flex-col">

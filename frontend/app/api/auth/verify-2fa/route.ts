@@ -6,7 +6,7 @@ export async function POST(req: Request) {
   try {
     const body = await req.json()
 
-    const res = await fetch(`${BACKEND_URL}/auth/verify-2fa`, {
+    const res = await fetch(`${BACKEND_URL}/api/auth/verify-2fa`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

@@ -1,16 +1,26 @@
 import axios from 'axios';
 import * as crypto from 'crypto';
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 
 @Injectable()
 export class IzipayService {
-  private baseUrl =
-    process.env.IZIPAY_ENV === 'production'
-      ? 'https://api.izipay.pe'
-      : 'https://api-sandbox.izipay.pe';
+  private baseUrl = process.env.IZIPAY_BASE_URL ?? 'https://api.micuentaweb.pe';
+  private shopId = process.env.IZIPAY_SHOP_ID ?? '';
+  private password = process.env.IZIPAY_PRIVATE_KEY ?? '';
+  private publicKey = process.env.IZIPAY_PUBLIC_KEY ?? '';
+  private hashKey = process.env.IZIPAY_HASH_KEY ?? '';
 
-  private merchantId = process.env.IZIPAY_MERCHANT_ID!;
-  private privateKey = process.env.IZIPAY_PRIVATE_KEY!;
+  private assertConfig() {
+    if (!this.shopId) {
+      throw new BadRequestException('Falta IZIPAY_SHOP_ID');
+    }
+    if (!this.password) {
+      throw new BadRequestException('Falta IZIPAY_PRIVATE_KEY');
+    }
+    if (!this.publicKey) {
+      throw new BadRequestException('Falta IZIPAY_PUBLIC_KEY');
+    }
+  }
 
   async chargeTokenized(data: {
     amount: number;
@@ -18,23 +28,21 @@ export class IzipayService {
     currency?: string;
     orderId: number;
   }) {
+    this.assertConfig();
     const payload = {
-      merchantId: this.merchantId,
-      amount: data.amount,
+      amount: Math.round(data.amount * 100),
       currency: data.currency ?? 'PEN',
-      cardToken: data.cardToken,
+      paymentMethodToken: data.cardToken,
       orderId: data.orderId.toString(),
     };
 
-    const signature = this.signPayload(payload);
-
     const response = await axios.post(
-      `${this.baseUrl}/v2/charge`,
+      `${this.baseUrl}/api-payment/V4/Charge/CreatePayment`,
       payload,
       {
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${signature}`,
+          Authorization: this.basicAuth(),
         },
       },
     );
@@ -47,32 +55,49 @@ export class IzipayService {
     orderNumber: string;
     transactionId?: string;
   }) {
+    this.assertConfig();
     const payload = {
-      merchantCode: this.merchantId,
-      orderNumber: data.orderNumber,
-      amount: data.amount.toFixed(2),
+      amount: Math.round(data.amount * 100),
       currency: 'PEN',
-      transactionId: data.transactionId,
+      orderId: data.orderNumber,
     };
 
-    const response = await axios.post(
-      `${this.baseUrl}/checkout/session`,
-      payload,
-      {
-        headers: {
-          'Content-Type': 'application/json',
+    try {
+      const response = await axios.post(
+        `${this.baseUrl}/api-payment/V4/Charge/CreatePayment`,
+        payload,
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: this.basicAuth(),
+          },
         },
-      },
-    );
+      );
 
-    return response.data;
+      return response.data;
+    } catch (error: any) {
+      const status = error?.response?.status;
+      const data = error?.response?.data;
+      console.error('Izipay createSession error', {
+        status,
+        data,
+        message: error?.message,
+      });
+      throw new BadRequestException(
+        data?.message ??
+          data?.error ??
+          'Error al crear sesion en Izipay',
+      );
+    }
   }
 
 
   validateResponse(payload: any, receivedHash: string): boolean {
-    const raw = Object.values(payload).join('');
+    if (!this.hashKey || !receivedHash) return false;
+    const raw =
+      typeof payload === 'string' ? payload : JSON.stringify(payload);
     const expectedHash = crypto
-      .createHmac('sha256', this.privateKey)
+      .createHmac('sha256', this.hashKey)
       .update(raw)
       .digest('hex');
 
@@ -83,8 +108,15 @@ export class IzipayService {
   private signPayload(payload: any): string {
     const raw = Object.values(payload).join('');
     return crypto
-      .createHmac('sha256', this.privateKey)
+      .createHmac('sha256', this.hashKey)
       .update(raw)
       .digest('hex');
+  }
+
+  private basicAuth(): string {
+    const token = Buffer.from(`${this.shopId}:${this.password}`).toString(
+      'base64',
+    );
+    return `Basic ${token}`;
   }
 }

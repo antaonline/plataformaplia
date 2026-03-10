@@ -13,7 +13,12 @@ export class CheckoutService {
     private domainsService: DomainsService,
   ) {}
 
-  async prepare(dto: PrepareCheckoutDto) {
+
+  async prepareForUser(userId: number, email: string, dto: PrepareCheckoutDto) {
+    return this.prepare({ ...dto, email }, userId);
+  }
+
+  async prepare(dto: PrepareCheckoutDto, userId?: number) {
     const plan = await this.prisma.plan.findUnique({
       where: { id: dto.planId },
     })
@@ -25,6 +30,7 @@ export class CheckoutService {
     const order = await this.ordersService.createOrder({
       planId: dto.planId,
       email: dto.email,
+      userId,
     })
 
     /*let domainSelection: DomainSelection | null = null;*/

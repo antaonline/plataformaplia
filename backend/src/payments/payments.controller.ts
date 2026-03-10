@@ -12,6 +12,19 @@ export class PaymentsController {
     return this.paymentsService.createPayment(dto);
   }
 
+  @Post('izipay/session')
+  async createIzipaySession(@Body() body: any) {
+    const orderId = Number(body?.orderId);
+    const payload = body ?? {};
+    return this.paymentsService.createIzipaySession(orderId, payload);
+  }
+
+  @Post('izipay/confirm')
+  @HttpCode(200)
+  async confirmIzipay(@Body() body: any) {
+    return this.paymentsService.confirmIzipayPayment(body);
+  }
+
   /*@Post('izipay/webhook')
   @HttpCode(200)
   async izipayWebhook(@Body() body: any) {

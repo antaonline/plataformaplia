@@ -2,30 +2,103 @@
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { IzipayService } from '../payments/izipay.service';
+import { CyberpanelService } from '../integrations/cyberpanel/cyberpanel.service';
+import { MailService } from '../mail/mail.service';
+import { addDays, differenceInDays } from 'date-fns';
 
 @Injectable()
 export class RenewHostingCron {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private izipay: IzipayService,
+    private cyberpanel: CyberpanelService,
+    private mailService: MailService,
+  ) {}
 
   @Cron(CronExpression.EVERY_DAY_AT_2AM)
   async handle() {
+    const now = new Date();
     const subs = await this.prisma.hostingSubscription.findMany({
-      where: { status: 'ACTIVE', nextBillingAt: { lte: new Date() } },
+      include: { user: true, projects: true },
     });
 
     for (const sub of subs) {
-      // Aquí va la llamada real a Izipay
-      await this.prisma.hostingSubscription.update({
-        where: {
-          id: sub.id,
-        },
-        data: {
-          lastChargedAt: new Date(),
-          nextBillingAt: new Date(
-            new Date().setFullYear(new Date().getFullYear() + 1),
-          ),
-        },
-      });
+      const dueAt = sub.renewalDueAt ?? sub.endDate;
+      const daysPastDue = differenceInDays(now, dueAt);
+      const graceEndsAt = addDays(dueAt, 14);
+
+      if (sub.status === 'ACTIVE' && now >= dueAt) {
+        if (sub.cardToken) {
+          try {
+            await this.izipay.chargeTokenized({
+              amount: sub.planId === 1 ? 135 : 165,
+              cardToken: sub.cardToken,
+              currency: 'PEN',
+              orderId: sub.id,
+            });
+
+            const nextEnd = addDays(dueAt, 365);
+            await this.prisma.hostingSubscription.update({
+              where: { id: sub.id },
+              data: {
+                lastChargedAt: now,
+                endDate: nextEnd,
+                nextBillingAt: nextEnd,
+                renewalDueAt: nextEnd,
+                renewalNoticeSentAt: null,
+                renewalReminderSentAt: null,
+                renewalFinalNoticeSentAt: null,
+                status: 'ACTIVE',
+              },
+            });
+            continue;
+          } catch {
+            await this.prisma.hostingSubscription.update({
+              where: { id: sub.id },
+              data: { status: 'PAST_DUE' },
+            });
+          }
+        } else {
+          await this.prisma.hostingSubscription.update({
+            where: { id: sub.id },
+            data: { status: 'PAST_DUE' },
+          });
+        }
+      }
+
+      if (sub.status !== 'ACTIVE') {
+        if (!sub.renewalNoticeSentAt) {
+          await this.mailService.sendRenewalNotice(sub.user.email, 14);
+          await this.prisma.hostingSubscription.update({
+            where: { id: sub.id },
+            data: { renewalNoticeSentAt: now },
+          });
+        } else if (daysPastDue >= 7 && !sub.renewalReminderSentAt) {
+          await this.mailService.sendRenewalNotice(sub.user.email, 7);
+          await this.prisma.hostingSubscription.update({
+            where: { id: sub.id },
+            data: { renewalReminderSentAt: now },
+          });
+        } else if (daysPastDue >= 13 && !sub.renewalFinalNoticeSentAt) {
+          await this.mailService.sendRenewalNotice(sub.user.email, 1);
+          await this.prisma.hostingSubscription.update({
+            where: { id: sub.id },
+            data: { renewalFinalNoticeSentAt: now },
+          });
+        }
+
+        if (now > graceEndsAt) {
+          const project = sub.projects?.[0];
+          if (project) {
+            await this.cyberpanel.deleteSiteByProject(project.id);
+          }
+          await this.prisma.hostingSubscription.update({
+            where: { id: sub.id },
+            data: { status: 'CANCELED' },
+          });
+        }
+      }
     }
   }
 }
