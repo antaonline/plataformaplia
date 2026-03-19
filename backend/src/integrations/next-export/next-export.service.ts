@@ -20,6 +20,10 @@ export class NextExportService {
     return 'out';
   }
 
+  private get previewRoot() {
+    return join(process.cwd(), 'uploads', 'previews');
+  }
+
   private copyDir(src: string, dest: string) {
     if (!fs.existsSync(src)) return;
     fs.mkdirSync(dest, { recursive: true });
@@ -37,6 +41,16 @@ export class NextExportService {
   private writeJson(path: string, data: any) {
     fs.mkdirSync(join(path, '..'), { recursive: true });
     fs.writeFileSync(path, JSON.stringify(data, null, 2), 'utf-8');
+  }
+
+  private createPreview(projectId: number, sourceDir: string) {
+    const previewDir = join(this.previewRoot, String(projectId));
+    if (fs.existsSync(previewDir)) {
+      fs.rmSync(previewDir, { recursive: true, force: true });
+    }
+    this.copyDir(sourceDir, previewDir);
+    const appUrl = (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '');
+    return `${appUrl}/uploads/previews/${projectId}/index.html`;
   }
 
   private toPages(spec: SiteSpec) {
@@ -94,12 +108,19 @@ export class NextExportService {
     this.writeJson(join(dataDir, 'assets.json'), { assets });
 
     try {
-      execSync('npm install', { cwd: siteRoot, stdio: 'ignore' });
+      execSync('npm install --no-fund --no-audit', { cwd: siteRoot, stdio: 'ignore' });
     } catch (error: any) {
-      this.logger.warn('npm install fallo o ya estaba instalado.');
+      this.logger.warn(`npm install fallo en export template: ${error?.message || error}`);
     }
 
-    execSync('npm run export', { cwd: siteRoot, stdio: 'ignore' });
+    try {
+      execSync('npm run export', { cwd: siteRoot, stdio: 'pipe' });
+    } catch (error: any) {
+      const stderr = error?.stderr?.toString?.() || '';
+      const stdout = error?.stdout?.toString?.() || '';
+      this.logger.error(`next export fallo: ${stderr || stdout || error?.message || error}`);
+      throw error;
+    }
 
     const outDir = join(siteRoot, this.outputDir);
     const cyberRoot = process.env.CYBERPANEL_SITES_ROOT || '/home';
@@ -107,6 +128,7 @@ export class NextExportService {
     const target = join(cyberRoot, domain, publicHtml);
 
     this.copyDir(outDir, target);
-    return target;
+    const previewUrl = this.createPreview(projectId, outDir);
+    return { target, previewUrl };
   }
 }

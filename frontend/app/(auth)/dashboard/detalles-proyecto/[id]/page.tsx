@@ -36,6 +36,7 @@ export default function AdminProjectDetailPage() {
   const [loading, setLoading] = useState(true);
   const [project, setProject] = useState<Project | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [viewerRole, setViewerRole] = useState<'USER' | 'ADMIN' | null>(null);
   const [saving, setSaving] = useState(false);
   const [dbSaving, setDbSaving] = useState(false);
 
@@ -51,7 +52,21 @@ export default function AdminProjectDetailPage() {
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch(`${apiBase}/admin/projects/${projectId}`, {
+        const meRes = await fetch(`${apiBase}/auth/me`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const meText = await meRes.text();
+        const meData = meText ? JSON.parse(meText) : null;
+        if (!meRes.ok) throw new Error(meData?.message || 'No se pudo validar la sesion');
+        setViewerRole(meData?.role ?? 'USER');
+
+        const projectUrl =
+          meData?.role === 'ADMIN'
+            ? `${apiBase}/admin/projects/${projectId}`
+            : `${apiBase}/projects/${projectId}`;
+
+        const res = await fetch(projectUrl, {
           headers: { Authorization: `Bearer ${token}` },
         });
         const text = await res.text();
@@ -254,49 +269,51 @@ export default function AdminProjectDetailPage() {
               </Card>
             )}
 
-            <div className="grid gap-6 lg:grid-cols-2">
-              <Card className="rounded-lg">
-                <CardHeader>
-                  <CardTitle>Publicar proyecto</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <label className="text-xs text-muted-foreground">URL publica</label>
-                  <Input
-                    value={project.onboardingData?.publicUrl || ''}
-                    onChange={(e) => updateOnboarding({ publicUrl: e.target.value })}
-                  />
-                  <Button variant="cta" className="w-full" onClick={publishProject} disabled={saving}>
-                    {saving ? 'Guardando...' : 'Marcar como publicado'}
-                  </Button>
-                </CardContent>
-              </Card>
+            {viewerRole === 'ADMIN' && (
+              <div className="grid gap-6 lg:grid-cols-2">
+                <Card className="rounded-lg">
+                  <CardHeader>
+                    <CardTitle>Publicar proyecto</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <label className="text-xs text-muted-foreground">URL publica</label>
+                    <Input
+                      value={project.onboardingData?.publicUrl || ''}
+                      onChange={(e) => updateOnboarding({ publicUrl: e.target.value })}
+                    />
+                    <Button variant="cta" className="w-full" onClick={publishProject} disabled={saving}>
+                      {saving ? 'Guardando...' : 'Marcar como publicado'}
+                    </Button>
+                  </CardContent>
+                </Card>
 
-              <Card className="rounded-lg">
-                <CardHeader>
-                  <CardTitle>Configurar base de datos</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <Input
-                    placeholder="Nombre de DB"
-                    value={project.onboardingData?.dbName || ''}
-                    onChange={(e) => updateOnboarding({ dbName: e.target.value })}
-                  />
-                  <Input
-                    placeholder="Usuario DB"
-                    value={project.onboardingData?.dbUser || ''}
-                    onChange={(e) => updateOnboarding({ dbUser: e.target.value })}
-                  />
-                  <Input
-                    placeholder="Password DB"
-                    value={project.onboardingData?.dbPassword || ''}
-                    onChange={(e) => updateOnboarding({ dbPassword: e.target.value })}
-                  />
-                  <Button variant="outline" className="w-full" onClick={saveDbConfig} disabled={dbSaving}>
-                    {dbSaving ? 'Guardando...' : 'Guardar configuracion DB'}
-                  </Button>
-                </CardContent>
-              </Card>
-            </div>
+                <Card className="rounded-lg">
+                  <CardHeader>
+                    <CardTitle>Configurar base de datos</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <Input
+                      placeholder="Nombre de DB"
+                      value={project.onboardingData?.dbName || ''}
+                      onChange={(e) => updateOnboarding({ dbName: e.target.value })}
+                    />
+                    <Input
+                      placeholder="Usuario DB"
+                      value={project.onboardingData?.dbUser || ''}
+                      onChange={(e) => updateOnboarding({ dbUser: e.target.value })}
+                    />
+                    <Input
+                      placeholder="Password DB"
+                      value={project.onboardingData?.dbPassword || ''}
+                      onChange={(e) => updateOnboarding({ dbPassword: e.target.value })}
+                    />
+                    <Button variant="outline" className="w-full" onClick={saveDbConfig} disabled={dbSaving}>
+                      {dbSaving ? 'Guardando...' : 'Guardar configuracion DB'}
+                    </Button>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
           </div>
         </main>
       </div>

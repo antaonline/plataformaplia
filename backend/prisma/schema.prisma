@@ -28,6 +28,7 @@ model Order {
 
   @@index([planId], map: "Order_planId_fkey")
   @@index([userId], map: "Order_userId_fkey")
+  @@map("order")
 }
 
 model DomainSelection {

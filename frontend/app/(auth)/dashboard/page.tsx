@@ -74,6 +74,30 @@ type Project = {
   };
 };
 
+type BusinessIdentity = 'local-business' | 'professional' | 'digital-project';
+
+type OptionGroup = {
+  id: BusinessIdentity;
+  label: string;
+  title: string;
+  description: string;
+  searchPlaceholder: string;
+  options: string[];
+};
+
+type SmartSectionField = {
+  key: string;
+  label: string;
+  placeholder: string;
+  multiline?: boolean;
+};
+
+declare global {
+  interface Window {
+    Izipay?: any;
+  }
+}
+
 const audienceOptions = [
   'Emprendedores',
   'Negocios locales',
@@ -82,6 +106,443 @@ const audienceOptions = [
   'Turistas',
   'Estudiantes',
 ];
+
+const identityOptions: OptionGroup[] = [
+  {
+    id: 'local-business',
+    label: '1. Un negocio con local o atencion al publico',
+    title: '1. Soy: un negocio con local o atencion al publico',
+    description: 'Este grupo incluye negocios fisicos tradicionales y atencion directa al cliente.',
+    searchPlaceholder: 'Buscar tipo de negocio...',
+    options: [
+      'Restaurante',
+      'Polleria',
+      'Cafeteria',
+      'Bar',
+      'Discoteca',
+      'Panaderia',
+      'Pasteleria',
+      'Heladeria',
+      'Pizzeria',
+      'Comida rapida',
+      'Food truck',
+      'Cevicheria',
+      'Jugueria',
+      'Carniceria',
+      'Minimarket',
+      'Bodega',
+      'Supermercado',
+      'Licoreria',
+      'Farmacia',
+      'Veterinaria',
+      'Pet shop',
+      'Floristeria',
+      'Ferreteria',
+      'Libreria',
+      'Jugueteria',
+      'Tienda de ropa',
+      'Boutique',
+      'Zapateria',
+      'Optica',
+      'Tienda de celulares',
+      'Tienda de tecnologia',
+      'Tienda de cosmeticos',
+      'Joyeria',
+      'Salon de belleza',
+      'Barberia',
+      'Spa',
+      'Centro estetico',
+      'Gimnasio',
+      'Estudio de yoga',
+      'Academia',
+      'Guarderia',
+      'Lavanderia',
+      'Taller mecanico',
+      'Lavado de autos',
+      'Concesionario',
+      'Agencia de viajes',
+      'Hotel',
+      'Hostal',
+      'Restobar',
+      'Catering',
+      'Salon de eventos',
+      'Fotografia',
+      'Imprenta',
+      'Tienda de decoracion',
+      'Tienda de muebles',
+      'Tienda de colchones',
+      'Tienda deportiva',
+      'Tienda de instrumentos musicales',
+    ],
+  },
+  {
+    id: 'professional',
+    label: '2. Un profesional, independiente u oficio',
+    title: '2. Soy: profesional, independiente o con oficio',
+    description: 'Aqui reunimos profesiones, consultorias, especialistas y oficios.',
+    searchPlaceholder: 'Buscar profesion u oficio...',
+    options: [
+      'Abogado',
+      'Contador',
+      'Arquitecto',
+      'Ingeniero civil',
+      'Ingeniero industrial',
+      'Ingeniero sistemas',
+      'Medico',
+      'Dentista',
+      'Psicologo',
+      'Psiquiatra',
+      'Nutricionista',
+      'Fisioterapeuta',
+      'Coach',
+      'Consultor',
+      'Asesor financiero',
+      'Agente inmobiliario',
+      'Profesor',
+      'Tutor',
+      'Entrenador personal',
+      'Instructor fitness',
+      'Instructor yoga',
+      'Chef',
+      'Fotografo',
+      'Videografo',
+      'Disenador grafico',
+      'Disenador web',
+      'Programador',
+      'Desarrollador software',
+      'Especialista marketing digital',
+      'Community manager',
+      'Copywriter',
+      'Traductor',
+      'Editor de video',
+      'Ilustrador',
+      'Artista',
+      'Musico',
+      'Actor',
+      'Locutor',
+      'Electricista',
+      'Gasfitero',
+      'Carpintero',
+      'Cerrajero',
+      'Tecnico celulares',
+      'Tecnico computadoras',
+      'Tecnico aire acondicionado',
+      'Mecanico',
+      'Pintor',
+      'Soldador',
+      'Jardinero',
+      'Decorador interiores',
+      'Maquillador profesional',
+      'Estilista',
+      'Barbero independiente',
+      'Masajista',
+      'Terapeuta',
+      'Tarotista',
+      'Astrologo',
+      'Consultor espiritual',
+    ],
+  },
+  {
+    id: 'digital-project',
+    label: '3. Una empresa, marca o proyecto digital',
+    title: '3. Soy: empresa, marca o proyecto digital',
+    description: 'Pensado para startups, marcas, empresas B2B y productos digitales.',
+    searchPlaceholder: 'Buscar empresa, marca o proyecto...',
+    options: [
+      'Startup tecnologica',
+      'Agencia de marketing',
+      'Agencia creativa',
+      'Empresa de software',
+      'Consultora empresarial',
+      'Empresa de logistica',
+      'Empresa de transporte',
+      'Empresa de construccion',
+      'Empresa inmobiliaria',
+      'Empresa industrial',
+      'Empresa importadora',
+      'Empresa exportadora',
+      'Empresa B2B',
+      'Marca personal',
+      'Influencer',
+      'Creador de contenido',
+      'Tienda online',
+      'Marketplace',
+      'Plataforma SaaS',
+      'App movil',
+      'Comunidad',
+      'Blog',
+      'Medio digital',
+      'ONG',
+      'Fundacion',
+      'Proyecto educativo',
+      'Proyecto cultural',
+      'Podcast',
+      'Productora audiovisual',
+      'Estudio creativo',
+    ],
+  },
+];
+
+const localSalesTypes = ['Solo en local', 'Local + delivery', 'Solo delivery', 'Local + reservas'];
+const localNeeds = [
+  'Mostrar menu o catalogo',
+  'Recibir pedidos',
+  'Reservas',
+  'Mostrar ubicacion',
+  'Promociones',
+  'Galeria de fotos',
+  'Agenda de citas',
+];
+const professionalWorkModes = ['Consultorio / oficina', 'Atencion a domicilio', 'Online', 'Mixto'];
+const professionalGoals = ['Conseguir clientes', 'Reservar citas', 'Mostrar portafolio', 'Vender cursos', 'Mostrar servicios'];
+const digitalBusinessModels = ['Servicios', 'Productos', 'Suscripcion', 'Marketplace', 'Contenido'];
+const digitalNeeds = ['Captar clientes', 'Mostrar portafolio', 'Explicar el producto', 'Landing de ventas', 'Registro de usuarios'];
+const smartNeedSectionMap: Record<string, string[]> = {
+  'Mostrar menu o catalogo': ['menu'],
+  'Recibir pedidos': ['delivery'],
+  Reservas: ['reservas'],
+  'Mostrar ubicacion': ['ubicacion'],
+  Promociones: ['promociones'],
+  'Galeria de fotos': ['galeria'],
+  'Agenda de citas': ['agenda'],
+  'Captar clientes': ['cta'],
+  'Mostrar portafolio': ['portafolio'],
+  'Explicar el producto': ['producto'],
+  'Landing de ventas': ['beneficios', 'cta'],
+  'Registro de usuarios': ['registro'],
+};
+
+const inferredSectionsMap: Record<string, string[]> = {
+  restaurante: ['menu', 'reservas', 'galeria', 'ubicacion', 'testimonios'],
+  polleria: ['menu', 'promociones', 'delivery', 'ubicacion'],
+  cafeteria: ['menu', 'galeria', 'ubicacion', 'promociones'],
+  abogado: ['especialidades', 'experiencia', 'casos', 'contacto'],
+  psicologo: ['servicios', 'metodologia', 'agenda', 'contacto'],
+  dentista: ['tratamientos', 'equipo', 'casos', 'reservas'],
+  fotografo: ['portafolio', 'paquetes', 'testimonios', 'contacto'],
+  'marca personal': ['sobre mi', 'servicios', 'contenido', 'contacto'],
+  'startup tecnologica': ['problema', 'solucion', 'beneficios', 'cta'],
+  'plataforma saas': ['producto', 'planes', 'faq', 'registro'],
+};
+
+const smartSectionFieldMap: Record<string, SmartSectionField[]> = {
+  menu: [
+    {
+      key: 'menuHighlights',
+      label: 'Menu o catalogo destacado',
+      placeholder: 'Describe los platos, productos o categorias principales que deben aparecer.',
+      multiline: true,
+    },
+    {
+      key: 'catalogPdfUrl',
+      label: 'Catalogo o menu en PDF',
+      placeholder: 'Sube tu PDF para que la IA tome los productos, precios o categorias.',
+    },
+  ],
+  promociones: [
+    {
+      key: 'promotionsDetails',
+      label: 'Promociones vigentes',
+      placeholder: 'Ej: 2x1 los martes, combo familiar, descuento por primera compra.',
+      multiline: true,
+    },
+  ],
+  delivery: [
+    {
+      key: 'deliveryInfo',
+      label: 'Cobertura y condiciones de delivery',
+      placeholder: 'Indica zonas, horarios, pedidos minimos o apps que usas para delivery.',
+      multiline: true,
+    },
+  ],
+  ubicacion: [
+    {
+      key: 'locationAddress',
+      label: 'Direccion del negocio',
+      placeholder: 'Ej: Av. Primavera 123, San Borja, Lima.',
+    },
+    {
+      key: 'mapReference',
+      label: 'Referencia o enlace de mapa',
+      placeholder: 'Ej: Frente al parque / enlace de Google Maps.',
+    },
+  ],
+  reservas: [
+    {
+      key: 'reservationDetails',
+      label: 'Como funcionan las reservas',
+      placeholder: 'Indica horarios, aforo, si reservas por WhatsApp o formulario.',
+      multiline: true,
+    },
+  ],
+  galeria: [
+    {
+      key: 'galleryNotes',
+      label: 'Que deberia mostrar la galeria',
+      placeholder: 'Describe fotos clave: local, productos, equipo, clientes, etc.',
+      multiline: true,
+    },
+  ],
+  testimonios: [
+    {
+      key: 'testimonialsNotes',
+      label: 'Testimonios o comentarios destacados',
+      placeholder: 'Comparte frases, reseñas o ideas de testimonios que quieras mostrar.',
+      multiline: true,
+    },
+  ],
+  especialidades: [
+    {
+      key: 'specialtiesDetails',
+      label: 'Especialidades o areas principales',
+      placeholder: 'Lista tus especialidades o areas de experiencia.',
+      multiline: true,
+    },
+  ],
+  experiencia: [
+    {
+      key: 'experienceDetails',
+      label: 'Experiencia profesional',
+      placeholder: 'Resume años de experiencia, cargos, logros o trayectoria.',
+      multiline: true,
+    },
+  ],
+  casos: [
+    {
+      key: 'caseStudies',
+      label: 'Casos, proyectos o resultados',
+      placeholder: 'Comparte ejemplos de casos atendidos, resultados o proyectos relevantes.',
+      multiline: true,
+    },
+  ],
+  contacto: [
+    {
+      key: 'contactPrompt',
+      label: 'Mensaje o llamada a la accion de contacto',
+      placeholder: 'Ej: Agenda una consulta hoy mismo / Escríbenos por WhatsApp.',
+      multiline: true,
+    },
+  ],
+  servicios: [
+    {
+      key: 'servicesSummary',
+      label: 'Servicios que deben resaltarse',
+      placeholder: 'Describe los servicios principales que quieres destacar.',
+      multiline: true,
+    },
+  ],
+  metodologia: [
+    {
+      key: 'methodologyDetails',
+      label: 'Metodologia o forma de trabajo',
+      placeholder: 'Explica como trabajas, tus fases o tu enfoque.',
+      multiline: true,
+    },
+  ],
+  agenda: [
+    {
+      key: 'agendaDetails',
+      label: 'Agenda o citas',
+      placeholder: 'Indica si atiendes por cita, horarios o modalidad de agendamiento.',
+      multiline: true,
+    },
+  ],
+  tratamientos: [
+    {
+      key: 'treatmentsDetails',
+      label: 'Tratamientos o soluciones destacadas',
+      placeholder: 'Describe los tratamientos o soluciones que ofreceras.',
+      multiline: true,
+    },
+  ],
+  equipo: [
+    {
+      key: 'teamInfo',
+      label: 'Equipo o profesionales',
+      placeholder: 'Comparte informacion del equipo que debe aparecer en la web.',
+      multiline: true,
+    },
+  ],
+  portafolio: [
+    {
+      key: 'portfolioHighlights',
+      label: 'Portafolio o trabajos destacados',
+      placeholder: 'Describe los proyectos o piezas mas importantes para mostrar.',
+      multiline: true,
+    },
+  ],
+  paquetes: [
+    {
+      key: 'packageDetails',
+      label: 'Paquetes o planes',
+      placeholder: 'Resume tus paquetes, rangos o servicios agrupados.',
+      multiline: true,
+    },
+  ],
+  problema: [
+    {
+      key: 'problemStatement',
+      label: 'Problema que resuelve tu producto',
+      placeholder: 'Explica el dolor o necesidad que atacas.',
+      multiline: true,
+    },
+  ],
+  solucion: [
+    {
+      key: 'solutionDescription',
+      label: 'Solucion que ofreces',
+      placeholder: 'Describe como funciona tu solucion o propuesta de valor.',
+      multiline: true,
+    },
+  ],
+  beneficios: [
+    {
+      key: 'benefitsList',
+      label: 'Beneficios principales',
+      placeholder: 'Enumera beneficios claros para el cliente.',
+      multiline: true,
+    },
+  ],
+  cta: [
+    {
+      key: 'ctaText',
+      label: 'Llamada a la accion principal',
+      placeholder: 'Ej: Solicita una demo / Empieza hoy / Habla con un asesor.',
+    },
+  ],
+  producto: [
+    {
+      key: 'productDescription',
+      label: 'Producto o plataforma',
+      placeholder: 'Describe el producto, plataforma o software que vendes.',
+      multiline: true,
+    },
+  ],
+  planes: [
+    {
+      key: 'planInformation',
+      label: 'Planes o niveles',
+      placeholder: 'Resume que planes existen o como deberian presentarse.',
+      multiline: true,
+    },
+  ],
+  faq: [
+    {
+      key: 'faqDetails',
+      label: 'Preguntas frecuentes',
+      placeholder: 'Escribe dudas comunes que deberian resolverse en la web.',
+      multiline: true,
+    },
+  ],
+  registro: [
+    {
+      key: 'registrationFlow',
+      label: 'Registro o onboarding de usuarios',
+      placeholder: 'Describe que datos pide el registro o como deberia funcionar.',
+      multiline: true,
+    },
+  ],
+};
 
 
 const colorSchemes = [
@@ -128,6 +589,7 @@ const statusSteps = [
 ];
 
 export default function DashboardPage() {
+  const heroActiveClass = 'border-cta bg-cta text-cta-foreground shadow-sm';
   const [loading, setLoading] = useState(true);
   const [project, setProject] = useState<Project | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -149,6 +611,7 @@ export default function DashboardPage() {
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+  const [catalogPdfFile, setCatalogPdfFile] = useState<File | null>(null);
   const [renewOpen, setRenewOpen] = useState(false);
   const [renewMethod, setRenewMethod] = useState<'card' | 'yape' | null>(null);
   const [renewLoading, setRenewLoading] = useState(false);
@@ -158,20 +621,28 @@ export default function DashboardPage() {
   const [formData, setFormData] = useState({
     domainOption: 'subdomain',
     subdomain: '',
+    businessIdentity: '' as BusinessIdentity | '',
+    businessTypeQuery: '',
+    businessType: '',
     colorScheme: '',
     visualStyle: '',
     features: [] as string[],
     businessName: '',
     businessSector: '',
     city: '',
-    hasLocal: 'no',
-    goal: '',
+    shortDescription: '',
+    salesType: '',
+    workMode: '',
+    professionalGoal: '',
+    businessModel: '',
+    smartNeeds: [] as string[],
+    smartSectionContent: {} as Record<string, string>,
+    primaryServices: [''] as string[],
     audience: [] as string[],
     colors: '',
     references: '',
     hasLogo: 'no',
     logoUrl: '',
-    baseText: '',
     instagram: '',
     facebook: '',
     whatsapp: '',
@@ -306,6 +777,7 @@ export default function DashboardPage() {
     if (!project) return '';
     const data = project.onboardingData || {};
     if (data.publicUrl) return data.publicUrl as string;
+    if (data.aiGeneration?.previewUrl) return data.aiGeneration.previewUrl as string;
     if (data.publicDomain) return `https://${data.publicDomain}`;
     if (data.subdomain) return `https://${data.subdomain}.${domainBase}`;
     return '';
@@ -321,6 +793,134 @@ export default function DashboardPage() {
       .replace(/^-+|-+$/g, '')
       .slice(0, 30);
 
+  const normalizeSearchValue = (value: string) =>
+    value
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+
+  const selectedIdentity = identityOptions.find((item) => item.id === formData.businessIdentity) ?? null;
+  const filteredBusinessOptions = useMemo(() => {
+    if (!selectedIdentity) return [];
+    const query = normalizeSearchValue(formData.businessTypeQuery);
+    if (!query) return selectedIdentity.options;
+    return selectedIdentity.options.filter((option) => normalizeSearchValue(option).includes(query));
+  }, [selectedIdentity, formData.businessTypeQuery]);
+
+  const inferredSections = useMemo(() => {
+    const key = normalizeSearchValue(formData.businessType);
+    return inferredSectionsMap[key] ?? [];
+  }, [formData.businessType]);
+
+  const manualSections = useMemo(
+    () => formData.smartNeeds.flatMap((need) => smartNeedSectionMap[need] ?? []),
+    [formData.smartNeeds],
+  );
+
+  const effectiveSections = useMemo(
+    () => Array.from(new Set([...inferredSections, ...manualSections])),
+    [inferredSections, manualSections],
+  );
+
+  const smartSectionFields = useMemo(
+    () =>
+      effectiveSections
+        .flatMap((section) => smartSectionFieldMap[section] ?? [])
+        .filter((field, index, all) => all.findIndex((item) => item.key === field.key) === index),
+    [effectiveSections],
+  );
+  useEffect(() => {
+    if (!effectiveSections.includes('menu')) {
+      setCatalogPdfFile(null);
+    }
+  }, [effectiveSections]);
+  const smartSectionFieldLabels = useMemo(
+    () =>
+      smartSectionFields.reduce<Record<string, string>>((acc, field) => {
+        acc[field.key] = field.label;
+        return acc;
+      }, {}),
+    [smartSectionFields],
+  );
+
+  const updatePrimaryService = (index: number, value: string) => {
+    setFormData((prev) => {
+      const next = [...prev.primaryServices];
+      next[index] = value;
+      return { ...prev, primaryServices: next };
+    });
+  };
+
+  const addPrimaryService = () => {
+    setFormData((prev) => {
+      if (prev.primaryServices.length >= 5) return prev;
+      return { ...prev, primaryServices: [...prev.primaryServices, ''] };
+    });
+  };
+
+  const removePrimaryService = (index: number) => {
+    setFormData((prev) => {
+      if (prev.primaryServices.length === 1) {
+        return { ...prev, primaryServices: [''] };
+      }
+      return {
+        ...prev,
+        primaryServices: prev.primaryServices.filter((_, serviceIndex) => serviceIndex !== index),
+      };
+    });
+  };
+
+  const toggleSmartNeed = (value: string) => {
+    setFormData((prev) => {
+      const exists = prev.smartNeeds.includes(value);
+      return {
+        ...prev,
+        smartNeeds: exists
+          ? prev.smartNeeds.filter((item) => item !== value)
+          : [...prev.smartNeeds, value],
+      };
+    });
+  };
+
+  const selectBusinessIdentity = (identity: BusinessIdentity) => {
+    setCatalogPdfFile(null);
+    setFormData((prev) => ({
+      ...prev,
+      businessIdentity: identity,
+      businessTypeQuery: '',
+      businessType: '',
+      businessSector: '',
+      salesType: '',
+      workMode: '',
+      professionalGoal: '',
+      businessModel: '',
+      smartNeeds: [],
+      smartSectionContent: {},
+      primaryServices: [''],
+    }));
+  };
+
+  const selectBusinessType = (value: string) => {
+    setCatalogPdfFile(null);
+    setFormData((prev) => ({
+      ...prev,
+      businessType: value,
+      businessTypeQuery: value,
+      businessSector: value,
+      smartSectionContent: {},
+    }));
+  };
+
+  const updateSmartSectionContent = (key: string, value: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      smartSectionContent: {
+        ...prev.smartSectionContent,
+        [key]: value,
+      },
+    }));
+  };
+
   const handleNext = () => {
     if (step === 1) {
       if (!formData.subdomain.trim()) {
@@ -332,6 +932,65 @@ export default function DashboardPage() {
         return;
       }
     }
+    if (step === 2) {
+      if (!formData.businessIdentity) {
+        setFormError('Selecciona que tipo de cliente eres.');
+        return;
+      }
+      if (!formData.businessType) {
+        setFormError('Selecciona tu tipo de negocio, profesion o proyecto.');
+        return;
+      }
+      if (formData.businessIdentity === 'local-business') {
+        if (!formData.salesType) {
+          setFormError('Selecciona como vendes o atiendes.');
+          return;
+        }
+        if (!formData.smartNeeds.length) {
+          setFormError('Selecciona que necesitas en tu web.');
+          return;
+        }
+      }
+      if (formData.businessIdentity === 'professional') {
+        if (!formData.workMode) {
+          setFormError('Selecciona como trabajas.');
+          return;
+        }
+        if (!formData.professionalGoal) {
+          setFormError('Selecciona el objetivo principal de tu web.');
+          return;
+        }
+        if (!formData.primaryServices.some((item) => item.trim())) {
+          setFormError('Agrega al menos un servicio principal.');
+          return;
+        }
+      }
+      if (formData.businessIdentity === 'digital-project') {
+        if (!formData.businessModel) {
+          setFormError('Selecciona tu modelo de negocio.');
+          return;
+        }
+        if (!formData.smartNeeds.length) {
+          setFormError('Selecciona lo que necesita tu web.');
+          return;
+        }
+      }
+    }
+    if (step === 3) {
+      if (!formData.businessName.trim() || !formData.city.trim()) {
+        setFormError('Completa el nombre del proyecto y la ciudad.');
+        return;
+      }
+      if (!formData.shortDescription.trim()) {
+        setFormError('Agrega una descripcion corta para orientar mejor la web.');
+        return;
+      }
+      if (!formData.audience.length) {
+        setFormError('Selecciona al menos un publico objetivo.');
+        return;
+      }
+    }
+    setFormError(null);
     if (step < 6) setStep(step + 1);
   };
 
@@ -387,16 +1046,20 @@ export default function DashboardPage() {
       setFormError('Subdominio requerido.');
       return;
     }
-    if (!formData.businessName || !formData.businessSector || !formData.city) {
+    if (!formData.businessIdentity || !formData.businessType) {
+      setFormError('Completa el perfil inteligente de tu proyecto.');
+      return;
+    }
+    if (!formData.businessName.trim() || !formData.city.trim()) {
       setFormError('Completa los datos basicos del negocio.');
       return;
     }
-    if (!formData.baseText.trim()) {
-      setFormError('Define tu negocio o proyecto.');
+    if (!formData.shortDescription.trim()) {
+      setFormError('Agrega una descripcion corta.');
       return;
     }
-    if (!formData.goal) {
-      setFormError('Selecciona el objetivo de tu web.');
+    if (!formData.audience.length) {
+      setFormError('Selecciona al menos un publico objetivo.');
       return;
     }
     if (!formData.confirm) {
@@ -409,6 +1072,7 @@ export default function DashboardPage() {
     try {
       const token = localStorage.getItem('access_token');
       let logoUrl = formData.hasLogo === 'si' ? formData.logoUrl : '';
+      let catalogPdfUrl = formData.smartSectionContent.catalogPdfUrl ?? '';
 
       if (formData.hasLogo === 'si' && logoFile) {
         const form = new FormData();
@@ -427,6 +1091,38 @@ export default function DashboardPage() {
 
         const uploadData = await uploadRes.json().catch(() => ({}));
         logoUrl = uploadData?.onboardingData?.logoUrl ?? uploadData?.logoUrl ?? logoUrl;
+      }
+
+      if (effectiveSections.includes('menu') && catalogPdfFile) {
+        if (catalogPdfFile.type !== 'application/pdf') {
+          throw new Error('El catalogo debe estar en formato PDF.');
+        }
+        if (catalogPdfFile.size > 5 * 1024 * 1024) {
+          throw new Error('El PDF del catalogo no puede pesar mas de 5MB.');
+        }
+
+        const form = new FormData();
+        form.append('file', catalogPdfFile);
+        form.append('fieldKey', 'catalogPdfUrl');
+        const documentRes = await fetch(`${apiBase}/projects/${project.id}/document`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          body: form,
+        });
+
+        if (!documentRes.ok) {
+          const text = await documentRes.text();
+          const data = text ? JSON.parse(text) : null;
+          throw new Error(data?.message || 'No se pudo subir el PDF del catalogo.');
+        }
+
+        const documentData = await documentRes.json().catch(() => ({}));
+        catalogPdfUrl =
+          documentData?.onboardingData?.catalogPdfUrl ??
+          documentData?.catalogPdfUrl ??
+          catalogPdfUrl;
       }
 
 
@@ -463,6 +1159,13 @@ export default function DashboardPage() {
           completed: true,
           data: {
             ...formData,
+            businessSector: formData.businessSector || formData.businessType,
+            smartSectionContent: {
+              ...formData.smartSectionContent,
+              ...(catalogPdfUrl ? { catalogPdfUrl } : {}),
+            },
+            effectiveSections,
+            inferredSections,
             logoUrl,
             images: uploadedImages,
             imageInstructions: formData.imageInstructions,
@@ -685,7 +1388,13 @@ export default function DashboardPage() {
                 </DialogDescription>
               </DialogHeader>
               <DialogFooter>
-                <Button variant="outline" onClick={() => setAdvancedOpen(false)}>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setAdvancedOpen(false);
+                    window.open('https://142.171.227.112:8090/', '_blank', 'noopener,noreferrer');
+                  }}
+                >
                   Entendido
                 </Button>
               </DialogFooter>
@@ -735,7 +1444,8 @@ export default function DashboardPage() {
                     <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-muted-foreground">
                       {[
                         { label: 'Dominio', active: step === 1 },
-                        { label: 'Negocio', active: step === 2 || step === 3 },
+                        { label: 'Perfil', active: step === 2 },
+                        { label: 'Negocio', active: step === 3 },
                         { label: 'Estilo', active: step === 4 || step === 5 },
                         { label: 'Generar', active: step === 6 },
                       ].map((item) => (
@@ -810,17 +1520,330 @@ export default function DashboardPage() {
 
                     {step === 2 && (
                       <div className="space-y-4">
+                        <div className="space-y-2">
+                          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-muted-foreground">
+                            SOY:
+                          </p>
+                          <div className="grid gap-3 md:grid-cols-3">
+                            {identityOptions.map((option) => {
+                              const active = formData.businessIdentity === option.id;
+                              return (
+                                <button
+                                  key={option.id}
+                                  type="button"
+                                  className={`min-h-32 rounded-3xl border p-5 text-left transition ${
+                                    active
+                                      ? heroActiveClass
+                                      : 'border-border bg-white hover:border-foreground/20'
+                                  }`}
+                                  onClick={() => selectBusinessIdentity(option.id)}
+                                >
+                                  <p className="text-base font-semibold leading-snug">{option.label}</p>
+                                  <p className="mt-2 text-xs text-muted-foreground">{option.description}</p>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {selectedIdentity && (
+                          <div className="rounded-3xl border border-border bg-white p-5">
+                            <div className="space-y-2">
+                              <h3 className="text-lg font-semibold">{selectedIdentity.title}</h3>
+                              <p className="text-sm text-muted-foreground">{selectedIdentity.description}</p>
+                            </div>
+
+                            <div className="mt-5 space-y-3">
+                              <label className="text-sm font-medium">Buscador</label>
+                              <Input
+                                placeholder={selectedIdentity.searchPlaceholder}
+                                value={formData.businessTypeQuery}
+                                onChange={(e) =>
+                                  setFormData((prev) => ({
+                                    ...prev,
+                                    businessTypeQuery: e.target.value,
+                                  }))
+                                }
+                              />
+                              <div className="max-h-64 space-y-2 overflow-y-auto rounded-2xl border border-border/70 bg-muted/20 p-3">
+                                {filteredBusinessOptions.length > 0 ? (
+                                  filteredBusinessOptions.map((option) => {
+                                    const active = formData.businessType === option;
+                                    return (
+                                      <button
+                                        key={option}
+                                        type="button"
+                                        className={`flex w-full items-center justify-between rounded-2xl px-3 py-2 text-left text-sm transition ${
+                                          active
+                                            ? 'bg-cta text-cta-foreground'
+                                            : 'bg-white text-foreground hover:bg-muted'
+                                        }`}
+                                        onClick={() => selectBusinessType(option)}
+                                      >
+                                        <span>{option}</span>
+                                        {active && <Check size={14} />}
+                                      </button>
+                                    );
+                                  })
+                                ) : (
+                                  <div className="rounded-2xl border border-dashed border-border bg-white px-4 py-5 text-sm text-muted-foreground">
+                                    No hay coincidencias con esa busqueda. Prueba con otra palabra o rubro.
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            {formData.businessType && (
+                              <div className="mt-5 space-y-5">
+                                {formData.businessIdentity === 'local-business' && (
+                                  <>
+                                    <div className="space-y-2">
+                                      <label className="text-sm font-medium">Tipo de venta</label>
+                                      <div className="flex flex-wrap gap-2">
+                                        {localSalesTypes.map((option) => {
+                                          const active = formData.salesType === option;
+                                          return (
+                                            <button
+                                              key={option}
+                                              type="button"
+                                              className={`rounded-full border px-4 py-2 text-sm transition ${
+                                                active
+                                                  ? 'border-cta bg-cta/10 text-foreground'
+                                                  : 'border-border bg-white text-muted-foreground'
+                                              }`}
+                                              onClick={() => setFormData((prev) => ({ ...prev, salesType: option }))}
+                                            >
+                                              {option}
+                                            </button>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                    <div className="space-y-2">
+                                      <label className="text-sm font-medium">Que quiere en su web</label>
+                                      <div className="flex flex-wrap gap-2">
+                                        {localNeeds.map((need) => {
+                                          const active = formData.smartNeeds.includes(need);
+                                          return (
+                                            <button
+                                              key={need}
+                                              type="button"
+                                              className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm transition ${
+                                                active
+                                                  ? 'border-cta bg-cta/10 text-foreground'
+                                                  : 'border-border bg-white text-muted-foreground'
+                                              }`}
+                                              onClick={() => toggleSmartNeed(need)}
+                                            >
+                                              <span
+                                                className={`flex h-4 w-4 items-center justify-center rounded-full border ${
+                                                  active ? 'border-cta bg-cta text-cta-foreground' : 'border-border'
+                                                }`}
+                                              >
+                                                {active && <Check size={10} />}
+                                              </span>
+                                              {need}
+                                            </button>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                  </>
+                                )}
+
+                                {formData.businessIdentity === 'professional' && (
+                                  <>
+                                    <div className="space-y-2">
+                                      <label className="text-sm font-medium">Como trabaja</label>
+                                      <div className="flex flex-wrap gap-2">
+                                        {professionalWorkModes.map((option) => {
+                                          const active = formData.workMode === option;
+                                          return (
+                                            <button
+                                              key={option}
+                                              type="button"
+                                              className={`rounded-full border px-4 py-2 text-sm transition ${
+                                                active
+                                                  ? 'border-cta bg-cta/10 text-foreground'
+                                                  : 'border-border bg-white text-muted-foreground'
+                                              }`}
+                                              onClick={() => setFormData((prev) => ({ ...prev, workMode: option }))}
+                                            >
+                                              {option}
+                                            </button>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                    <div className="space-y-2">
+                                      <label className="text-sm font-medium">Objetivo de la web</label>
+                                      <div className="flex flex-wrap gap-2">
+                                        {professionalGoals.map((option) => {
+                                          const active = formData.professionalGoal === option;
+                                          return (
+                                            <button
+                                              key={option}
+                                              type="button"
+                                              className={`rounded-full border px-4 py-2 text-sm transition ${
+                                                active
+                                                  ? 'border-cta bg-cta/10 text-foreground'
+                                                  : 'border-border bg-white text-muted-foreground'
+                                              }`}
+                                              onClick={() => setFormData((prev) => ({ ...prev, professionalGoal: option }))}
+                                            >
+                                              {option}
+                                            </button>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                    <div className="space-y-2">
+                                      <label className="text-sm font-medium">Servicios principales</label>
+                                      <div className="space-y-3">
+                                        {formData.primaryServices.map((service, index) => (
+                                          <div key={index} className="flex items-center gap-3">
+                                            <Input
+                                              value={service}
+                                              onChange={(e) => updatePrimaryService(index, e.target.value)}
+                                              placeholder={`Servicio ${index + 1}`}
+                                            />
+                                            <Button
+                                              type="button"
+                                              variant="outline"
+                                              onClick={() => removePrimaryService(index)}
+                                              disabled={formData.primaryServices.length === 1 && !service.trim()}
+                                            >
+                                              Quitar
+                                            </Button>
+                                          </div>
+                                        ))}
+                                      </div>
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        onClick={addPrimaryService}
+                                        disabled={formData.primaryServices.length >= 5}
+                                      >
+                                        Anadir servicio
+                                      </Button>
+                                      <p className="text-xs text-muted-foreground">
+                                        Puedes agregar hasta 5 servicios principales.
+                                      </p>
+                                    </div>
+                                  </>
+                                )}
+
+                                {formData.businessIdentity === 'digital-project' && (
+                                  <>
+                                    <div className="space-y-2">
+                                      <label className="text-sm font-medium">Modelo de negocio</label>
+                                      <div className="flex flex-wrap gap-2">
+                                        {digitalBusinessModels.map((option) => {
+                                          const active = formData.businessModel === option;
+                                          return (
+                                            <button
+                                              key={option}
+                                              type="button"
+                                              className={`rounded-full border px-4 py-2 text-sm transition ${
+                                                active
+                                                  ? 'border-cta bg-cta/10 text-foreground'
+                                                  : 'border-border bg-white text-muted-foreground'
+                                              }`}
+                                              onClick={() => setFormData((prev) => ({ ...prev, businessModel: option }))}
+                                            >
+                                              {option}
+                                            </button>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                    <div className="space-y-2">
+                                      <label className="text-sm font-medium">Que necesita la web</label>
+                                      <div className="flex flex-wrap gap-2">
+                                        {digitalNeeds.map((need) => {
+                                          const active = formData.smartNeeds.includes(need);
+                                          return (
+                                            <button
+                                              key={need}
+                                              type="button"
+                                              className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm transition ${
+                                                active
+                                                  ? 'border-cta bg-cta/10 text-foreground'
+                                                  : 'border-border bg-white text-muted-foreground'
+                                              }`}
+                                              onClick={() => toggleSmartNeed(need)}
+                                            >
+                                              <span
+                                                className={`flex h-4 w-4 items-center justify-center rounded-full border ${
+                                                  active ? 'border-cta bg-cta text-cta-foreground' : 'border-border'
+                                                }`}
+                                              >
+                                                {active && <Check size={10} />}
+                                              </span>
+                                              {need}
+                                            </button>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                  </>
+                                )}
+
+                                {inferredSections.length > 0 && (
+                                  <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                                    <p className="text-sm font-semibold text-emerald-900">
+                                      Secciones sugeridas automaticamente para tu web
+                                    </p>
+                                    <div className="mt-3 flex flex-wrap gap-2">
+                                      {inferredSections.map((section) => (
+                                        <span
+                                          key={section}
+                                          className="rounded-full bg-white px-3 py-1 text-xs font-medium text-emerald-900"
+                                        >
+                                          {section}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {step === 3 && (
+                      <div className="space-y-4">
                         <div>
-                          <label className="text-sm font-medium">Nombre de la empresa</label>
-                          <Input value={formData.businessName} onChange={(e) => setFormData({ ...formData, businessName: e.target.value })} />
+                          <label className="text-sm font-medium">Nombre de la empresa o proyecto</label>
+                          <Input
+                            value={formData.businessName}
+                            onChange={(e) => setFormData({ ...formData, businessName: e.target.value })}
+                          />
                         </div>
                         <div>
-                          <label className="text-sm font-medium">Rubro</label>
-                          <Input value={formData.businessSector} onChange={(e) => setFormData({ ...formData, businessSector: e.target.value })} />
+                          <label className="text-sm font-medium">Rubro o actividad</label>
+                          <Input
+                            value={formData.businessSector}
+                            onChange={(e) => setFormData({ ...formData, businessSector: e.target.value })}
+                            placeholder={formData.businessType || 'Ej: Restaurante, Estudio contable, SaaS'}
+                          />
                         </div>
                         <div>
                           <label className="text-sm font-medium">Pais / ciudad</label>
-                          <Input value={formData.city} onChange={(e) => setFormData({ ...formData, city: e.target.value })} />
+                          <Input
+                            value={formData.city}
+                            onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-sm font-medium">Descripcion corta</label>
+                          <Textarea
+                            value={formData.shortDescription}
+                            onChange={(e) => setFormData({ ...formData, shortDescription: e.target.value })}
+                            placeholder="Resume en pocas lineas que haces, que vendes o como ayudas a tus clientes."
+                          />
                         </div>
                         <div>
                           <label className="text-sm font-medium">Referencias de webs (opcional)</label>
@@ -829,46 +1852,6 @@ export default function DashboardPage() {
                             onChange={(e) => setFormData({ ...formData, references: e.target.value })}
                             placeholder="Ej: https://ejemplo.com, https://otraweb.com"
                           />
-                        </div>
-                        <div className="space-y-2">
-                          <span className="text-sm font-medium">Tiene local fisico?</span>
-                          <div className="flex flex-wrap gap-3">
-                            {[
-                              { label: 'Si', value: 'si' },
-                              { label: 'No', value: 'no' },
-                            ].map((opt) => (
-                              <button
-                                key={opt.value}
-                                type="button"
-                                className={`h-10 rounded-full border px-4 text-sm transition ${
-                                  formData.hasLocal === opt.value
-                                    ? 'border-cta bg-cta/10 text-foreground'
-                                    : 'border-border bg-white text-muted-foreground'
-                                }`}
-                                onClick={() => setFormData({ ...formData, hasLocal: opt.value })}
-                              >
-                                {opt.label}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {step === 3 && (
-                      <div className="space-y-4">
-                        <div>
-                          <label className="text-sm font-medium">Objetivo de la web</label>
-                          <select
-                            className="w-full h-11 rounded-md border border-input bg-background px-3 text-sm"
-                            value={formData.goal}
-                            onChange={(e) => setFormData({ ...formData, goal: e.target.value })}
-                          >
-                            <option value="">Selecciona</option>
-                            <option value="vender">Vender</option>
-                            <option value="leads">Conseguir leads</option>
-                            <option value="informacion">Mostrar informacion</option>
-                          </select>
                         </div>
                         <div>
                           <label className="text-sm font-medium">Publico objetivo</label>
@@ -1067,14 +2050,61 @@ export default function DashboardPage() {
 
                     {step === 5 && (
                       <div className="space-y-4">
-                        <div>
-                          <label className="text-sm font-medium">Define tu negocio o proyecto</label>
-                          <Textarea
-                            value={formData.baseText}
-                            onChange={(e) => setFormData({ ...formData, baseText: e.target.value })}
-                            placeholder="Escribe todo lo relevante de tu negocio y todo lo que la gente deberia saber"
-                          />
-                        </div>
+                        {smartSectionFields.length > 0 && (
+                          <div className="space-y-4 rounded-3xl border border-border bg-white p-5">
+                            <div>
+                              <h3 className="text-base font-semibold">Campos inteligentes segun tu rubro</h3>
+                              <p className="mt-1 text-sm text-muted-foreground">
+                                Estos campos aparecieron segun las secciones sugeridas y las opciones que seleccionaste para tu web.
+                              </p>
+                            </div>
+                            <div className="grid gap-4">
+                              {smartSectionFields.map((field) => (
+                                <div key={field.key} className="space-y-2">
+                                  <label className="text-sm font-medium">{field.label}</label>
+                                  {field.key === 'catalogPdfUrl' ? (
+                                    <div className="space-y-3 rounded-2xl border border-dashed border-border bg-muted/20 p-4">
+                                      <Input
+                                        type="file"
+                                        accept="application/pdf"
+                                        onChange={(e) => {
+                                          const file = e.target.files?.[0] ?? null;
+                                          if (file && file.size > 5 * 1024 * 1024) {
+                                            setFormError('El PDF del catalogo no puede pesar mas de 5MB.');
+                                            setCatalogPdfFile(null);
+                                            return;
+                                          }
+                                          setFormError(null);
+                                          setCatalogPdfFile(file);
+                                        }}
+                                      />
+                                      <p className="text-xs text-muted-foreground">
+                                        Sube un PDF de hasta 5MB con tu menu, catalogo o lista de productos.
+                                      </p>
+                                      {(catalogPdfFile || formData.smartSectionContent.catalogPdfUrl) && (
+                                        <div className="rounded-xl border border-border bg-white px-3 py-2 text-sm text-muted-foreground">
+                                          {catalogPdfFile?.name || 'Ya existe un PDF cargado para este catalogo.'}
+                                        </div>
+                                      )}
+                                    </div>
+                                  ) : field.multiline ? (
+                                    <Textarea
+                                      value={formData.smartSectionContent[field.key] ?? ''}
+                                      onChange={(e) => updateSmartSectionContent(field.key, e.target.value)}
+                                      placeholder={field.placeholder}
+                                    />
+                                  ) : (
+                                    <Input
+                                      value={formData.smartSectionContent[field.key] ?? ''}
+                                      onChange={(e) => updateSmartSectionContent(field.key, e.target.value)}
+                                      placeholder={field.placeholder}
+                                    />
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                         <div>
                           <label className="text-sm font-medium">Instagram</label>
                           <div className="relative">
@@ -1145,12 +2175,34 @@ export default function DashboardPage() {
                         </div>
                         <div className="grid md:grid-cols-2 gap-3 text-sm">
                           <div><strong>Subdominio:</strong> {formData.subdomain ? `${formData.subdomain}.plia.pe` : '-'}</div>
+                          <div><strong>Perfil:</strong> {selectedIdentity?.label || '-'}</div>
+                          <div><strong>Tipo:</strong> {formData.businessType || '-'}</div>
                           <div><strong>Empresa:</strong> {formData.businessName || '-'}</div>
-                          <div><strong>Rubro:</strong> {formData.businessSector || '-'}</div>
+                          <div><strong>Rubro:</strong> {formData.businessSector || formData.businessType || '-'}</div>
                           <div><strong>Ciudad:</strong> {formData.city || '-'}</div>
+                          <div><strong>Descripcion:</strong> {formData.shortDescription || '-'}</div>
                           <div><strong>Referencias:</strong> {formData.references || '-'}</div>
-                          <div><strong>Objetivo:</strong> {formData.goal || '-'}</div>
                           <div><strong>Publico:</strong> {formData.audience.join(', ') || '-'}</div>
+                          {formData.salesType && <div><strong>Tipo de venta:</strong> {formData.salesType}</div>}
+                          {formData.workMode && <div><strong>Como trabaja:</strong> {formData.workMode}</div>}
+                          {formData.professionalGoal && <div><strong>Objetivo:</strong> {formData.professionalGoal}</div>}
+                          {formData.businessModel && <div><strong>Modelo:</strong> {formData.businessModel}</div>}
+                          {formData.primaryServices.some((item) => item.trim()) && (
+                            <div><strong>Servicios:</strong> {formData.primaryServices.filter((item) => item.trim()).join(', ')}</div>
+                          )}
+                          {formData.smartNeeds.length > 0 && (
+                            <div><strong>Necesidades:</strong> {formData.smartNeeds.join(', ')}</div>
+                          )}
+                          {effectiveSections.length > 0 && (
+                            <div><strong>Secciones activas:</strong> {effectiveSections.join(', ')}</div>
+                          )}
+                          {Object.entries(formData.smartSectionContent)
+                            .filter(([, value]) => value.trim())
+                            .map(([key, value]) => (
+                              <div key={key}>
+                                <strong>{smartSectionFieldLabels[key] || key}:</strong> {value}
+                              </div>
+                            ))}
                           <div><strong>Esquema:</strong> {formData.colors || formData.colorScheme || '-'}</div>
                           <div><strong>Estilo:</strong> {formData.visualStyle || '-'}</div>
                           <div><strong>Caracteristicas:</strong> {formData.features.join(', ') || '-'}</div>

@@ -23,6 +23,7 @@ export class ProjectsService {
       where: { id: projectId },
       include: {
         order: true,
+        user: true,
       },
     });
 
@@ -63,8 +64,25 @@ export class ProjectsService {
     });
 
     if (shouldStart) {
-      await this.cyberpanelService.ensureSite(projectId);
-      void this.aiService.generateForProject(projectId);
+      const cyberpanelProvision = await this.cyberpanelService.ensureSite(projectId);
+      if (
+        cyberpanelProvision.accountCreated &&
+        cyberpanelProvision.account &&
+        cyberpanelProvision.plainPassword &&
+        project.user?.email
+      ) {
+        const loginUrl = `${process.env.APP_URL ?? 'http://localhost:3000'}/login`;
+        await this.mailService.sendProjectReady(project.user.email, {
+          projectName: project.name,
+          loginUrl,
+          hostingAccess: {
+            panelUrl: cyberpanelProvision.account.panelUrl,
+            username: cyberpanelProvision.account.username,
+            password: cyberpanelProvision.plainPassword,
+          },
+        });
+      }
+      void this.aiService.generateForProject(projectId).catch(() => undefined);
     }
 
     return updated;
@@ -125,6 +143,20 @@ export class ProjectsService {
         subscription: true,
       },
       orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async findProjectByUser(projectId: number, userId: number) {
+    return this.prisma.project.findFirst({
+      where: { id: projectId, userId },
+      include: {
+        order: {
+          include: {
+            plan: true,
+          },
+        },
+        subscription: true,
+      },
     });
   }
 
@@ -253,6 +285,30 @@ export class ProjectsService {
     const mergedData = {
       ...data,
       images: combined,
+    };
+
+    return this.prisma.project.update({
+      where: { id: projectId },
+      data: {
+        onboardingData: mergedData,
+      },
+    });
+  }
+
+  async saveDocument(projectId: number, userId: number, fieldKey: string, documentUrl: string) {
+    const project = await this.prisma.project.findUnique({
+      where: { id: projectId },
+    });
+    if (!project) {
+      throw new NotFoundException('Project no encontrado.');
+    }
+    if (project.userId !== userId) {
+      throw new BadRequestException('No tienes acceso a este proyecto.');
+    }
+
+    const mergedData = {
+      ...(project.onboardingData as any || {}),
+      [fieldKey]: documentUrl,
     };
 
     return this.prisma.project.update({

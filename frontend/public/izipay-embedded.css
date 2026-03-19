@@ -94,6 +94,10 @@
   margin-top: 25px;
 }
 
+.kr-field-element.kr-installment-number, .kr-field-element.kr-first-installment-delay {
+  height: 53px;
+}
+
 .plia-izipay .kr-embedded .kr-pan .kr-card-logo,
 .plia-izipay .kr-embedded .kr-pan .kr-card-logo,
 .plia-izipay .kr-embedded .kr-security-code .kr-field-icon,

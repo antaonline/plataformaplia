@@ -8,6 +8,7 @@ import { JwtStrategy } from './jwt.strategy'
 import { RefreshTokenService } from './refresh-token.service'
 import { PrismaModule } from '../prisma/prisma.module'
 import { Email2FAModule } from '../email-2fa/email-2fa.module'
+import { resolveAccessTokenTtlSeconds } from './access-token-ttl'
 
 import { MailModule } from '../mail/mail.module'
 
@@ -20,7 +21,9 @@ import { MailModule } from '../mail/mail.module'
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.register({
       secret: process.env.JWT_SECRET,
-      signOptions: { expiresIn: '15m' },
+      signOptions: {
+        expiresIn: resolveAccessTokenTtlSeconds(process.env.ACCESS_TOKEN_TTL),
+      },
     }),
   ],
   providers: [AuthService, JwtStrategy, RefreshTokenService,], // 👈 ESTO ES OBLIGATORIO

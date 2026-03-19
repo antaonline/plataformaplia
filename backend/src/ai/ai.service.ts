@@ -93,22 +93,41 @@ export class AiService {
   }
 
   private buildUserPrompt(input: any, plan: PlanType) {
-    const tone = input.goal === 'vender' ? 'ventas' : input.goal === 'leads' ? 'captacion' : 'informativo';
+    const goal =
+      input.professionalGoal ||
+      input.businessModel ||
+      input.goal ||
+      '';
+    const tone =
+      goal === 'Conseguir clientes' || goal === 'vender'
+        ? 'ventas'
+        : goal === 'Reservar citas' || goal === 'leads'
+          ? 'captacion'
+          : 'informativo';
     const blueprint = this.selectBlueprint(input.businessSector || '');
     return JSON.stringify({
       subdomain: input.subdomain,
       businessName: input.businessName,
+      businessIdentity: input.businessIdentity,
+      businessType: input.businessType,
       sector: input.businessSector,
       city: input.city,
-      goal: input.goal,
+      shortDescription: input.shortDescription,
+      salesType: input.salesType,
+      workMode: input.workMode,
+      businessModel: input.businessModel,
+      goal,
       tone,
       audience: input.audience || [],
       colors: input.colors,
       colorScheme: input.colorScheme,
       visualStyle: input.visualStyle,
       features: input.features || [],
+      effectiveSections: input.effectiveSections || [],
+      smartNeeds: input.smartNeeds || [],
+      smartSectionContent: input.smartSectionContent || {},
+      primaryServices: input.primaryServices || [],
       references: input.references,
-      baseText: input.baseText,
       additionalInstructions: input.additionalInstructions,
       imageInstructions: input.imageInstructions,
       images: input.images || [],
@@ -285,20 +304,36 @@ export class AiService {
 </html>`;
   }
 
-  private persistGeneratedAssets(projectId: number, domain: string, html: string, pages?: Array<{ slug: string; html: string }>) {
-    const root = process.env.CYBERPANEL_SITES_ROOT || '/home';
-    const publicDir = process.env.CYBERPANEL_PUBLIC_DIR || 'public_html';
-    const siteRoot = join(root, domain, publicDir);
-    fs.mkdirSync(siteRoot, { recursive: true });
+  private persistGeneratedAssets(projectId: number, domain: string | null, html: string, pages?: Array<{ slug: string; html: string }>) {
+    let siteRoot: string | null = null;
+    if (domain) {
+      const root = process.env.CYBERPANEL_SITES_ROOT || '/home';
+      const publicDir = process.env.CYBERPANEL_PUBLIC_DIR || 'public_html';
+      siteRoot = join(root, domain, publicDir);
+      fs.mkdirSync(siteRoot, { recursive: true });
 
-    fs.writeFileSync(join(siteRoot, 'index.html'), html, 'utf-8');
+      fs.writeFileSync(join(siteRoot, 'index.html'), html, 'utf-8');
+      if (pages?.length) {
+        for (const page of pages) {
+          const fileName = page.slug === 'index' ? 'index.html' : `${page.slug}.html`;
+          fs.writeFileSync(join(siteRoot, fileName), page.html, 'utf-8');
+        }
+      }
+    }
+    const previewRoot = join(process.cwd(), 'uploads', 'previews', String(projectId));
+    fs.mkdirSync(previewRoot, { recursive: true });
+    fs.writeFileSync(join(previewRoot, 'index.html'), html, 'utf-8');
     if (pages?.length) {
       for (const page of pages) {
         const fileName = page.slug === 'index' ? 'index.html' : `${page.slug}.html`;
-        fs.writeFileSync(join(siteRoot, fileName), page.html, 'utf-8');
+        fs.writeFileSync(join(previewRoot, fileName), page.html, 'utf-8');
       }
     }
-    return siteRoot;
+    const appUrl = (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '');
+    return {
+      target: siteRoot,
+      previewUrl: `${appUrl}/uploads/previews/${projectId}/index.html`,
+    };
   }
 
   private persistImages(projectId: number, images: Array<{ id: string; url: string; usage: string }>) {
@@ -320,17 +355,47 @@ export class AiService {
       include: { order: true, user: true },
     });
     if (!project) return null;
+
+    await this.prisma.project.update({
+      where: { id: projectId },
+      data: {
+        onboardingData: {
+          ...(project.onboardingData as any || {}),
+          aiGeneration: {
+            ...((project.onboardingData as any)?.aiGeneration || {}),
+            status: 'GENERATING',
+            startedAt: new Date().toISOString(),
+          },
+        },
+      },
+    });
+
     if (!this.env.apiKey) {
       this.logger.warn('OPENAI_API_KEY no configurada.');
+      await this.prisma.project.update({
+        where: { id: projectId },
+        data: {
+          onboardingData: {
+            ...(project.onboardingData as any || {}),
+            aiGeneration: {
+              ...((project.onboardingData as any)?.aiGeneration || {}),
+              status: 'FAILED',
+              error: 'OPENAI_API_KEY no configurada.',
+              updatedAt: new Date().toISOString(),
+            },
+          },
+        },
+      });
       return null;
     }
 
-    const plan = project.type as PlanType;
-    const mode = this.getMode(plan);
-    const systemPrompt = this.buildSystemPrompt(plan);
-    const userPrompt = this.buildUserPrompt(project.onboardingData || {}, plan);
-    const model = this.getModel(plan, mode);
-    const spec = await this.chatJson<SiteSpec>(model, systemPrompt, userPrompt);
+    try {
+      const plan = project.type as PlanType;
+      const mode = this.getMode(plan);
+      const systemPrompt = this.buildSystemPrompt(plan);
+      const userPrompt = this.buildUserPrompt(project.onboardingData || {}, plan);
+      const model = this.getModel(plan, mode);
+      const spec = await this.chatJson<SiteSpec>(model, systemPrompt, userPrompt);
     if (!spec.brand) {
       spec.brand = {
         name: (project.onboardingData as any)?.businessName || project.name,
@@ -392,16 +457,20 @@ export class AiService {
     }
 
     const domain = (project.onboardingData as any)?.publicDomain || '';
+    let deployment: { target?: string | null; previewUrl?: string } = {};
     if (domain && html) {
       try {
         if (plan === 'WEB') {
-          this.nextExportService.exportSite(projectId, spec, domain);
+          deployment = this.nextExportService.exportSite(projectId, spec, domain);
         } else {
-          this.persistGeneratedAssets(projectId, domain, html, pages);
+          deployment = this.persistGeneratedAssets(projectId, domain, html, pages);
         }
       } catch (error: any) {
         this.logger.error(`No se pudo escribir en el sitio ${domain}`, error?.message || error);
+        deployment = this.persistGeneratedAssets(projectId, null, html, pages);
       }
+    } else if (html) {
+      deployment = this.persistGeneratedAssets(projectId, null, html, pages);
     }
 
     const result: AiGenerationResult = {
@@ -423,11 +492,31 @@ export class AiService {
             updatedAt: new Date().toISOString(),
             score,
             images: storedImages,
+            previewUrl: deployment.previewUrl || null,
+            target: deployment.target || null,
           },
         },
       },
     });
 
     return result;
+    } catch (error: any) {
+      this.logger.error(`Fallo AI generateForProject ${projectId}: ${error?.message || error}`);
+      await this.prisma.project.update({
+        where: { id: projectId },
+        data: {
+          onboardingData: {
+            ...(project.onboardingData as any || {}),
+            aiGeneration: {
+              ...((project.onboardingData as any)?.aiGeneration || {}),
+              status: 'FAILED',
+              error: error?.message || 'Error generando el sitio',
+              updatedAt: new Date().toISOString(),
+            },
+          },
+        },
+      });
+      return null;
+    }
   }
 }

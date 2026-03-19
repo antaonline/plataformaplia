@@ -100,35 +100,93 @@ export class MailService {
     }
   }
 
-  async sendProjectReady(email: string, payload: { projectName?: string; loginUrl: string }) {
+  private getAppUrl() {
+    return (process.env.APP_URL ?? 'http://localhost:3000').replace(/\/$/, '');
+  }
+
+  private escapeHtml(value?: string) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  async sendProjectReady(email: string, payload: {
+    projectName?: string;
+    loginUrl: string;
+    hostingAccess?: {
+      panelUrl: string;
+      username: string;
+      password: string;
+    };
+  }) {
     const projectName = payload.projectName || 'tu proyecto';
     const loginUrl = payload.loginUrl;
-    const subject = 'Tu web ya esta lista para revisar';
+    const hasHostingAccess = Boolean(payload.hostingAccess);
+    const subject = hasHostingAccess
+      ? 'Tu acceso de hosting PLIA ya esta listo'
+      : 'Tu web ya esta lista para revisar';
+    const appUrl = this.getAppUrl();
+    const logoUrl = `${appUrl}/plia-logo-black.svg`;
+    const heading = hasHostingAccess ? 'Tu acceso de hosting esta listo' : 'Tu web esta lista';
+    const intro = hasHostingAccess
+      ? `<p style="margin:0 0 12px;font-size:15px;line-height:1.6;color:#111827;">
+          <strong>${this.escapeHtml(projectName)}</strong> ya tiene su acceso inicial de hosting en CyberPanel.
+          Usa estas credenciales para entrar a tu panel tecnico cuando necesites gestionar archivos, bases de datos o dominios.
+        </p>
+        <p style="margin:0 0 18px;font-size:14px;line-height:1.6;color:#6b7280;">
+          Por seguridad, la contrasena completa solo se muestra en este correo. Guardala en un gestor seguro.
+        </p>`
+      : `<p style="margin:0 0 12px;font-size:15px;line-height:1.6;color:#111827;">
+          <strong>${this.escapeHtml(projectName)}</strong> ya completo su ciclo de desarrollo.
+          Ahora puedes ingresar a tu panel para revisar el resultado final y solicitar cambios si lo deseas.
+        </p>
+        <p style="margin:0 0 18px;font-size:14px;line-height:1.6;color:#6b7280;">
+          Te recomendamos ingresar hoy mismo para validar el contenido, colores y secciones.
+        </p>`;
+    const hostingBlock = payload.hostingAccess
+      ? `
+        <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin:0 0 20px;border:1px solid #d9f99d;border-radius:18px;background:#f7fee7;">
+          <tr>
+            <td style="padding:20px 22px;">
+              <div style="font-size:12px;letter-spacing:0.14em;text-transform:uppercase;font-weight:700;color:#3f6212;">Acceso CyberPanel</div>
+              <div style="margin-top:14px;font-size:14px;line-height:1.7;color:#111827;">
+                <div><strong>Panel:</strong> <span style="color:#365314;">${this.escapeHtml(payload.hostingAccess.panelUrl)}</span></div>
+                <div><strong>Usuario:</strong> <span style="color:#365314;">${this.escapeHtml(payload.hostingAccess.username)}</span></div>
+                <div><strong>Contrasena:</strong> <span style="color:#365314;">${this.escapeHtml(payload.hostingAccess.password)}</span></div>
+              </div>
+              <p style="margin:14px 0 0;font-size:12px;line-height:1.6;color:#4d7c0f;">
+                Si compras mas sitios en PLIA, se asociaran a este mismo usuario de hosting para mantener una sola cuenta tecnica por cliente.
+              </p>
+            </td>
+          </tr>
+        </table>
+      `
+      : '';
     const html = `
       <div style="background:#f6f7fb;padding:24px;font-family:'Segoe UI',Roboto,Arial,sans-serif;color:#0f172a;">
         <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:640px;margin:0 auto;background:#ffffff;border-radius:20px;overflow:hidden;border:1px solid #e5e7eb;">
           <tr>
-            <td style="padding:28px 32px;background:linear-gradient(135deg,#16a34a 0%,#22c55e 45%,#86efac 100%);color:#052e16;">
-              <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;font-weight:700;color:#052e16;">PLIA</div>
-              <h1 style="margin:12px 0 6px;font-size:24px;line-height:1.3;color:#052e16;">Tu web esta lista</h1>
-              <p style="margin:0;font-size:14px;color:#052e16;">Revisa tu resultado y pidemos ajustes si lo necesitas.</p>
+            <td style="padding:28px 32px;background:linear-gradient(135deg,hsl(75 100% 50%) 0%,hsl(80 100% 45%) 100%);color:#1a1a0a;">
+              <img src="${logoUrl}" alt="PLIA" width="104" height="30" style="display:block;width:104px;height:auto;" />
+              <h1 style="margin:18px 0 6px;font-size:24px;line-height:1.3;color:#1a1a0a;">${heading}</h1>
+              <p style="margin:0;font-size:14px;color:#2f3b0b;">
+                ${hasHostingAccess ? 'Tu cuenta tecnica ya fue creada en PLIA Hosting.' : 'Revisa tu resultado y pidemos ajustes si lo necesitas.'}
+              </p>
             </td>
           </tr>
           <tr>
             <td style="padding:28px 32px;">
-              <p style="margin:0 0 12px;font-size:15px;line-height:1.6;color:#111827;">
-                <strong>${projectName}</strong> ya completo su ciclo de desarrollo.
-                Ahora puedes ingresar a tu panel para revisar el resultado final y solicitar cambios si lo deseas.
-              </p>
-              <p style="margin:0 0 18px;font-size:14px;line-height:1.6;color:#6b7280;">
-                Te recomendamos ingresar hoy mismo para validar el contenido, colores y secciones.
-              </p>
-              <a href="${loginUrl}" style="display:inline-block;background:#16a34a;color:#ffffff;text-decoration:none;padding:12px 18px;border-radius:999px;font-weight:600;font-size:14px;">
+              ${intro}
+              ${hostingBlock}
+              <a href="${loginUrl}" style="display:inline-block;background:hsl(75 100% 45%);color:#111827;text-decoration:none;padding:12px 18px;border-radius:999px;font-weight:700;font-size:14px;">
                 Ingresar a mi cuenta
               </a>
               <p style="margin:20px 0 0;font-size:12px;color:#9ca3af;">
                 Si el boton no funciona, copia y pega este enlace en tu navegador:<br />
-                <span style="color:#6b7280;">${loginUrl}</span>
+                <span style="color:#6b7280;">${this.escapeHtml(loginUrl)}</span>
               </p>
             </td>
           </tr>

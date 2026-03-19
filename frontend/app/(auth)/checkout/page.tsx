@@ -176,7 +176,7 @@ function Content() {
         setPayError('Yape estará disponible próximamente.');
         return;
       }
-      if (paymentMethod !== 'yape' && !validateCheckout()) return;
+      if (paymentMethod === 'card' && !validateCheckout()) return;
       if (!paymentMethod) {
         setPayError('Selecciona una forma de pago.');
         return;

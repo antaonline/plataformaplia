@@ -5,6 +5,7 @@ import { RefreshTokenService } from './refresh-token.service'
 import { Email2FAService } from '../email-2fa/email-2fa.service'
 import { MailService } from '../mail/mail.service'
 import { PrismaService } from '../prisma/prisma.service'
+import { resolveAccessTokenTtlSeconds } from './access-token-ttl'
 
 import * as bcrypt from 'bcrypt'
 import { randomUUID } from 'crypto'
@@ -12,6 +13,9 @@ import { addHours } from 'date-fns'
 
 @Injectable()
 export class AuthService {
+  private readonly accessTokenTtl = resolveAccessTokenTtlSeconds(
+    process.env.ACCESS_TOKEN_TTL,
+  );
   
   constructor(
     private readonly usersService: UsersService,
@@ -79,7 +83,7 @@ export class AuthService {
         }
 
         const accessToken = this.jwtService.sign(payload, {
-          expiresIn: '15m',
+          expiresIn: this.accessTokenTtl,
         })
 
         const refreshToken = await this.refreshTokenService.create({
@@ -128,7 +132,7 @@ export class AuthService {
         role: user.role,
         name: user.name,
       },
-      { expiresIn: '15m' },
+      { expiresIn: this.accessTokenTtl },
     );
 
     const newRefreshToken = await this.refreshTokenService.create({
@@ -187,7 +191,7 @@ export class AuthService {
         role: user.role,
         name: user.name,
       },
-      { expiresIn: '15m' },
+      { expiresIn: this.accessTokenTtl },
     );
 
     const refreshToken = await this.refreshTokenService.create({
@@ -221,7 +225,7 @@ export class AuthService {
         role: user.role,
         name: user.name,
       },
-      { expiresIn: '15m' },
+      { expiresIn: this.accessTokenTtl },
     );
 
     const refreshToken = await this.refreshTokenService.create({
