@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { MessageCircle, Mail, Phone, MapPin, Clock, Send } from "lucide-react";
 
-const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";
+const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3002";
 const apiBase = apiUrl.endsWith("/api") ? apiUrl : `${apiUrl}/api`;
 
 const contactMethods = [

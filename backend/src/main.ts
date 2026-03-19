@@ -12,6 +12,11 @@ async function bootstrap() {
   dotenv.config()
 
   const app = await NestFactory.create<NestExpressApplication>(AppModule)
+  const frontendUrl =
+    process.env.FRONTEND_URL ||
+    process.env.APP_URL ||
+    'http://localhost:3001';
+  const port = Number(process.env.PORT || 3002);
 
   app.setGlobalPrefix('api');
 
@@ -27,7 +32,7 @@ async function bootstrap() {
   )
 
   app.enableCors({
-    origin: "http://localhost:3001",
+    origin: frontendUrl,
     credentials: true,
   });
 
@@ -53,6 +58,6 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config)
   SwaggerModule.setup('docs', app, document)
 
-  await app.listen(3000)
+  await app.listen(port)
 }
 bootstrap()

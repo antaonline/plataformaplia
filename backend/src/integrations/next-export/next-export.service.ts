@@ -49,7 +49,7 @@ export class NextExportService {
       fs.rmSync(previewDir, { recursive: true, force: true });
     }
     this.copyDir(sourceDir, previewDir);
-    const appUrl = (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '');
+    const appUrl = (process.env.APP_URL || 'http://localhost:3001').replace(/\/$/, '');
     return `${appUrl}/uploads/previews/${projectId}/index.html`;
   }
 

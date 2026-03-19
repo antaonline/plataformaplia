@@ -56,7 +56,7 @@ export class MailService {
   }
 
   async sendAccountSetup(email: string, token: string) {
-    const baseUrl = process.env.APP_URL ?? 'http://localhost:3000'
+    const baseUrl = process.env.APP_URL ?? 'http://localhost:3001'
     const link = `${baseUrl}/set-password?token=${token}`
 
     try {
@@ -101,7 +101,7 @@ export class MailService {
   }
 
   private getAppUrl() {
-    return (process.env.APP_URL ?? 'http://localhost:3000').replace(/\/$/, '');
+    return (process.env.APP_URL ?? 'http://localhost:3001').replace(/\/$/, '');
   }
 
   private escapeHtml(value?: string) {

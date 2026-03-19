@@ -1,5 +1,5 @@
 export async function refreshToken() {
-  const res = await fetch('http://localhost:3000/auth/refresh', {
+  const res = await fetch('http://localhost:3002/auth/refresh', {
     method: 'POST',
     credentials: 'include',
   })

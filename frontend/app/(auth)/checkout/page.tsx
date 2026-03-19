@@ -11,7 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import Link from "next/link";
 import Image from "next/image";
 
-const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
+const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3002';
 const apiBase = apiUrl.endsWith('/api') ? apiUrl : `${apiUrl}/api`;
 
 type Plan = {

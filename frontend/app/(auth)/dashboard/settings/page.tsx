@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
-const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
+const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3002';
 const apiBase = apiUrl.endsWith('/api') ? apiUrl : `${apiUrl}/api`;
 
 export default function SettingsPage() {

@@ -35,7 +35,7 @@ import {
 import Image from "next/image";
 import Link from "next/link";
 
-const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
+const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3002';
 const apiBase = apiUrl.endsWith('/api') ? apiUrl : `${apiUrl}/api`;
 const domainBase = process.env.NEXT_PUBLIC_DOMAIN_BASE ?? 'plia.pe';
 

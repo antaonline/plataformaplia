@@ -329,7 +329,7 @@ export class AiService {
         fs.writeFileSync(join(previewRoot, fileName), page.html, 'utf-8');
       }
     }
-    const appUrl = (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '');
+    const appUrl = (process.env.APP_URL || 'http://localhost:3001').replace(/\/$/, '');
     return {
       target: siteRoot,
       previewUrl: `${appUrl}/uploads/previews/${projectId}/index.html`,
@@ -339,7 +339,7 @@ export class AiService {
   private persistImages(projectId: number, images: Array<{ id: string; url: string; usage: string }>) {
     const baseDir = join(process.cwd(), 'uploads', 'generated', String(projectId));
     fs.mkdirSync(baseDir, { recursive: true });
-    const appUrl = (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '');
+    const appUrl = (process.env.APP_URL || 'http://localhost:3001').replace(/\/$/, '');
     return images.map((img, idx) => {
       const filename = `${img.id || 'asset'}-${idx}.png`;
       const filePath = join(baseDir, filename);

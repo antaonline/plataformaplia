@@ -71,7 +71,7 @@ export class ProjectsService {
         cyberpanelProvision.plainPassword &&
         project.user?.email
       ) {
-        const loginUrl = `${process.env.APP_URL ?? 'http://localhost:3000'}/login`;
+        const loginUrl = `${process.env.APP_URL ?? 'http://localhost:3001'}/login`;
         await this.mailService.sendProjectReady(project.user.email, {
           projectName: project.name,
           loginUrl,
@@ -392,7 +392,7 @@ export class ProjectsService {
       const publicUrl = data.publicUrl;
       await this.publishProject(project.id, { publicUrl });
       if (project.user?.email) {
-        const loginUrl = `${process.env.APP_URL ?? 'http://localhost:3000'}/login`;
+        const loginUrl = `${process.env.APP_URL ?? 'http://localhost:3001'}/login`;
         await this.mailService.sendProjectReady(project.user.email, {
           projectName: project.name,
           loginUrl,

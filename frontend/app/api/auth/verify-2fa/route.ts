@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL! // ej: http://localhost:3001
+const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL! // ej: http://localhost:3002
 
 export async function POST(req: Request) {
   try {
