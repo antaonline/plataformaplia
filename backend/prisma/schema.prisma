@@ -40,6 +40,7 @@ model DomainSelection {
   createdAt DateTime @default(now())
 
   order Order @relation(fields: [orderId], references: [id])
+  @@map("domainselection")
 }
 
 model plan {
@@ -89,6 +90,7 @@ model Project {
   user                  user  @relation(fields: [userId], references: [id])
   order                 Order @relation(fields: [orderId], references: [id])
   hostingSubscriptionId Int?
+  @@map("project")
 }
 
 model HostingSubscription {
@@ -113,6 +115,7 @@ model HostingSubscription {
 
   @@index([planId], map: "Subscription_planId_fkey")
   @@index([userId], map: "Subscription_userId_fkey")
+  @@map("hostingsubscription")
 }
 
 enum HostingSubscriptionStatus {
@@ -163,6 +166,7 @@ model Email2FACode {
 
   @@index([userId])
   @@index([expiresAt])
+  @@map("email2facode")
 }
 
 model Payment {
@@ -179,6 +183,7 @@ model Payment {
   paidAt           DateTime?
 
   order Order @relation(fields: [orderId], references: [id])
+  @@map("payment")
 }
 
 model PasswordSetupToken {
@@ -193,6 +198,7 @@ model PasswordSetupToken {
 
   @@index([userId])
   @@index([expiresAt])
+  @@map("passwordsetuptoken")
 }
 
 enum OrderStatus {
@@ -228,6 +234,7 @@ model HostingRenewal {
   subscription HostingSubscription @relation(fields: [subscriptionId], references: [id])
 
   @@index([subscriptionId])
+  @@map("hostingrenewal")
 }
 
 enum user_role {

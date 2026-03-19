@@ -1,6 +1,9 @@
 # Variables de entorno (Backend y Frontend)
 .env
 
+ecosystem.config.js
+
+
 # Archivos de configuración específica del entorno
 backend/src/main.ts
 
