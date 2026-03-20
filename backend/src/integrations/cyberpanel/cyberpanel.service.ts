@@ -43,6 +43,10 @@ export class CyberpanelService {
     return process.env.CYBERPANEL_API_CREATE_PATH || '/api/createWebsite';
   }
 
+  private get createChildDomainPath() {
+    return process.env.CYBERPANEL_API_CREATE_CHILD_DOMAIN_PATH || '/api/createChildDomain';
+  }
+
   private get createUserPath() {
     return process.env.CYBERPANEL_API_CREATE_USER_PATH || '/api/createUser';
   }
@@ -169,6 +173,56 @@ export class CyberpanelService {
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '')
       .slice(0, 40);
+  }
+
+  private isChildDomain(domain: string, baseDomain: string) {
+    const normalizedDomain = domain.toLowerCase();
+    const normalizedBase = baseDomain.toLowerCase();
+    return (
+      normalizedDomain !== normalizedBase &&
+      normalizedDomain.endsWith(`.${normalizedBase}`)
+    );
+  }
+
+  private buildSiteRequest(
+    domain: string,
+    baseDomain: string,
+    account: StoredCyberpanelAccount,
+  ) {
+    const packageName = process.env.CYBERPANEL_PACKAGE || 'Default';
+    const phpSelection = this.normalizePhpSelection(
+      process.env.CYBERPANEL_PHP_SELECTION || process.env.CYBERPANEL_PHP,
+    );
+    const useChildDomain = this.isChildDomain(domain, baseDomain);
+
+    const body: Record<string, any> = useChildDomain
+      ? {
+          masterDomain: baseDomain,
+          domainName: domain,
+          phpSelection,
+          ssl: 1,
+        }
+      : {
+          domainName: domain,
+          email: account.email,
+          owner: account.username,
+          phpSelection,
+          packageName,
+          ssl: 1,
+          dkIMCheck: 0,
+          openBasedir: 1,
+        };
+
+    if (process.env.CYBERPANEL_ADMIN_USER && process.env.CYBERPANEL_ADMIN_PASS) {
+      body.adminUser = process.env.CYBERPANEL_ADMIN_USER;
+      body.adminPass = process.env.CYBERPANEL_ADMIN_PASS;
+    }
+
+    return {
+      path: useChildDomain ? this.createChildDomainPath : this.createPath,
+      type: useChildDomain ? 'child-domain' : 'website',
+      body,
+    };
   }
 
   private buildCustomerUsername(userId: number, name?: string, email?: string) {
@@ -301,27 +355,13 @@ export class CyberpanelService {
     }
     const accountProvision = await this.ensureCustomerAccount(project);
     const account = accountProvision.account;
-    const packageName = process.env.CYBERPANEL_PACKAGE || 'Default';
-    const phpSelection = this.normalizePhpSelection(process.env.CYBERPANEL_PHP_SELECTION || process.env.CYBERPANEL_PHP);
-
-    const body: Record<string, any> = {
-      domainName: domain,
-      email: account.email,
-      owner: account.username,
-      phpSelection,
-      packageName,
-      ssl: 1,
-      dkIMCheck: 0,
-      openBasedir: 1,
-    };
-
-    if (process.env.CYBERPANEL_ADMIN_USER && process.env.CYBERPANEL_ADMIN_PASS) {
-      body.adminUser = process.env.CYBERPANEL_ADMIN_USER;
-      body.adminPass = process.env.CYBERPANEL_ADMIN_PASS;
-    }
+    const siteRequest = this.buildSiteRequest(domain, baseDomain, account);
 
     try {
-      const response = await this.request(this.createPath, body);
+      this.logger.log(
+        `CyberPanel provisioning ${siteRequest.type} for ${domain} via ${siteRequest.path}`,
+      );
+      const response = await this.request(siteRequest.path, siteRequest.body);
       await this.prisma.project.update({
         where: { id: projectId },
         data: {
@@ -331,6 +371,8 @@ export class CyberpanelService {
             publicUrl: `https://${domain}`,
             cyberpanel: {
               status: 'CREATED',
+              siteType: siteRequest.type,
+              requestedPath: siteRequest.path,
               response,
               owner: account.username,
               account,
@@ -349,7 +391,9 @@ export class CyberpanelService {
     } catch (error: any) {
       const responseData = error?.response?.data;
       const message = this.extractErrorMessage(responseData || error?.message || error);
-      this.logger.error(`CyberPanel createWebsite fallo para ${domain}: ${message}`);
+      this.logger.error(
+        `CyberPanel ${siteRequest.type} fallo para ${domain} via ${siteRequest.path}: ${message}`,
+      );
       if (responseData) {
         this.logger.error(`CyberPanel response: ${JSON.stringify(responseData)}`);
       }
@@ -360,6 +404,8 @@ export class CyberpanelService {
             ...data,
             cyberpanel: {
               status: 'FAILED',
+              siteType: siteRequest.type,
+              requestedPath: siteRequest.path,
               owner: account.username,
               account,
               requestedDomain: domain,
