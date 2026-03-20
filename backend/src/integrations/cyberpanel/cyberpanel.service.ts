@@ -325,7 +325,7 @@ export class CyberpanelService {
       await this.prisma.project.update({
         where: { id: projectId },
         data: {
-          onboardingData: {
+          onboardingData: { set: {
             ...data,
             publicDomain: domain,
             publicUrl: `https://${domain}`,
@@ -336,7 +336,7 @@ export class CyberpanelService {
               account,
               createdAt: new Date().toISOString(),
             },
-          },
+          } },
         },
       });
       return {
@@ -356,7 +356,7 @@ export class CyberpanelService {
       await this.prisma.project.update({
         where: { id: projectId },
         data: {
-          onboardingData: {
+          onboardingData: { set: {
             ...data,
             cyberpanel: {
               status: 'FAILED',
@@ -366,7 +366,7 @@ export class CyberpanelService {
               error: responseData || error?.message || 'Unknown error',
               createdAt: new Date().toISOString(),
             },
-          },
+          } },
         },
       });
       return {
@@ -398,13 +398,13 @@ export class CyberpanelService {
       await this.prisma.project.update({
         where: { id: projectId },
         data: {
-          onboardingData: {
+          onboardingData: { set: {
             ...data,
             cyberpanel: {
               ...(data.cyberpanel || {}),
               deletedAt: new Date().toISOString(),
             },
-          },
+          } },
         },
       });
       return true;

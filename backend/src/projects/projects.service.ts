@@ -52,7 +52,7 @@ export class ProjectsService {
     const updated = await this.prisma.project.update({
       where: { id: projectId },
       data: {
-        onboardingData: mergedData,
+        onboardingData: { set: mergedData },
         onboardingStep: dto.step,
         status: dto.completed
           ? ProjectStatus.IN_PROGRESS
@@ -208,7 +208,7 @@ export class ProjectsService {
     return this.prisma.project.update({
       where: { id },
       data: {
-        onboardingData: mergedData,
+        onboardingData: { set: mergedData },
         status: ProjectStatus.DELIVERED,
         completed: true,
         completedAt: publishedAt,
@@ -235,7 +235,7 @@ export class ProjectsService {
     return this.prisma.project.update({
       where: { id },
       data: {
-        onboardingData: mergedData,
+        onboardingData: { set: mergedData },
       },
     });
   }
@@ -259,7 +259,7 @@ export class ProjectsService {
     return this.prisma.project.update({
       where: { id: projectId },
       data: {
-        onboardingData: mergedData,
+        onboardingData: { set: mergedData },
       },
     });
   }
@@ -290,7 +290,7 @@ export class ProjectsService {
     return this.prisma.project.update({
       where: { id: projectId },
       data: {
-        onboardingData: mergedData,
+        onboardingData: { set: mergedData },
       },
     });
   }
@@ -314,7 +314,7 @@ export class ProjectsService {
     return this.prisma.project.update({
       where: { id: projectId },
       data: {
-        onboardingData: mergedData,
+        onboardingData: { set: mergedData },
       },
     });
   }
@@ -367,7 +367,7 @@ export class ProjectsService {
     const updated = await this.prisma.project.update({
       where: { id: projectId },
       data: {
-        onboardingData: mergedData,
+        onboardingData: { set: mergedData },
       },
     });
 
