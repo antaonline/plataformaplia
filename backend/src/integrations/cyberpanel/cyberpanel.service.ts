@@ -43,10 +43,6 @@ export class CyberpanelService {
     return process.env.CYBERPANEL_API_CREATE_PATH || '/api/createWebsite';
   }
 
-  private get createChildDomainPath() {
-    return process.env.CYBERPANEL_API_CREATE_CHILD_DOMAIN_PATH || '/api/createChildDomain';
-  }
-
   private get createUserPath() {
     return process.env.CYBERPANEL_API_CREATE_USER_PATH || '/api/createUser';
   }
@@ -175,43 +171,21 @@ export class CyberpanelService {
       .slice(0, 40);
   }
 
-  private isChildDomain(domain: string, baseDomain: string) {
-    const normalizedDomain = domain.toLowerCase();
-    const normalizedBase = baseDomain.toLowerCase();
-    return (
-      normalizedDomain !== normalizedBase &&
-      normalizedDomain.endsWith(`.${normalizedBase}`)
-    );
-  }
-
-  private buildSiteRequest(
-    domain: string,
-    baseDomain: string,
-    account: StoredCyberpanelAccount,
-  ) {
+  private buildWebsiteRequest(domain: string, account: StoredCyberpanelAccount) {
     const packageName = process.env.CYBERPANEL_PACKAGE || 'Default';
     const phpSelection = this.normalizePhpSelection(
       process.env.CYBERPANEL_PHP_SELECTION || process.env.CYBERPANEL_PHP,
     );
-    const useChildDomain = this.isChildDomain(domain, baseDomain);
-
-    const body: Record<string, any> = useChildDomain
-      ? {
-          masterDomain: baseDomain,
-          domainName: domain,
-          phpSelection,
-          ssl: 1,
-        }
-      : {
-          domainName: domain,
-          email: account.email,
-          owner: account.username,
-          phpSelection,
-          packageName,
-          ssl: 1,
-          dkIMCheck: 0,
-          openBasedir: 1,
-        };
+    const body: Record<string, any> = {
+      domainName: domain,
+      email: account.email,
+      owner: account.username,
+      phpSelection,
+      packageName,
+      ssl: 1,
+      dkIMCheck: 0,
+      openBasedir: 1,
+    };
 
     if (process.env.CYBERPANEL_ADMIN_USER && process.env.CYBERPANEL_ADMIN_PASS) {
       body.adminUser = process.env.CYBERPANEL_ADMIN_USER;
@@ -219,8 +193,8 @@ export class CyberpanelService {
     }
 
     return {
-      path: useChildDomain ? this.createChildDomainPath : this.createPath,
-      type: useChildDomain ? 'child-domain' : 'website',
+      path: this.createPath,
+      type: 'website',
       body,
     };
   }
@@ -355,7 +329,7 @@ export class CyberpanelService {
     }
     const accountProvision = await this.ensureCustomerAccount(project);
     const account = accountProvision.account;
-    const siteRequest = this.buildSiteRequest(domain, baseDomain, account);
+    const siteRequest = this.buildWebsiteRequest(domain, account);
 
     try {
       this.logger.log(

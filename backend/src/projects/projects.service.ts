@@ -66,6 +66,7 @@ export class ProjectsService {
     if (shouldStart) {
       const cyberpanelProvision = await this.cyberpanelService.ensureSite(projectId);
       if (
+        cyberpanelProvision.createdWebsite &&
         cyberpanelProvision.accountCreated &&
         cyberpanelProvision.account &&
         cyberpanelProvision.plainPassword &&
