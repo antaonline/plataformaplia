@@ -75,12 +75,7 @@ export class CyberpanelService {
   }
 
   private get headers() {
-    const key = process.env.CYBERPANEL_API_KEY;
-    if (!key) return { 'Content-Type': 'application/json' };
-    return {
-      'Content-Type': 'application/json',
-      Authorization: key,
-    };
+    return { 'Content-Type': 'application/json' };
   }
 
   private get httpsAgent() {
@@ -125,6 +120,9 @@ export class CyberpanelService {
 
   private async request(path: string, body: Record<string, any>) {
     const url = `${this.baseUrl}${path}`;
+    this.logger.log(
+      `CyberPanel request ${path} adminUser=${body.adminUser || 'missing'} hasAdminPass=${Boolean(body.adminPass)}`,
+    );
     const res = await axios.post(url, body, {
       headers: this.headers,
       httpsAgent: this.httpsAgent,
