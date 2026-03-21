@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import axios from 'axios';
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'crypto';
 import https from 'https';
 import { PrismaService } from '../../prisma/prisma.service';
 
@@ -10,6 +11,7 @@ export type StoredCyberpanelAccount = {
   ownerType: 'customer';
   createdAt: string;
   sourceProjectId?: number;
+  encryptedPassword?: string;
 };
 
 export type EnsureSiteResult = {
@@ -17,6 +19,12 @@ export type EnsureSiteResult = {
   createdWebsite: boolean;
   accountCreated: boolean;
   account?: StoredCyberpanelAccount;
+  plainPassword?: string;
+};
+
+type CustomerAccountProvision = {
+  account: StoredCyberpanelAccount;
+  accountCreated: boolean;
   plainPassword?: string;
 };
 
@@ -44,7 +52,7 @@ export class CyberpanelService {
   }
 
   private get createUserPath() {
-    return process.env.CYBERPANEL_API_CREATE_USER_PATH || '/api/createUser';
+    return process.env.CYBERPANEL_API_CREATE_USER_PATH || '/api/submitUserCreation';
   }
 
   private get deletePath() {
@@ -54,6 +62,16 @@ export class CyberpanelService {
   private get panelUrl() {
     const raw = process.env.CYBERPANEL_PANEL_URL || this.baseUrl;
     return raw.replace(/\/?$/, '/');
+  }
+
+  private get credentialsSecret() {
+    const secret = process.env.CYBERPANEL_CREDENTIALS_KEY || process.env.JWT_SECRET || '';
+    if (!secret) {
+      throw new Error(
+        'Missing CYBERPANEL_CREDENTIALS_KEY or JWT_SECRET for CyberPanel credential encryption.',
+      );
+    }
+    return createHash('sha256').update(secret).digest();
   }
 
   private get headers() {
@@ -135,6 +153,29 @@ export class CyberpanelService {
       .join('');
   }
 
+  private encryptSecret(value: string) {
+    const iv = randomBytes(16);
+    const cipher = createCipheriv('aes-256-cbc', this.credentialsSecret, iv);
+    const encrypted = Buffer.concat([cipher.update(value, 'utf8'), cipher.final()]);
+    return `${iv.toString('hex')}:${encrypted.toString('hex')}`;
+  }
+
+  private decryptSecret(value?: string) {
+    if (!value) return undefined;
+    const [ivHex, payloadHex] = value.split(':');
+    if (!ivHex || !payloadHex) return undefined;
+    const decipher = createDecipheriv(
+      'aes-256-cbc',
+      this.credentialsSecret,
+      Buffer.from(ivHex, 'hex'),
+    );
+    const decrypted = Buffer.concat([
+      decipher.update(Buffer.from(payloadHex, 'hex')),
+      decipher.final(),
+    ]);
+    return decrypted.toString('utf8');
+  }
+
   private splitName(value: string) {
     const parts = value.trim().split(/\s+/).filter(Boolean);
     if (parts.length === 0) {
@@ -171,7 +212,17 @@ export class CyberpanelService {
       .slice(0, 40);
   }
 
-  private buildWebsiteRequest(domain: string, account: StoredCyberpanelAccount) {
+  private buildWebsiteRequest(
+    domain: string,
+    account: StoredCyberpanelAccount,
+    ownerPassword: string,
+  ) {
+    if (!ownerPassword) {
+      throw new Error(
+        `Missing owner password for CyberPanel user ${account.username}. Set CYBERPANEL_EXISTING_USER_PASSWORD or recreate the account.`,
+      );
+    }
+
     const packageName = process.env.CYBERPANEL_PACKAGE || 'Default';
     const phpSelection = this.normalizePhpSelection(
       process.env.CYBERPANEL_PHP_SELECTION || process.env.CYBERPANEL_PHP,
@@ -179,7 +230,10 @@ export class CyberpanelService {
     const body: Record<string, any> = {
       domainName: domain,
       email: account.email,
+      ownerEmail: account.email,
       owner: account.username,
+      websiteOwner: account.username,
+      ownerPassword,
       phpSelection,
       packageName,
       ssl: 1,
@@ -225,16 +279,15 @@ export class CyberpanelService {
     return null;
   }
 
-  private async ensureCustomerAccount(project: any): Promise<{
-    account: StoredCyberpanelAccount;
-    accountCreated: boolean;
-    plainPassword?: string;
-  }> {
+  private async ensureCustomerAccount(project: any): Promise<CustomerAccountProvision> {
     const existing = await this.findStoredAccount(project.userId);
     if (existing) {
       return {
         account: existing,
         accountCreated: false,
+        plainPassword:
+          this.decryptSecret(existing.encryptedPassword) ||
+          process.env.CYBERPANEL_EXISTING_USER_PASSWORD,
       };
     }
 
@@ -287,6 +340,7 @@ export class CyberpanelService {
         ownerType: 'customer',
         createdAt: new Date().toISOString(),
         sourceProjectId: project.id,
+        encryptedPassword: this.encryptSecret(password),
       },
       accountCreated,
       plainPassword: accountCreated ? password : undefined,
@@ -329,7 +383,11 @@ export class CyberpanelService {
     }
     const accountProvision = await this.ensureCustomerAccount(project);
     const account = accountProvision.account;
-    const siteRequest = this.buildWebsiteRequest(domain, account);
+    const ownerPassword =
+      accountProvision.plainPassword ||
+      process.env.CYBERPANEL_EXISTING_USER_PASSWORD ||
+      '';
+    const siteRequest = this.buildWebsiteRequest(domain, account, ownerPassword);
 
     try {
       this.logger.log(
