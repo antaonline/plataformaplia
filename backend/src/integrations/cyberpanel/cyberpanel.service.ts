@@ -100,6 +100,7 @@ export class CyberpanelService {
       data.status,
       data.createWebSiteStatus,
       data.createWebsiteStatus,
+      data.websiteDeleteStatus,
       data.deleteWebSiteStatus,
       data.deleteWebsiteStatus,
       data.deleteStatus,
