@@ -8,6 +8,8 @@
   "scripts": {
     "clean": "node -e \"const fs=require('fs');['dist','tsconfig.tsbuildinfo'].forEach((p)=>fs.rmSync(p,{recursive:true,force:true}));\"",
     "prisma:generate": "prisma generate",
+    "prisma:verify-client": "node ./scripts/verify-prisma-client.js",
+    "deploy:vps": "bash ./scripts/deploy-vps-backend.sh",
     "postinstall": "npm run prisma:generate",
     "build": "npm run clean && npm run prisma:generate && nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
