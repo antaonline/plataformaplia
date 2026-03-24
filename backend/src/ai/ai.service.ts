@@ -44,6 +44,44 @@ export class AiService {
     };
   }
 
+  private sleep(ms: number) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  private getRetryDelay(error: any, attempt: number) {
+    const retryAfter = Number(error?.response?.headers?.['retry-after'] || 0);
+    if (retryAfter > 0) {
+      return retryAfter * 1000;
+    }
+    return Math.min(2000 * 2 ** attempt, 15000);
+  }
+
+  private async openAiPost<T>(url: string, payload: Record<string, any>): Promise<T> {
+    const maxRetries = Number(process.env.OPENAI_MAX_RETRIES || 3);
+
+    for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+      try {
+        const res = await axios.post(url, payload, { headers: this.headers });
+        return res.data as T;
+      } catch (error: any) {
+        const status = error?.response?.status;
+        const shouldRetry = status === 429 || (status >= 500 && status < 600);
+
+        if (!shouldRetry || attempt === maxRetries) {
+          throw error;
+        }
+
+        const delayMs = this.getRetryDelay(error, attempt);
+        this.logger.warn(
+          `OpenAI request retry ${attempt + 1}/${maxRetries} after ${delayMs}ms (status ${status})`,
+        );
+        await this.sleep(delayMs);
+      }
+    }
+
+    throw new Error('OpenAI request failed after retries');
+  }
+
   private getMode(plan: PlanType) {
     return plan === 'LANDING' ? this.env.landingMode : this.env.webMode;
   }
@@ -155,20 +193,16 @@ export class AiService {
 
   private async chatJson<T>(model: string, system: string, user: string): Promise<T> {
     const url = `${this.env.baseUrl}/chat/completions`;
-    const res = await axios.post(
-      url,
-      {
-        model,
-        messages: [
-          { role: 'system', content: system },
-          { role: 'user', content: user },
-        ],
-        temperature: 0.7,
-        response_format: { type: 'json_object' },
-      },
-      { headers: this.headers },
-    );
-    const content = res.data?.choices?.[0]?.message?.content ?? '{}';
+    const data = await this.openAiPost<any>(url, {
+      model,
+      messages: [
+        { role: 'system', content: system },
+        { role: 'user', content: user },
+      ],
+      temperature: 0.7,
+      response_format: { type: 'json_object' },
+    });
+    const content = data?.choices?.[0]?.message?.content ?? '{}';
     return this.safeJsonParse<T>(content, {} as T);
   }
 
@@ -180,19 +214,15 @@ export class AiService {
     for (const prompt of selected) {
       try {
         const url = `${this.env.baseUrl}/images/generations`;
-        const res = await axios.post(
-          url,
-          {
-            model: this.env.imageModel,
-            prompt: prompt.prompt,
-            size: this.env.imageSize,
-            quality: this.env.imageQuality,
-            response_format: 'b64_json',
-          },
-          { headers: this.headers },
-        );
+        const data = await this.openAiPost<any>(url, {
+          model: this.env.imageModel,
+          prompt: prompt.prompt,
+          size: this.env.imageSize,
+          quality: this.env.imageQuality,
+          response_format: 'b64_json',
+        });
 
-        const b64 = res.data?.data?.[0]?.b64_json;
+        const b64 = data?.data?.[0]?.b64_json;
         if (!b64) {
           continue;
         }

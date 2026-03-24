@@ -59,6 +59,10 @@ export class CyberpanelService {
     return process.env.CYBERPANEL_API_DELETE_PATH || '/api/deleteWebsite';
   }
 
+  private get deleteUserPath() {
+    return process.env.CYBERPANEL_API_DELETE_USER_PATH || '/api/submitUserDeletion';
+  }
+
   private get panelUrl() {
     const raw = process.env.CYBERPANEL_PANEL_URL || this.baseUrl;
     return raw.replace(/\/?$/, '/');
@@ -96,6 +100,10 @@ export class CyberpanelService {
       data.status,
       data.createWebSiteStatus,
       data.createWebsiteStatus,
+      data.deleteWebSiteStatus,
+      data.deleteWebsiteStatus,
+      data.deleteStatus,
+      data.submitUserDeletion,
       data.fetchStatus,
       data.success,
     ];
@@ -464,13 +472,17 @@ export class CyberpanelService {
     const domain = data.publicDomain;
     if (!domain) return null;
 
-    const body = {
+    const body: Record<string, any> = {
       domainName: domain,
     };
 
+    if (process.env.CYBERPANEL_ADMIN_USER && process.env.CYBERPANEL_ADMIN_PASS) {
+      body.adminUser = process.env.CYBERPANEL_ADMIN_USER;
+      body.adminPass = process.env.CYBERPANEL_ADMIN_PASS;
+    }
+
     try {
-      const url = `${this.baseUrl}${this.deletePath}`;
-      await axios.post(url, body, { headers: this.headers, httpsAgent: this.httpsAgent });
+      await this.request(this.deletePath, body);
       await this.prisma.project.update({
         where: { id: projectId },
         data: {
@@ -486,6 +498,30 @@ export class CyberpanelService {
       return true;
     } catch (error: any) {
       this.logger.error('CyberPanel delete error', error?.message || error);
+      return false;
+    }
+  }
+
+  async deleteUserByUsername(username: string) {
+    if (!username) return false;
+
+    const body: Record<string, any> = {
+      accountUsername: username,
+    };
+
+    if (process.env.CYBERPANEL_ADMIN_USER && process.env.CYBERPANEL_ADMIN_PASS) {
+      body.adminUser = process.env.CYBERPANEL_ADMIN_USER;
+      body.adminPass = process.env.CYBERPANEL_ADMIN_PASS;
+    }
+
+    try {
+      await this.request(this.deleteUserPath, body);
+      return true;
+    } catch (error: any) {
+      this.logger.error(
+        `CyberPanel delete user error for ${username}`,
+        error?.message || error,
+      );
       return false;
     }
   }
