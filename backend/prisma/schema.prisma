@@ -240,4 +240,4 @@ model HostingRenewal {
 enum user_role {
   USER
   ADMIN
-}
+}   
