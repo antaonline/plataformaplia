@@ -468,10 +468,16 @@ export class CyberpanelService {
     const project = await this.prisma.project.findUnique({
       where: { id: projectId },
     });
-    if (!project) return null;
+    if (!project) {
+      this.logger.warn(`CyberPanel delete skipped: project ${projectId} not found`);
+      return true;
+    }
     const data = (project.onboardingData as any) || {};
     const domain = data.publicDomain;
-    if (!domain) return null;
+    if (!domain) {
+      this.logger.log(`CyberPanel delete skipped: project ${projectId} has no publicDomain`);
+      return true;
+    }
 
     const body: Record<string, any> = {
       domainName: domain,
