@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import axios from 'axios';
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'crypto';
 import https from 'https';
@@ -379,14 +379,17 @@ export class CyberpanelService {
 
     const baseDomain = process.env.CYBERPANEL_DOMAIN_BASE || 'plia.pe';
     const preferred = this.normalizeSubdomain(data.subdomain || '');
-    const sourceName = data.businessName || project.name || `proyecto-${project.id}`;
-    const slug = this.slugify(sourceName) || `proyecto-${project.id}`;
-    let domain = `${preferred || slug}.${baseDomain}`;
+    if (!preferred) {
+      throw new BadRequestException(
+        'El subdominio enviado no es valido o no se guardo correctamente. Debe tener al menos 3 caracteres y solo usar letras, numeros o guiones.',
+      );
+    }
+    let domain = `${preferred}.${baseDomain}`;
     const existing = await this.prisma.project.findFirst({
       where: { onboardingData: { path: 'publicDomain', equals: domain } as any },
     });
     if (existing) {
-      domain = `${slug}-${project.id}.${baseDomain}`;
+      throw new BadRequestException('El subdominio elegido ya esta en uso. Elige otro.');
     }
     const accountProvision = await this.ensureCustomerAccount(project);
     const account = accountProvision.account;
