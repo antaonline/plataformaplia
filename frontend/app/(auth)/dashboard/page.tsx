@@ -1173,8 +1173,16 @@ export default function DashboardPage() {
         }),
       });
 
-      if (!res.ok) throw new Error('No se pudo guardar la informacion');
-      const updated = await res.json();
+      const submitText = await res.text();
+      const submitData = submitText ? JSON.parse(submitText) : null;
+      if (!res.ok) {
+        throw new Error(
+          submitData?.message ||
+            submitData?.error_message ||
+            'No se pudo guardar la informacion',
+        );
+      }
+      const updated = submitData;
       setProject(updated);
     } catch (err: any) {
       setFormError(err.message ?? 'Error al enviar la informacion');
