@@ -389,14 +389,14 @@ export class AiService {
     await this.prisma.project.update({
       where: { id: projectId },
       data: {
-        onboardingData: { set: {
+        onboardingData: {
           ...(project.onboardingData as any || {}),
           aiGeneration: {
             ...((project.onboardingData as any)?.aiGeneration || {}),
             status: 'GENERATING',
             startedAt: new Date().toISOString(),
           },
-        } },
+        },
       },
     });
 
@@ -405,7 +405,7 @@ export class AiService {
       await this.prisma.project.update({
         where: { id: projectId },
         data: {
-          onboardingData: { set: {
+          onboardingData: {
             ...(project.onboardingData as any || {}),
             aiGeneration: {
               ...((project.onboardingData as any)?.aiGeneration || {}),
@@ -413,7 +413,7 @@ export class AiService {
               error: 'OPENAI_API_KEY no configurada.',
               updatedAt: new Date().toISOString(),
             },
-          } },
+          },
         },
       });
       return null;
@@ -514,7 +514,7 @@ export class AiService {
     await this.prisma.project.update({
       where: { id: projectId },
       data: {
-        onboardingData: { set: {
+        onboardingData: {
           ...(project.onboardingData as any || {}),
           aiGeneration: {
             status: 'READY',
@@ -525,7 +525,7 @@ export class AiService {
             previewUrl: deployment.previewUrl || null,
             target: deployment.target || null,
           },
-        } },
+        },
       },
     });
 
@@ -535,7 +535,7 @@ export class AiService {
       await this.prisma.project.update({
         where: { id: projectId },
         data: {
-          onboardingData: { set: {
+          onboardingData: {
             ...(project.onboardingData as any || {}),
             aiGeneration: {
               ...((project.onboardingData as any)?.aiGeneration || {}),
@@ -543,7 +543,7 @@ export class AiService {
               error: error?.message || 'Error generando el sitio',
               updatedAt: new Date().toISOString(),
             },
-          } },
+          },
         },
       });
       return null;
