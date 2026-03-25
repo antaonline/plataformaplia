@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { SaveOnboardingDto } from './dto/save-onboarding.dto';
 import { ProjectStatus } from '@prisma/client';
@@ -10,12 +10,34 @@ import { MailService } from '../mail/mail.service';
 
 @Injectable()
 export class ProjectsService {
+  private readonly logger = new Logger(ProjectsService.name);
   constructor(
     private prisma: PrismaService,
     private aiService: AiService,
     private cyberpanelService: CyberpanelService,
     private mailService: MailService,
   ) {}
+
+  private normalizeSubdomain(value: unknown, baseDomain?: string) {
+    let raw = typeof value === 'string' ? value.trim().toLowerCase() : '';
+    const suffix = (baseDomain || process.env.CYBERPANEL_DOMAIN_BASE || 'plia.pe')
+      .trim()
+      .toLowerCase();
+
+    raw = raw.replace(/^https?:\/\//, '').replace(/^www\./, '');
+    if (suffix && raw.endsWith(`.${suffix}`)) {
+      raw = raw.slice(0, -(`.${suffix}`.length));
+    }
+
+    const cleaned = raw
+      .normalize('NFD')
+      .replace(/[^\x00-\x7F]/g, '')
+      .replace(/[^a-z0-9-]/g, '')
+      .replace(/^-+|-+$/g, '');
+
+    if (!cleaned || cleaned.length < 3) return '';
+    return cleaned.slice(0, 30);
+  }
 
   // ✅ ONBOARDING POR PASOS (CORRECTO)
   async saveOnboarding(projectId: number, dto: SaveOnboardingDto) {
@@ -31,9 +53,14 @@ export class ProjectsService {
       throw new NotFoundException('Project no encontrado.');
     }
 
+    const normalizedSubdomain = this.normalizeSubdomain(
+      dto?.data?.subdomain ?? (project.onboardingData as any)?.subdomain,
+    );
+
     const mergedData = {
       ...(project.onboardingData as any || {}),
       ...dto.data,
+      ...(normalizedSubdomain ? { subdomain: normalizedSubdomain } : {}),
     };
 
     const shouldStart = dto.completed === true;
@@ -64,6 +91,13 @@ export class ProjectsService {
     });
 
     if (shouldStart) {
+      this.logger.log(
+        `Onboarding project=${projectId} rawSubdomain=${JSON.stringify(
+          dto?.data?.subdomain ?? null,
+        )} normalizedSubdomain=${JSON.stringify(normalizedSubdomain || null)} storedSubdomain=${JSON.stringify(
+          (mergedData as any).subdomain ?? null,
+        )}`,
+      );
       const cyberpanelProvision = await this.cyberpanelService.ensureSite(projectId);
       if (
         cyberpanelProvision.createdWebsite &&

@@ -390,6 +390,11 @@ export class CyberpanelService {
     const baseDomain = process.env.CYBERPANEL_DOMAIN_BASE || 'plia.pe';
     const preferred = this.normalizeSubdomain(data.subdomain || '', baseDomain);
     if (!preferred) {
+      this.logger.warn(
+        `CyberPanel invalid subdomain for project=${projectId} raw=${JSON.stringify(
+          data.subdomain ?? null,
+        )} onboardingKeys=${Object.keys(data || {}).join(',')}`,
+      );
       throw new BadRequestException(
         'El subdominio enviado no es valido o no se guardo correctamente. Debe tener al menos 3 caracteres y solo usar letras, numeros o guiones.',
       );
