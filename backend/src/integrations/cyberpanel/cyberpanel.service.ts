@@ -197,8 +197,18 @@ export class CyberpanelService {
     };
   }
 
-  private normalizeSubdomain(value: string) {
-    const cleaned = value
+  private normalizeSubdomain(value: string, baseDomain?: string) {
+    let raw = (value || '').trim().toLowerCase();
+    const suffix = (baseDomain || process.env.CYBERPANEL_DOMAIN_BASE || 'plia.pe')
+      .trim()
+      .toLowerCase();
+
+    raw = raw.replace(/^https?:\/\//, '').replace(/^www\./, '');
+    if (suffix && raw.endsWith(`.${suffix}`)) {
+      raw = raw.slice(0, -(`.${suffix}`.length));
+    }
+
+    const cleaned = raw
       .toLowerCase()
       .normalize('NFD')
       .replace(/[̀-ͯ]/g, '')
@@ -378,7 +388,7 @@ export class CyberpanelService {
     }
 
     const baseDomain = process.env.CYBERPANEL_DOMAIN_BASE || 'plia.pe';
-    const preferred = this.normalizeSubdomain(data.subdomain || '');
+    const preferred = this.normalizeSubdomain(data.subdomain || '', baseDomain);
     if (!preferred) {
       throw new BadRequestException(
         'El subdominio enviado no es valido o no se guardo correctamente. Debe tener al menos 3 caracteres y solo usar letras, numeros o guiones.',

@@ -738,6 +738,52 @@ export default function DashboardPage() {
     };
   }, [imageFiles]);
 
+  useEffect(() => {
+    if (!project) return;
+    const data = project.onboardingData || {};
+    setFormData((prev) => ({
+      ...prev,
+      domainOption: data.domainOption ?? prev.domainOption,
+      subdomain: data.subdomain ?? prev.subdomain,
+      businessIdentity: data.businessIdentity ?? prev.businessIdentity,
+      businessTypeQuery: data.businessType ?? data.businessTypeQuery ?? prev.businessTypeQuery,
+      businessType: data.businessType ?? prev.businessType,
+      colorScheme: data.colorScheme ?? prev.colorScheme,
+      visualStyle: data.visualStyle ?? prev.visualStyle,
+      features: Array.isArray(data.features) ? data.features : prev.features,
+      businessName: data.businessName ?? prev.businessName,
+      businessSector: data.businessSector ?? prev.businessSector,
+      city: data.city ?? prev.city,
+      shortDescription: data.shortDescription ?? prev.shortDescription,
+      salesType: data.salesType ?? prev.salesType,
+      workMode: data.workMode ?? prev.workMode,
+      professionalGoal: data.professionalGoal ?? prev.professionalGoal,
+      businessModel: data.businessModel ?? prev.businessModel,
+      smartNeeds: Array.isArray(data.smartNeeds) ? data.smartNeeds : prev.smartNeeds,
+      smartSectionContent:
+        data.smartSectionContent && typeof data.smartSectionContent === 'object'
+          ? data.smartSectionContent
+          : prev.smartSectionContent,
+      primaryServices:
+        Array.isArray(data.primaryServices) && data.primaryServices.length
+          ? data.primaryServices
+          : prev.primaryServices,
+      audience: Array.isArray(data.audience) ? data.audience : prev.audience,
+      colors: data.colors ?? prev.colors,
+      references: data.references ?? prev.references,
+      hasLogo: data.hasLogo ?? prev.hasLogo,
+      logoUrl: data.logoUrl ?? prev.logoUrl,
+      instagram: data.instagram ?? prev.instagram,
+      facebook: data.facebook ?? prev.facebook,
+      whatsapp: data.whatsapp ?? prev.whatsapp,
+      tiktok: data.tiktok ?? prev.tiktok,
+      contactEmail: data.contactEmail ?? prev.contactEmail,
+      additionalInstructions: data.additionalInstructions ?? prev.additionalInstructions,
+      imageInstructions: data.imageInstructions ?? prev.imageInstructions,
+      confirm: data.confirm ?? prev.confirm,
+    }));
+  }, [project]);
+
   const handleSelectProject = (proj: Project) => {
     setSelectedProjectId(proj.id);
     setProject(proj);
@@ -784,14 +830,21 @@ export default function DashboardPage() {
   }, [project, project?.onboardingData, domainBase]);
 
 
-  const normalizeSubdomain = (value: string) =>
-    value
+  const normalizeSubdomain = (value: string) => {
+    let raw = value.trim().toLowerCase();
+    raw = raw.replace(/^https?:\/\//, '').replace(/^www\./, '');
+    if (raw.endsWith(`.${domainBase.toLowerCase()}`)) {
+      raw = raw.slice(0, -(`.${domainBase.toLowerCase()}`.length));
+    }
+
+    return raw
       .toLowerCase()
       .normalize('NFD')
       .replace(/[̀-ͯ]/g, '')
       .replace(/[^a-z0-9-]/g, '')
       .replace(/^-+|-+$/g, '')
       .slice(0, 30);
+  };
 
   const normalizeSearchValue = (value: string) =>
     value
