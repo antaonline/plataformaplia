@@ -1532,14 +1532,15 @@ export default function DashboardPage() {
                           </p>
                         </div>
 
-                        <button
-                          type="button"
+                        <div
                           className={`w-full rounded-2xl border p-4 text-left transition ${
                             formData.domainOption === 'subdomain'
                               ? 'border-cta bg-cta/10'
                               : 'border-border bg-white'
                           }`}
-                          onClick={() => setFormData({ ...formData, domainOption: 'subdomain' })}
+                          onClick={() =>
+                            setFormData((prev) => ({ ...prev, domainOption: 'subdomain' }))
+                          }
                         >
                           <div className="flex items-center justify-between">
                             <div>
@@ -1555,7 +1556,10 @@ export default function DashboardPage() {
                               placeholder="miempresa"
                               value={formData.subdomain}
                               onChange={(e) =>
-                                setFormData({ ...formData, subdomain: normalizeSubdomain(e.target.value) })
+                                setFormData((prev) => ({
+                                  ...prev,
+                                  subdomain: normalizeSubdomain(e.target.value),
+                                }))
                               }
                             />
                             <span className="text-sm text-muted-foreground">.plia.pe</span>
@@ -1563,7 +1567,7 @@ export default function DashboardPage() {
                           <p className="mt-2 text-xs text-muted-foreground">
                             Solo letras, numeros y guion. Minimo 3, maximo 30.
                           </p>
-                        </button>
+                        </div>
 
                         <div className="w-full rounded-2xl border border-border/60 bg-muted/30 p-4 text-left opacity-70">
                           <div className="flex items-center justify-between">
