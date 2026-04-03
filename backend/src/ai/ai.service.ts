@@ -349,6 +349,10 @@ export class AiService {
           fs.writeFileSync(join(siteRoot, fileName), page.html, 'utf-8');
         }
       }
+      const targetIndex = join(siteRoot, 'index.html');
+      if (!fs.existsSync(targetIndex)) {
+        throw new Error(`No se encontro index.html en el destino publicado: ${targetIndex}`);
+      }
     }
     const previewRoot = join(process.cwd(), 'uploads', 'previews', String(projectId));
     fs.mkdirSync(previewRoot, { recursive: true });
@@ -497,7 +501,7 @@ export class AiService {
         }
       } catch (error: any) {
         this.logger.error(`No se pudo escribir en el sitio ${domain}`, error?.message || error);
-        deployment = this.persistGeneratedAssets(projectId, null, html, pages);
+        throw new Error(`No se pudo publicar el sitio en ${domain}: ${error?.message || error}`);
       }
     } else if (html) {
       deployment = this.persistGeneratedAssets(projectId, null, html, pages);

@@ -63,7 +63,7 @@ const faqs = [
   },
   {
     question: "¿Cuánto tiempo toma tener mi web lista?",
-    answer: "El Plan Landing se entrega en 5 días hábiles aproximadamente. El Plan Institucional toma 5 días hábiles. Esto puede variar según qué tan rápido nos envíes el contenido.",
+    answer: "El Plan Landing se entrega en 24 horas aproximadamente. El Plan Institucional toma 2 días. Esto puede variar según qué tan rápido nos envíes el contenido.",
   },
   {
     question: "¿Qué pasa si no me gusta el diseño?",
@@ -185,7 +185,7 @@ const ComoFunciona = () => {
           <div className="grid md:grid-cols-2 gap-8 mt-12 max-w-3xl mx-auto">
             <AnimatedSection delay={0.1}>
               <div className="p-6 rounded-2xl bg-white border border-border text-center">
-                <p className="text-4xl font-bold text-foreground mb-2">48 Horas!</p>
+                <p className="text-4xl font-bold text-foreground mb-2">24 Horas!</p>
                 <p className="text-lg font-medium text-foreground mb-1">Plan Landing</p>
                 <p className="text-sm text-muted-foreground">Página de una sección</p>
               </div>
@@ -193,7 +193,7 @@ const ComoFunciona = () => {
 
             <AnimatedSection delay={0.2}>
               <div className="p-6 rounded-2xl bg-cta/10 border border-cta/20 text-center">
-                <p className="text-4xl font-bold text-foreground mb-2">5 días hábiles!</p>
+                <p className="text-4xl font-bold text-foreground mb-2">2 días hábiles!</p>
                 <p className="text-lg font-medium text-foreground mb-1">Plan Web Institucional</p>
                 <p className="text-sm text-muted-foreground">Web completa de Hasta 5 páginas internas</p>
               </div>

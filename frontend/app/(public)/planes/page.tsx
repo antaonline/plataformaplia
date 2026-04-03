@@ -25,7 +25,7 @@ const plans = [
       "Optimizada para celulares",
       "Formulario de contacto",
       "Certificado de seguridad (HTTPS)",
-      "Entrega en 48 Horas!",
+      "Entrega en 24 Horas!",
     ],
   },
   {
@@ -45,7 +45,7 @@ const plans = [
       "Certificado de seguridad (HTTPS)",
       "Optimizado para Google",
       "Soporte prioritario por 3 meses",
-      "Entrega de 5 a 7 días hábiles!",
+      "Entrega de 2 días hábiles!",
     ],
     isPopular: true,
   },
@@ -88,7 +88,7 @@ const faqs = [
   },
   {
     question: "¿Qué formas de pago aceptan?",
-    answer: "Aceptamos todas las tarjetas de crédito/débito, Visa, Mastercard o American Express y pago con Yape.",
+    answer: "Aceptamos todas las tarjetas de crédito/débito, Visa, Mastercard o American Express y pago con Yape (próximamente).",
   },
   {
     question: "¿Puedo hacer cambios a mi web después de publicada?",

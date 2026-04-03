@@ -128,6 +128,10 @@ export class NextExportService {
     const target = join(cyberRoot, domain, publicHtml);
 
     this.copyDir(outDir, target);
+    const targetIndex = join(target, 'index.html');
+    if (!fs.existsSync(targetIndex)) {
+      throw new Error(`No se encontro index.html en el destino publicado: ${targetIndex}`);
+    }
     const previewUrl = this.createPreview(projectId, outDir);
     return { target, previewUrl };
   }

@@ -37,7 +37,13 @@ export class MailService {
     context: string,
   ) {
     try {
-      return await this.transporter.sendMail(options)
+      const info = await this.transporter.sendMail(options)
+      this.logger.log(
+        `SMTP ${context} accepted=${JSON.stringify(info.accepted || [])} rejected=${JSON.stringify(
+          info.rejected || [],
+        )} response=${info.response || 'n/a'} messageId=${info.messageId || 'n/a'}`,
+      )
+      return info
     } catch (error: any) {
       this.logger.error(
         `SMTP ${context} fallo`,

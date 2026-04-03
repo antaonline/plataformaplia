@@ -306,7 +306,7 @@ const Contacto = () => {
                 <div className="bg-white rounded-xl p-5 border border-border">
                   <p className="font-semibold text-foreground mb-2">¿Cuánto tiempo toma?</p>
                   <p className="text-sm text-muted-foreground">
-                    Una página landing está lista en 2 días. Una web completa en 5 días.
+                    Una página landing está lista en 24 horas!. Una web completa en 2 días!.
                   </p>
                 </div>
               </AnimatedSection>

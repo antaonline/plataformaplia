@@ -8,6 +8,9 @@ import { AiService } from '../ai/ai.service';
 import { CyberpanelService } from '../integrations/cyberpanel/cyberpanel.service';
 import { MailService } from '../mail/mail.service';
 
+const LANDING_DEVELOPMENT_HOURS = 24;
+const WEB_DEVELOPMENT_DAYS = 2;
+
 @Injectable()
 export class ProjectsService {
   private readonly logger = new Logger(ProjectsService.name);
@@ -70,9 +73,9 @@ export class ProjectsService {
     if (shouldStart && project.order?.planId) {
       const planId = project.order.planId;
       if (planId === 1) {
-        deadline = addHours(new Date(), 48);
+        deadline = addHours(new Date(), LANDING_DEVELOPMENT_HOURS);
       } else {
-        deadline = addDays(new Date(), 5);
+        deadline = addDays(new Date(), WEB_DEVELOPMENT_DAYS);
       }
     }
 
