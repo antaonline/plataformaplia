@@ -240,70 +240,79 @@ export class PaymentsService {
   }
 
   async createIzipaySession(orderId: number, payload: any = {}) {
-    const order = await this.prisma.order.findUnique({
-      where: { id: orderId },
-    });
-
-    if (!order) {
-      throw new NotFoundException('Order not found');
-    }
-
-    if (order.status !== OrderStatus.PENDING) {
-      throw new BadRequestException('Order no esta pendiente');
-    }
-
-    const transactionId = order.transactionId ?? `TRX-${Date.now()}`;
-    if (!order.transactionId) {
-      await this.prisma.order.update({
-        where: { id: order.id },
-        data: { transactionId },
+    try {
+      const order = await this.prisma.order.findUnique({
+        where: { id: orderId },
       });
-    }
 
-    const orderNumber = order.id.toString().padStart(5, '0');
-    const session = await this.izipay.createSession({
-      amount: Number(order.amount),
-      orderNumber,
-      transactionId,
-    });
+      if (!order) {
+        throw new NotFoundException('Order not found');
+      }
 
-    if (session?.status && session.status !== 'SUCCESS') {
-      const message =
-        session?.answer?.detailedErrorMessage ??
-        session?.answer?.errorMessage ??
-        'Error al crear sesion en Micuentaweb';
-      throw new BadRequestException(message);
-    }
+      if (order.status !== OrderStatus.PENDING) {
+        throw new BadRequestException('Order no esta pendiente');
+      }
 
-    const existingPayment = await this.prisma.payment.findFirst({
-      where: { orderId: order.id },
-    });
-    if (!existingPayment) {
-      await this.prisma.payment.create({
-        data: {
-          orderId: order.id,
-          amount: Number(order.amount),
-          status: 'PENDING',
-          provider: 'IZIPAY',
-          transactionId: session.transactionId ?? transactionId,
-          rawResponse: JSON.stringify(session),
-          providerResponse: JSON.stringify(session),
+      const transactionId = order.transactionId ?? `TRX-${Date.now()}`;
+      if (!order.transactionId) {
+        await this.prisma.order.update({
+          where: { id: order.id },
+          data: { transactionId },
+        });
+      }
+
+      const orderNumber = order.id.toString().padStart(5, '0');
+      const session = await this.izipay.createSession({
+        amount: Number(order.amount),
+        orderNumber,
+        transactionId,
+      });
+
+      if (session?.status && session.status !== 'SUCCESS') {
+        const message =
+          session?.answer?.detailedErrorMessage ??
+          session?.answer?.errorMessage ??
+          'Error al crear sesion en Micuentaweb';
+        throw new BadRequestException(message);
+      }
+
+      const existingPayment = await this.prisma.payment.findFirst({
+        where: { orderId: order.id },
+      });
+      if (!existingPayment) {
+        await this.prisma.payment.create({
+          data: {
+            orderId: order.id,
+            amount: Number(order.amount),
+            status: 'PENDING',
+            provider: 'IZIPAY',
+            transactionId: session.transactionId ?? transactionId,
+            rawResponse: JSON.stringify(session),
+            providerResponse: JSON.stringify(session),
+          },
+        });
+      }
+
+      return {
+        orderId: order.id,
+        amount: Number(order.amount),
+        currency: order.currency,
+        email: payload?.email ?? order.email,
+        session: {
+          ...session,
+          orderNumber: session?.orderNumber ?? orderNumber,
+          formToken: session?.answer?.formToken ?? session?.formToken,
+          publicKey: session?.publicKey ?? process.env.IZIPAY_PUBLIC_KEY,
         },
-      });
+      };
+    } catch (error: any) {
+      if (error instanceof BadRequestException || error instanceof NotFoundException) {
+        throw error;
+      }
+      throw new BadRequestException(
+        `No se pudo iniciar la sesion de pago: ${error?.message || 'error interno en pagos'}`,
+      );
     }
-
-    return {
-      orderId: order.id,
-      amount: Number(order.amount),
-      currency: order.currency,
-      email: payload?.email ?? order.email,
-      session: {
-        ...session,
-        orderNumber: session?.orderNumber ?? orderNumber,
-        formToken: session?.answer?.formToken ?? session?.formToken,
-        publicKey: session?.publicKey ?? process.env.IZIPAY_PUBLIC_KEY,
-      },
-    };
   }
 
   async confirmIzipayPayment(payload: any) {

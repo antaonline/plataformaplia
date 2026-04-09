@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
+  Logger,
 } from '@nestjs/common';
 import { addMonths, formatDistanceToNowStrict } from 'date-fns';
 import { HostingAccount, HostingAccountStatus, HostedSiteType, PlanServiceType, Prisma } from '@prisma/client';
@@ -27,6 +28,8 @@ type UploadFile = {
 
 @Injectable()
 export class HostingService {
+  private readonly logger = new Logger(HostingService.name);
+
   constructor(
     private prisma: PrismaService,
     private cyberpanelService: CyberpanelService,
@@ -121,11 +124,20 @@ export class HostingService {
 
     for (const definition of Object.values(HOSTING_PLAN_DEFINITIONS)) {
       const data = this.buildPlanPayload(definition);
-      await this.prisma.plan.upsert({
-        where: { slug: data.slug },
-        update: data,
-        create: data,
-      });
+      try {
+        await this.prisma.plan.upsert({
+          where: { slug: data.slug },
+          update: data,
+          create: data,
+        });
+      } catch (error: any) {
+        this.logger.error(
+          `No se pudo sincronizar el plan de hosting ${data.slug}: ${error?.message || error}`,
+        );
+        throw new BadRequestException(
+          `No se pudo sincronizar el catalogo de hosting en la base de datos: ${error?.message || 'error desconocido'}`,
+        );
+      }
     }
   }
 
@@ -146,68 +158,80 @@ export class HostingService {
   }
 
   async prepareCheckout(dto: PrepareHostingCheckoutDto, userId?: number) {
-    await this.assertHostingSchemaReady();
-    await this.ensureCatalogPlans();
+    try {
+      await this.assertHostingSchemaReady();
+      await this.ensureCatalogPlans();
 
-    const billingCycleMonths = Number(dto.billingCycleMonths);
-    if (!HOSTING_TERM_OPTIONS.includes(billingCycleMonths as any)) {
-      throw new BadRequestException('Plazo de hosting invalido.');
-    }
+      const billingCycleMonths = Number(dto.billingCycleMonths);
+      if (!HOSTING_TERM_OPTIONS.includes(billingCycleMonths as any)) {
+        throw new BadRequestException('Plazo de hosting invalido.');
+      }
 
-    const definition = this.getPlanDefinitionOrThrow(dto.planSlug);
-    const monthlyPrice = definition.monthlyPricing[billingCycleMonths as 1 | 12 | 24 | 48];
-    const total = this.toMoney(monthlyPrice * billingCycleMonths);
-    const regularTotal = this.toMoney(definition.regularMonthlyPrice * billingCycleMonths);
-    const planRecord = await this.prisma.plan.findUnique({
-      where: { slug: `hosting-${definition.slug}` },
-    });
+      const definition = this.getPlanDefinitionOrThrow(dto.planSlug);
+      const monthlyPrice = definition.monthlyPricing[billingCycleMonths as 1 | 12 | 24 | 48];
+      const total = this.toMoney(monthlyPrice * billingCycleMonths);
+      const regularTotal = this.toMoney(definition.regularMonthlyPrice * billingCycleMonths);
+      const planRecord = await this.prisma.plan.findUnique({
+        where: { slug: `hosting-${definition.slug}` },
+      });
 
-    if (!planRecord) {
-      throw new BadRequestException('No se pudo preparar el plan de hosting.');
-    }
+      if (!planRecord) {
+        throw new BadRequestException('No se pudo preparar el plan de hosting.');
+      }
 
-    const order = await this.prisma.order.create({
-      data: {
-        userId,
-        email: dto.email,
-        planId: planRecord.id,
-        amount: total,
-        currency: 'PEN',
-        billingCycleMonths,
-        metadata: {
-          service: 'hosting-only',
-          planSlug: definition.slug,
-          planName: definition.name,
+      const order = await this.prisma.order.create({
+        data: {
+          userId,
+          email: dto.email,
+          planId: planRecord.id,
+          amount: total,
+          currency: 'PEN',
+          billingCycleMonths,
+          metadata: {
+            service: 'hosting-only',
+            planSlug: definition.slug,
+            planName: definition.name,
+            monthlyPrice,
+            regularMonthlyPrice: definition.regularMonthlyPrice,
+            regularTotal,
+            packageName: definition.packageName,
+            maxSites: definition.maxSites,
+            storageMb: definition.storageMb,
+            bandwidthMb: definition.bandwidthMb,
+            mailboxesPerSite: definition.mailboxesPerSite,
+          } as Prisma.InputJsonValue,
+        },
+      });
+
+      return {
+        orderId: order.id,
+        service: 'hosting-only',
+        plan: {
+          id: planRecord.id,
+          slug: definition.slug,
+          name: definition.name,
           monthlyPrice,
           regularMonthlyPrice: definition.regularMonthlyPrice,
-          regularTotal,
-          packageName: definition.packageName,
-          maxSites: definition.maxSites,
-          storageMb: definition.storageMb,
-          bandwidthMb: definition.bandwidthMb,
-          mailboxesPerSite: definition.mailboxesPerSite,
-        } as Prisma.InputJsonValue,
-      },
-    });
-
-    return {
-      orderId: order.id,
-      service: 'hosting-only',
-      plan: {
-        id: planRecord.id,
-        slug: definition.slug,
-        name: definition.name,
-        monthlyPrice,
-        regularMonthlyPrice: definition.regularMonthlyPrice,
-        billingCycleMonths,
-      },
-      summary: {
-        subtotal: total,
-        taxes: 0,
-        total,
-        currency: 'PEN',
-      },
-    };
+          billingCycleMonths,
+        },
+        summary: {
+          subtotal: total,
+          taxes: 0,
+          total,
+          currency: 'PEN',
+        },
+      };
+    } catch (error: any) {
+      if (error instanceof BadRequestException || error instanceof NotFoundException) {
+        throw error;
+      }
+      this.logger.error(
+        `prepareCheckout fallo para plan=${dto?.planSlug} term=${dto?.billingCycleMonths}: ${error?.message || error}`,
+      );
+      throw new BadRequestException(
+        `No se pudo preparar el checkout de hosting: ${error?.message || 'error interno en backend'}`,
+      );
+    }
   }
 
   private computeStorageUsageMb(sites: Array<{ storageUsedMb: number }>) {

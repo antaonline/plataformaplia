@@ -5,6 +5,9 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 @Injectable()
 export class IzipayService {
   private baseUrl = process.env.IZIPAY_BASE_URL ?? 'https://api.micuentaweb.pe';
+  private sessionUrl =
+    process.env.IZIPAY_SESSION_URL ??
+    `${this.baseUrl}/api-payment/V4/Charge/CreatePayment`;
   private shopId = process.env.IZIPAY_SHOP_ID ?? '';
   private password = process.env.IZIPAY_PRIVATE_KEY ?? '';
   private publicKey = process.env.IZIPAY_PUBLIC_KEY ?? '';
@@ -37,7 +40,7 @@ export class IzipayService {
     };
 
     const response = await axios.post(
-      `${this.baseUrl}/api-payment/V4/Charge/CreatePayment`,
+      this.sessionUrl,
       payload,
       {
         headers: {
@@ -64,7 +67,7 @@ export class IzipayService {
 
     try {
       const response = await axios.post(
-        `${this.baseUrl}/api-payment/V4/Charge/CreatePayment`,
+        this.sessionUrl,
         payload,
         {
           headers: {

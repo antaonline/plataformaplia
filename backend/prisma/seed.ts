@@ -18,7 +18,7 @@ async function main() {
   })
 
   await prisma.plan.upsert({
-    where: { id: 1 },
+    where: { slug: 'landing' },
     update: {
       name: 'LANDING',
       description: 'Landing page + hosting anual',
@@ -28,7 +28,6 @@ async function main() {
       serviceType: 'WEBSITE_BUILD',
     },
     create: {
-      id: 1,
       name: 'LANDING',
       description: 'Landing page + hosting anual',
       price: 390,
@@ -39,7 +38,7 @@ async function main() {
   })
 
   await prisma.plan.upsert({
-    where: { id: 2 },
+    where: { slug: 'web' },
     update: {
       name: 'WEB INSTITUCIONAL',
       description: 'Web completa + hosting anual',
@@ -49,7 +48,6 @@ async function main() {
       serviceType: 'WEBSITE_BUILD',
     },
     create: {
-      id: 2,
       name: 'WEB INSTITUCIONAL',
       description: 'Web completa + hosting anual',
       price: 690,

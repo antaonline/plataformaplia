@@ -7,6 +7,6 @@ export class PlansPublicController {
 
   @Get()
   findAll() {
-    return this.plansService.findAll(1, 50)
+    return this.plansService.findPublicWebsitePlans()
   }
 }
