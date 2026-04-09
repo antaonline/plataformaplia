@@ -2,7 +2,8 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { IzipayService } from '../payments/izipay.service';
-import { addDays, subDays } from 'date-fns';
+import { addDays, addMonths, subDays } from 'date-fns';
+import { PlanServiceType } from '@prisma/client';
 
 @Injectable()
 export class SubscriptionsService {
@@ -33,6 +34,9 @@ export class SubscriptionsService {
         userId: project.userId,
         projectId: project.id,
         planId: project.order.planId,
+        serviceType: PlanServiceType.WEBSITE_BUILD,
+        billingCycleMonths: 12,
+        cycleAmount: amount,
 
         startDate,
         endDate,
@@ -76,7 +80,9 @@ export class SubscriptionsService {
       throw new BadRequestException('Aun no puedes renovar');
     }
 
-    const amount = await this.getUserAnnualAmount(subscription.userId);
+    const amount = Number(
+      subscription.cycleAmount ?? (await this.getUserAnnualAmount(subscription.userId)),
+    );
     const renewal = await this.prisma.hostingRenewal.create({
       data: {
         subscriptionId: subscription.id,
@@ -150,7 +156,7 @@ export class SubscriptionsService {
     const cardToken = response?.token?.cardToken ?? response?.cardToken ?? null;
 
     const currentEnd = renewal.subscription.endDate;
-    const nextEnd = addDays(currentEnd, 365);
+    const nextEnd = addMonths(currentEnd, renewal.subscription.billingCycleMonths || 12);
 
     await this.prisma.hostingRenewal.update({
       where: { id: renewal.id },

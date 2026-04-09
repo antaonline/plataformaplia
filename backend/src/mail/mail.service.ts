@@ -237,6 +237,77 @@ export class MailService {
     )
   }
 
+  async sendHostingPanelReady(
+    email: string,
+    payload: {
+      planName?: string
+      loginUrl: string
+      hostingAccess: {
+        panelUrl: string
+        username: string
+        password: string
+      }
+    },
+  ) {
+    const subject = 'Tu cuenta de hosting PLIA ya esta activa'
+    const appUrl = this.getAppUrl()
+    const logoUrl = `${appUrl}/plia-logo-black.svg`
+    const html = `
+      <div style="background:#f6f7fb;padding:24px;font-family:'Segoe UI',Roboto,Arial,sans-serif;color:#0f172a;">
+        <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:640px;margin:0 auto;background:#ffffff;border-radius:20px;overflow:hidden;border:1px solid #e5e7eb;">
+          <tr>
+            <td style="padding:28px 32px;background:linear-gradient(135deg,#d9f99d 0%,#bef264 100%);color:#1a1a0a;">
+              <img src="${logoUrl}" alt="PLIA" width="104" height="30" style="display:block;width:104px;height:auto;" />
+              <h1 style="margin:18px 0 6px;font-size:24px;line-height:1.3;color:#1a1a0a;">Tu hosting ya esta activo</h1>
+              <p style="margin:0;font-size:14px;color:#3f6212;">
+                ${this.escapeHtml(payload.planName || 'Tu plan PLIA')} ya quedo habilitado y listo para crear sitios.
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:28px 32px;">
+              <p style="margin:0 0 12px;font-size:15px;line-height:1.6;color:#111827;">
+                Ya puedes entrar a tu dashboard PLIA para crear sitios, subir tu web y administrar tu capacidad.
+              </p>
+              <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin:0 0 20px;border:1px solid #d9f99d;border-radius:18px;background:#f7fee7;">
+                <tr>
+                  <td style="padding:20px 22px;">
+                    <div style="font-size:12px;letter-spacing:0.14em;text-transform:uppercase;font-weight:700;color:#3f6212;">Acceso tecnico</div>
+                    <div style="margin-top:14px;font-size:14px;line-height:1.7;color:#111827;">
+                      <div><strong>Panel:</strong> <span style="color:#365314;">${this.escapeHtml(payload.hostingAccess.panelUrl)}</span></div>
+                      <div><strong>Usuario:</strong> <span style="color:#365314;">${this.escapeHtml(payload.hostingAccess.username)}</span></div>
+                      <div><strong>Contrasena:</strong> <span style="color:#365314;">${this.escapeHtml(payload.hostingAccess.password)}</span></div>
+                    </div>
+                  </td>
+                </tr>
+              </table>
+              <a href="${payload.loginUrl}" style="display:inline-block;background:hsl(75 100% 45%);color:#111827;text-decoration:none;padding:12px 18px;border-radius:999px;font-weight:700;font-size:14px;">
+                Ir a mi dashboard de hosting
+              </a>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:18px 32px;background:#f8fafc;border-top:1px solid #e5e7eb;">
+              <p style="margin:0;font-size:12px;color:#94a3b8;">
+                PLIA - Soporte: soporte@plia.pe
+              </p>
+            </td>
+          </tr>
+        </table>
+      </div>
+    `
+
+    await this.sendMail(
+      {
+        from: `"PLIA" <${process.env.MAIL_USER}>`,
+        to: email,
+        subject,
+        html,
+      },
+      'hosting panel ready',
+    )
+  }
+
   async sendContactMessage(payload: {
     name: string
     email: string

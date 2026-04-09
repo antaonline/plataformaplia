@@ -8,9 +8,10 @@ export type StoredCyberpanelAccount = {
   username: string;
   email: string;
   panelUrl: string;
-  ownerType: 'customer';
+  ownerType: 'customer' | 'shared-admin';
   createdAt: string;
   sourceProjectId?: number;
+  sourceLabel?: string;
   encryptedPassword?: string;
 };
 
@@ -79,7 +80,11 @@ export class CyberpanelService {
   }
 
   private get headers() {
-    return { 'Content-Type': 'application/json' };
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (process.env.CYBERPANEL_API_KEY) {
+      headers.Authorization = process.env.CYBERPANEL_API_KEY;
+    }
+    return headers;
   }
 
   private get httpsAgent() {
@@ -132,14 +137,46 @@ export class CyberpanelService {
     this.logger.log(
       `CyberPanel request ${path} adminUser=${body.adminUser || 'missing'} hasAdminPass=${Boolean(body.adminPass)}`,
     );
-    const res = await axios.post(url, body, {
-      headers: this.headers,
-      httpsAgent: this.httpsAgent,
-    });
-    if (!this.isSuccessResponse(res.data)) {
-      throw new Error(this.extractErrorMessage(res.data));
+    try {
+      const res = await axios.post(url, body, {
+        headers: this.headers,
+        httpsAgent: this.httpsAgent,
+      });
+      if (!this.isSuccessResponse(res.data)) {
+        throw new BadRequestException(this.extractErrorMessage(res.data));
+      }
+      return res.data;
+    } catch (error: any) {
+      const status = error?.response?.status;
+      const responseData = error?.response?.data;
+      const message = this.extractErrorMessage(responseData || error?.message || error);
+      if (status === 404) {
+        throw new BadRequestException(
+          `CyberPanel devolvio 404 al llamar ${url}. Revisa CYBERPANEL_API_URL, puerto y la ruta configurada.`,
+        );
+      }
+      if (status === 401 || status === 403) {
+        throw new BadRequestException(
+          `CyberPanel rechazo la autenticacion al llamar ${url}. Revisa CYBERPANEL_ADMIN_USER, CYBERPANEL_ADMIN_PASS y/o CYBERPANEL_API_KEY.`,
+        );
+      }
+      throw new BadRequestException(`CyberPanel error en ${url}: ${message}`);
     }
-    return res.data;
+  }
+
+  private buildSharedAdminAccount(sourceLabel?: string): StoredCyberpanelAccount {
+    return {
+      username: process.env.CYBERPANEL_OWNER || process.env.CYBERPANEL_ADMIN_USER || 'admin',
+      email: process.env.CYBERPANEL_DEFAULT_EMAIL || 'admin@plia.pe',
+      panelUrl: this.panelUrl,
+      ownerType: 'shared-admin',
+      createdAt: new Date().toISOString(),
+      sourceLabel,
+    };
+  }
+
+  private shouldFallbackToSharedAdmin() {
+    return process.env.CYBERPANEL_SHARED_OWNER_FALLBACK !== 'false';
   }
 
   private buildStrongPassword(length = 16) {
@@ -233,6 +270,7 @@ export class CyberpanelService {
     domain: string,
     account: StoredCyberpanelAccount,
     ownerPassword: string,
+    packageName?: string,
   ) {
     if (!ownerPassword) {
       throw new Error(
@@ -240,7 +278,7 @@ export class CyberpanelService {
       );
     }
 
-    const packageName = process.env.CYBERPANEL_PACKAGE || 'Default';
+    const resolvedPackageName = packageName || process.env.CYBERPANEL_PACKAGE || 'Default';
     const phpSelection = this.normalizePhpSelection(
       process.env.CYBERPANEL_PHP_SELECTION || process.env.CYBERPANEL_PHP,
     );
@@ -252,7 +290,7 @@ export class CyberpanelService {
       websiteOwner: account.username,
       ownerPassword,
       phpSelection,
-      packageName,
+      packageName: resolvedPackageName,
       ssl: 1,
       dkIMCheck: 0,
       openBasedir: 1,
@@ -277,6 +315,21 @@ export class CyberpanelService {
   }
 
   private async findStoredAccount(userId: number): Promise<StoredCyberpanelAccount | null> {
+    const hostingAccount = await this.prisma.hostingAccount.findUnique({
+      where: { userId },
+    });
+
+    if (hostingAccount?.cyberpanelUsername && hostingAccount?.panelUrl) {
+      return {
+        username: hostingAccount.cyberpanelUsername,
+        email: hostingAccount.email,
+        panelUrl: hostingAccount.panelUrl,
+        ownerType: 'customer',
+        createdAt: hostingAccount.createdAt.toISOString(),
+        encryptedPassword: hostingAccount.encryptedPassword ?? undefined,
+      };
+    }
+
     const projects = await this.prisma.project.findMany({
       where: { userId },
       orderBy: { createdAt: 'asc' },
@@ -296,8 +349,15 @@ export class CyberpanelService {
     return null;
   }
 
-  private async ensureCustomerAccount(project: any): Promise<CustomerAccountProvision> {
-    const existing = await this.findStoredAccount(project.userId);
+  revealStoredPassword(value?: string) {
+    return this.decryptSecret(value);
+  }
+
+  async ensureHostingAccountForUser(
+    user: { id: number; name?: string; email?: string },
+    options: { packageName: string; maxSites: number; sourceLabel?: string },
+  ): Promise<CustomerAccountProvision> {
+    const existing = await this.findStoredAccount(user.id);
     if (existing) {
       return {
         account: existing,
@@ -308,15 +368,13 @@ export class CyberpanelService {
       };
     }
 
-    const user = project.user;
-    const username = this.buildCustomerUsername(project.userId, user?.name, user?.email);
+    const username = this.buildCustomerUsername(user.id, user?.name, user?.email);
     const password = this.buildStrongPassword();
     const email = user?.email || process.env.CYBERPANEL_DEFAULT_EMAIL || 'admin@plia.pe';
     const { firstName, lastName } = this.splitName(user?.name || '');
-    const websitesLimit = Number(process.env.CYBERPANEL_USER_WEBSITES_LIMIT || 100);
+    const websitesLimit = Number(options.maxSites || process.env.CYBERPANEL_USER_WEBSITES_LIMIT || 100);
     const selectedACL = process.env.CYBERPANEL_USER_ACL || 'user';
     const securityLevel = process.env.CYBERPANEL_USER_SECURITY_LEVEL || 'HIGH';
-    const packageName = process.env.CYBERPANEL_PACKAGE || 'Default';
 
     const body: Record<string, any> = {
       firstName,
@@ -324,7 +382,7 @@ export class CyberpanelService {
       email,
       userName: username,
       password,
-      packageName,
+      packageName: options.packageName,
       websitesLimit,
       selectedACL,
       securityLevel,
@@ -340,8 +398,20 @@ export class CyberpanelService {
     try {
       await this.request(this.createUserPath, body);
     } catch (error: any) {
-      const responseData = error?.response?.data;
-      const message = this.extractErrorMessage(responseData || error?.message || error);
+      const message = this.extractErrorMessage(error?.response?.data || error?.message || error);
+      if (
+        this.shouldFallbackToSharedAdmin() &&
+        /404|submitUserCreation|ruta configurada/i.test(message)
+      ) {
+        this.logger.warn(
+          `CyberPanel createUser no disponible. Usando owner compartido administrado por PLIA para ${username}.`,
+        );
+        return {
+          account: this.buildSharedAdminAccount(options.sourceLabel),
+          accountCreated: false,
+          plainPassword: undefined,
+        };
+      }
       if (!this.isAlreadyExistsMessage(message)) {
         throw error;
       }
@@ -356,12 +426,63 @@ export class CyberpanelService {
         panelUrl: this.panelUrl,
         ownerType: 'customer',
         createdAt: new Date().toISOString(),
-        sourceProjectId: project.id,
+        sourceLabel: options.sourceLabel,
         encryptedPassword: this.encryptSecret(password),
       },
       accountCreated,
       plainPassword: accountCreated ? password : undefined,
     };
+  }
+
+  async createSiteForAccount(
+    domain: string,
+    account: StoredCyberpanelAccount,
+    ownerPassword: string,
+    packageName?: string,
+  ) {
+    const siteRequest = this.buildWebsiteRequest(domain, account, ownerPassword, packageName);
+    this.logger.log(
+      `CyberPanel provisioning ${siteRequest.type} for ${domain} via ${siteRequest.path}`,
+    );
+    return this.request(siteRequest.path, siteRequest.body);
+  }
+
+  async deleteSiteByDomain(domain: string) {
+    if (!domain) {
+      return true;
+    }
+
+    const body: Record<string, any> = {
+      domainName: domain,
+    };
+
+    if (process.env.CYBERPANEL_ADMIN_USER && process.env.CYBERPANEL_ADMIN_PASS) {
+      body.adminUser = process.env.CYBERPANEL_ADMIN_USER;
+      body.adminPass = process.env.CYBERPANEL_ADMIN_PASS;
+    }
+
+    try {
+      await this.request(this.deletePath, body);
+      return true;
+    } catch (error: any) {
+      this.logger.error(`CyberPanel delete error for ${domain}`, error?.message || error);
+      return false;
+    }
+  }
+
+  private async ensureCustomerAccount(project: any): Promise<CustomerAccountProvision> {
+    return this.ensureHostingAccountForUser(
+      {
+        id: project.userId,
+        name: project.user?.name,
+        email: project.user?.email,
+      },
+      {
+        packageName: process.env.CYBERPANEL_PACKAGE || 'Default',
+        maxSites: Number(process.env.CYBERPANEL_USER_WEBSITES_LIMIT || 100),
+        sourceLabel: `project-${project.id}`,
+      },
+    );
   }
 
   async ensureSite(projectId: number): Promise<EnsureSiteResult> {
@@ -413,12 +534,8 @@ export class CyberpanelService {
       process.env.CYBERPANEL_EXISTING_USER_PASSWORD ||
       '';
     const siteRequest = this.buildWebsiteRequest(domain, account, ownerPassword);
-
     try {
-      this.logger.log(
-        `CyberPanel provisioning ${siteRequest.type} for ${domain} via ${siteRequest.path}`,
-      );
-      const response = await this.request(siteRequest.path, siteRequest.body);
+      const response = await this.createSiteForAccount(domain, account, ownerPassword);
       await this.prisma.project.update({
         where: { id: projectId },
         data: {
@@ -497,17 +614,11 @@ export class CyberpanelService {
       return true;
     }
 
-    const body: Record<string, any> = {
-      domainName: domain,
-    };
-
-    if (process.env.CYBERPANEL_ADMIN_USER && process.env.CYBERPANEL_ADMIN_PASS) {
-      body.adminUser = process.env.CYBERPANEL_ADMIN_USER;
-      body.adminPass = process.env.CYBERPANEL_ADMIN_PASS;
-    }
-
     try {
-      await this.request(this.deletePath, body);
+      const deleted = await this.deleteSiteByDomain(domain);
+      if (!deleted) {
+        throw new Error('CyberPanel no pudo eliminar el dominio.');
+      }
       await this.prisma.project.update({
         where: { id: projectId },
         data: {

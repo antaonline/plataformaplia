@@ -1,6 +1,5 @@
 generator client {
   provider = "prisma-client-js"
-  url      = env("DATABASE_URL")
 }
 
 datasource db {
@@ -17,6 +16,8 @@ model Order {
   currency  String
   status    OrderStatus @default(PENDING)
   transactionId String?
+  billingCycleMonths Int?
+  metadata Json?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   payment   Payment?
@@ -25,6 +26,7 @@ model Order {
 
   projects Project[]
   domainSelection DomainSelection?
+  subscriptions HostingSubscription[]
 
   @@index([planId], map: "Order_planId_fkey")
   @@index([userId], map: "Order_userId_fkey")
@@ -49,9 +51,16 @@ model plan {
   description  String
   price        Float
   hostingYear  Boolean               @default(true)
+  slug         String?               @unique
+  serviceType  PlanServiceType       @default(WEBSITE_BUILD)
   createdAt    DateTime              @default(now())
   order        Order[]
   subscription HostingSubscription[]
+}
+
+enum PlanServiceType {
+  WEBSITE_BUILD
+  HOSTING_ONLY
 }
 
 enum ProjectType {
@@ -95,9 +104,14 @@ model Project {
 
 model HostingSubscription {
   id        Int       @id @default(autoincrement())
-  projectId Int
+  projectId Int?
   userId    Int
   planId    Int
+  sourceOrderId Int?    @unique
+  serviceType PlanServiceType @default(WEBSITE_BUILD)
+  billingCycleMonths Int @default(12)
+  cycleAmount Decimal?
+  metadata Json?
   startDate DateTime  @default(now())
   endDate   DateTime
   status    String
@@ -110,8 +124,10 @@ model HostingSubscription {
   renewalFinalNoticeSentAt DateTime?
   plan      plan      @relation(fields: [planId], references: [id], map: "Subscription_planId_fkey")
   user      user      @relation(fields: [userId], references: [id], map: "Subscription_userId_fkey")
+  sourceOrder Order?  @relation(fields: [sourceOrderId], references: [id])
   projects  Project[]
   renewals  HostingRenewal[]
+  account   HostingAccount? @relation("ActiveSubscription")
 
   @@index([planId], map: "Subscription_planId_fkey")
   @@index([userId], map: "Subscription_userId_fkey")
@@ -136,6 +152,7 @@ model user {
   refreshTokens RefreshToken[]
   email2faCodes Email2FACode[]
   projects      Project[]
+  hostingAccount HostingAccount?
   passwordSetupTokens PasswordSetupToken[]
 }
 
@@ -235,6 +252,107 @@ model HostingRenewal {
 
   @@index([subscriptionId])
   @@map("hostingrenewal")
+}
+
+enum HostingAccountStatus {
+  PROVISIONING
+  ACTIVE
+  PAST_DUE
+  SUSPENDED
+  CANCELED
+  ERROR
+}
+
+enum HostedSiteStatus {
+  PROVISIONING
+  ACTIVE
+  PAST_DUE
+  SUSPENDED
+  ERROR
+  DELETED
+}
+
+enum HostedSiteType {
+  SUBDOMAIN
+  CUSTOM_DOMAIN
+}
+
+enum HostedSiteAppType {
+  EMPTY
+  STATIC_UPLOAD
+  WORDPRESS
+}
+
+enum HostingSslStatus {
+  PENDING
+  ACTIVE
+  FAILED
+  NOT_CONFIGURED
+}
+
+model HostingAccount {
+  id                   Int                  @id @default(autoincrement())
+  userId               Int                  @unique
+  activeSubscriptionId Int?                 @unique
+  packageName          String
+  status               HostingAccountStatus @default(PROVISIONING)
+  maxSites             Int
+  storageMb            Int
+  bandwidthMb          Int
+  mailboxesPerSite     Int
+  cyberpanelUsername   String
+  email                String
+  panelUrl             String
+  encryptedPassword    String?
+  metadata             Json?
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+
+  user               user                 @relation(fields: [userId], references: [id])
+  activeSubscription HostingSubscription? @relation("ActiveSubscription", fields: [activeSubscriptionId], references: [id])
+  sites              HostedSite[]
+
+  @@map("hostingaccount")
+}
+
+model HostedSite {
+  id               Int              @id @default(autoincrement())
+  hostingAccountId Int
+  name             String
+  domain           String           @unique
+  siteType         HostedSiteType
+  appType          HostedSiteAppType @default(EMPTY)
+  status           HostedSiteStatus @default(PROVISIONING)
+  sslStatus        HostingSslStatus @default(PENDING)
+  rootPath         String
+  publicUrl        String
+  storageUsedMb    Int              @default(0)
+  uploadCount      Int              @default(0)
+  lastUploadedAt   DateTime?
+  lastDeployedAt   DateTime?
+  metadata         Json?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  hostingAccount HostingAccount  @relation(fields: [hostingAccountId], references: [id])
+  mailboxes     HostedMailbox[]
+
+  @@index([hostingAccountId])
+  @@map("hostedsite")
+}
+
+model HostedMailbox {
+  id           Int      @id @default(autoincrement())
+  hostedSiteId Int
+  email        String   @unique
+  status       String   @default("ACTIVE")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  hostedSite HostedSite @relation(fields: [hostedSiteId], references: [id])
+
+  @@index([hostedSiteId])
+  @@map("hostedmailbox")
 }
 
 enum user_role {

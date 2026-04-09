@@ -24,6 +24,8 @@ async function main() {
       description: 'Landing page + hosting anual',
       price: 390,
       hostingYear: true,
+      slug: 'landing',
+      serviceType: 'WEBSITE_BUILD',
     },
     create: {
       id: 1,
@@ -31,6 +33,8 @@ async function main() {
       description: 'Landing page + hosting anual',
       price: 390,
       hostingYear: true,
+      slug: 'landing',
+      serviceType: 'WEBSITE_BUILD',
     },
   })
 
@@ -41,6 +45,8 @@ async function main() {
       description: 'Web completa + hosting anual',
       price: 690,
       hostingYear: true,
+      slug: 'web',
+      serviceType: 'WEBSITE_BUILD',
     },
     create: {
       id: 2,
@@ -48,6 +54,8 @@ async function main() {
       description: 'Web completa + hosting anual',
       price: 690,
       hostingYear: true,
+      slug: 'web',
+      serviceType: 'WEBSITE_BUILD',
     },
   })
 

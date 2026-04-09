@@ -66,7 +66,7 @@ const comparison = [
   { feature: "Optimización para Google", landing: "Básica", institucional: "Avanzada" },
   { feature: "Revisiones de diseño", landing: "1", institucional: "2" },
   { feature: "Soporte Pioritario post-entrega", landing: "1 mes", institucional: "3 meses" },
-  { feature: "Tiempo de entrega", landing: "2 días", institucional: "5 días" },
+  { feature: "Tiempo de entrega", landing: "1 día", institucional: "2 días" },
 ];
 
 const faqs = [

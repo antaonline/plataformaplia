@@ -23,6 +23,7 @@ import { RenewHostingCron } from './cron/renew-hosting.cron';
 import { PublishProjectsCron } from './cron/publish-projects.cron';
 import { MailModule } from './mail/mail.module';
 import { ContactModule } from './contact/contact.module';
+import { HostingModule } from './hosting/hosting.module';
 
 import { ThrottlerModule } from '@nestjs/throttler'
 
@@ -52,6 +53,7 @@ import { ThrottlerModule } from '@nestjs/throttler'
     NextExportModule,
     MailModule,
     ContactModule,
+    HostingModule,
   ],
   controllers: [AppController, OrdersController],
   providers: [AppService, ProjectsService, RenewHostingCron, PublishProjectsCron],

@@ -9,10 +9,11 @@ import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
 import { IzipayService } from './izipay.service';
 import { UsersModule } from '../users/users.module';
 import { MailModule } from '../mail/mail.module';
+import { HostingModule } from '../hosting/hosting.module';
 
 
 @Module({
-  imports: [PrismaModule, ProjectsModule, SubscriptionsModule, UsersModule, MailModule],
+  imports: [PrismaModule, ProjectsModule, SubscriptionsModule, UsersModule, MailModule, HostingModule],
   controllers: [PaymentsController, IzipayReturnController],
   providers: [PaymentsService, PrismaService, IzipayService ],
   exports: [PaymentsService, IzipayService],

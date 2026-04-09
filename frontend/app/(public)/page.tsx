@@ -647,7 +647,7 @@ export default function Home() {
               {[
                 { value: "500+", label: "Webs creadas" },
                 { value: "98%", label: "Clientes satisfechos" },
-                { value: "5 días", label: "Tiempo promedio" },
+                { value: "1 día", label: "Tiempo promedio" },
                 { value: "24/7", label: "Soporte disponible" },
               ].map((stat, index) => (
                 <motion.div

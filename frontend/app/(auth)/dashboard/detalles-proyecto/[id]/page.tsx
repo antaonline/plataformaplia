@@ -100,11 +100,20 @@ export default function AdminProjectDetailPage() {
     if (!token) return;
     setSaving(true);
     try {
-      await fetch(`${apiBase}/admin/projects/${project.id}/publish`, {
+      setError(null);
+      const res = await fetch(`${apiBase}/admin/projects/${project.id}/publish`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ publicUrl: project.onboardingData?.publicUrl || '' }),
       });
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : null;
+      if (!res.ok) {
+        throw new Error(data?.message || 'No se pudo publicar el proyecto');
+      }
+      setProject(data);
+    } catch (err: any) {
+      setError(err.message ?? 'No se pudo publicar el proyecto');
     } finally {
       setSaving(false);
     }

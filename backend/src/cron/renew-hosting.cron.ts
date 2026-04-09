@@ -5,7 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { IzipayService } from '../payments/izipay.service';
 import { CyberpanelService } from '../integrations/cyberpanel/cyberpanel.service';
 import { MailService } from '../mail/mail.service';
-import { addDays, differenceInDays } from 'date-fns';
+import { addDays, addMonths, differenceInDays } from 'date-fns';
 
 @Injectable()
 export class RenewHostingCron {
@@ -20,7 +20,15 @@ export class RenewHostingCron {
   async handle() {
     const now = new Date();
     const subs = await this.prisma.hostingSubscription.findMany({
-      include: { user: true, projects: true },
+      include: {
+        user: true,
+        projects: true,
+        account: {
+          include: {
+            sites: true,
+          },
+        },
+      },
     });
 
     for (const sub of subs) {
@@ -32,13 +40,13 @@ export class RenewHostingCron {
         if (sub.cardToken) {
           try {
             await this.izipay.chargeTokenized({
-              amount: sub.planId === 1 ? 135 : 165,
+              amount: Number(sub.cycleAmount ?? (sub.planId === 1 ? 135 : 165)),
               cardToken: sub.cardToken,
               currency: 'PEN',
               orderId: sub.id,
             });
 
-            const nextEnd = addDays(dueAt, 365);
+            const nextEnd = addMonths(dueAt, sub.billingCycleMonths || 12);
             await this.prisma.hostingSubscription.update({
               where: { id: sub.id },
               data: {
@@ -92,6 +100,9 @@ export class RenewHostingCron {
           const project = sub.projects?.[0];
           if (project) {
             await this.cyberpanel.deleteSiteByProject(project.id);
+          }
+          for (const site of sub.account?.sites ?? []) {
+            await this.cyberpanel.deleteSiteByDomain(site.domain);
           }
           await this.prisma.hostingSubscription.update({
             where: { id: sub.id },

@@ -72,6 +72,34 @@ export class ProjectsController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Get(':id/diagnostics')
+  async diagnostics(
+    @Param('id', ParseIntPipe) id: number,
+    @Req() req: any,
+  ) {
+    return this.projectsService.getGenerationDiagnostics(
+      id,
+      req.user?.id,
+      req.user?.role === 'ADMIN',
+    );
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/generate-now')
+  async generateNow(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { reprovision?: boolean },
+    @Req() req: any,
+  ) {
+    return this.projectsService.runManualGeneration(
+      id,
+      req.user?.id,
+      req.user?.role === 'ADMIN',
+      body?.reprovision === true,
+    );
+  }
+
+  @UseGuards(JwtAuthGuard)
   @Post(':id/logo')
   @UseInterceptors(
     FileInterceptor('file', {

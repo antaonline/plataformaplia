@@ -9,7 +9,8 @@ import { MailService } from '../mail/mail.service';
 import { randomUUID } from 'crypto';
 import * as bcrypt from 'bcrypt';
 import { addHours } from 'date-fns';
-import { OrderStatus } from '@prisma/client';
+import { OrderStatus, PlanServiceType } from '@prisma/client';
+import { HostingService } from '../hosting/hosting.service';
 
 
 @Injectable()
@@ -21,6 +22,7 @@ export class PaymentsService {
     private subscriptionsService: SubscriptionsService,
     private usersService: UsersService,
     private mailService: MailService,
+    private hostingService: HostingService,
   ) {}
 
   // ✅ SOLO crea la sesión de pago
@@ -62,7 +64,7 @@ export class PaymentsService {
   async approveOrder(orderId: number, cardToken?: string) {
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
-      include: { user: true },
+      include: { user: true, plan: true },
     });
 
     if (!order) {
@@ -116,42 +118,48 @@ export class PaymentsService {
         transactionId: order.transactionId ?? `APPROVED-${Date.now()}`,
       },
     });
+    let project: any = null;
+    let hostingAccount: any = null;
 
-    let project = await this.prisma.project.findUnique({
-      where: { orderId: order.id },
-    });
-
-    if (!project) {
-      project = await this.projectsService.createFromOrder({
-        id: order.id,
-        userId: user.id,
-        planId: order.planId,
-      });
-    }
-
-    const existingSubscription = await this.prisma.hostingSubscription.findFirst({
-      where: { projectId: project.id },
-    });
-
-    if (!existingSubscription) {
-      await this.subscriptionsService.createAnnual(
-        project.id,
-        order.planId === 1 ? 'LANDING' : 'WEB',
-        cardToken,
-      );
+    if (order.plan?.serviceType === PlanServiceType.HOSTING_ONLY) {
+      hostingAccount = await this.hostingService.provisionApprovedOrder(order.id, user.id, cardToken);
     } else {
-      const nextPlanId = order.planId === 1 ? existingSubscription.planId : 2;
-      const update: any = {
-        ...(cardToken ? { cardToken } : {}),
-      };
-      if (nextPlanId && nextPlanId !== existingSubscription.planId) {
-        update.planId = nextPlanId;
-      }
-      if (Object.keys(update).length) {
-        await this.prisma.hostingSubscription.update({
-          where: { id: existingSubscription.id },
-          data: update,
+      project = await this.prisma.project.findUnique({
+        where: { orderId: order.id },
+      });
+
+      if (!project) {
+        project = await this.projectsService.createFromOrder({
+          id: order.id,
+          userId: user.id,
+          planId: order.planId,
         });
+      }
+
+      const existingSubscription = await this.prisma.hostingSubscription.findFirst({
+        where: { projectId: project.id },
+      });
+
+      if (!existingSubscription) {
+        await this.subscriptionsService.createAnnual(
+          project.id,
+          order.planId === 1 ? 'LANDING' : 'WEB',
+          cardToken,
+        );
+      } else {
+        const nextPlanId = order.planId === 1 ? existingSubscription.planId : 2;
+        const update: any = {
+          ...(cardToken ? { cardToken } : {}),
+        };
+        if (nextPlanId && nextPlanId !== existingSubscription.planId) {
+          update.planId = nextPlanId;
+        }
+        if (Object.keys(update).length) {
+          await this.prisma.hostingSubscription.update({
+            where: { id: existingSubscription.id },
+            data: update,
+          });
+        }
       }
     }
 
@@ -170,9 +178,17 @@ export class PaymentsService {
     }
 
     return {
-      message: 'Pago aprobado y proyecto creado',
+      message:
+        order.plan?.serviceType === PlanServiceType.HOSTING_ONLY
+          ? 'Pago aprobado y hosting activado'
+          : 'Pago aprobado y proyecto creado',
       project,
+      hostingAccount,
       passwordSetupToken,
+      redirectTo:
+        order.plan?.serviceType === PlanServiceType.HOSTING_ONLY
+          ? '/dashboard/hosting'
+          : '/dashboard',
     };
   }
 
@@ -352,6 +368,10 @@ export class PaymentsService {
 
     const approval = await this.approveOrder(orderId, cardToken ?? undefined);
 
-    return { ok: true, passwordSetupToken: approval?.passwordSetupToken ?? null };
+    return {
+      ok: true,
+      passwordSetupToken: approval?.passwordSetupToken ?? null,
+      redirectTo: approval?.redirectTo ?? '/dashboard',
+    };
   }
 }

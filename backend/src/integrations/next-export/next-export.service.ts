@@ -123,6 +123,7 @@ export class NextExportService {
     }
 
     const outDir = join(siteRoot, this.outputDir);
+    const previewUrl = this.createPreview(projectId, outDir);
     const cyberRoot = process.env.CYBERPANEL_SITES_ROOT || '/home';
     const publicHtml = process.env.CYBERPANEL_PUBLIC_DIR || 'public_html';
     const target = join(cyberRoot, domain, publicHtml);
@@ -132,7 +133,6 @@ export class NextExportService {
     if (!fs.existsSync(targetIndex)) {
       throw new Error(`No se encontro index.html en el destino publicado: ${targetIndex}`);
     }
-    const previewUrl = this.createPreview(projectId, outDir);
     return { target, previewUrl };
   }
 }

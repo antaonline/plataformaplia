@@ -68,6 +68,9 @@ export class UsersService {
         subscription: {
           select: { id: true },
         },
+        hostingAccount: {
+          select: { id: true },
+        },
       },
     })
 
@@ -86,19 +89,38 @@ export class UsersService {
         onboardingData: true,
       },
     })
+    const hostedSites = await this.prisma.hostedSite.findMany({
+      where: {
+        hostingAccount: {
+          userId,
+        },
+      },
+      select: {
+        id: true,
+        domain: true,
+      },
+    })
 
     const projectIds = projects.map((project) => project.id)
     const orderIds = user.order.map((order) => order.id)
     const subscriptionIds = user.subscription.map((subscription) => subscription.id)
     const cyberpanelUsernames = Array.from(
       new Set(
-        projects
-          .map(
+        [
+          ...projects.map(
             (project) =>
               (project.onboardingData as any)?.cyberpanel?.account?.username ||
               (project.onboardingData as any)?.cyberpanel?.owner,
-          )
-          .filter(Boolean),
+          ),
+          user.hostingAccount?.id
+            ? (
+                await this.prisma.hostingAccount.findUnique({
+                  where: { id: user.hostingAccount.id },
+                  select: { cyberpanelUsername: true },
+                })
+              )?.cyberpanelUsername
+            : null,
+        ].filter(Boolean),
       ),
     ) as string[]
 
@@ -107,6 +129,15 @@ export class UsersService {
       if (!deleted) {
         throw new BadRequestException(
           'No se pudo eliminar uno de los sitios en CyberPanel. Intenta nuevamente.',
+        )
+      }
+    }
+
+    for (const site of hostedSites) {
+      const deleted = await this.cyberpanelService.deleteSiteByDomain(site.domain)
+      if (!deleted) {
+        throw new BadRequestException(
+          'No se pudo eliminar uno de los sitios de hosting en CyberPanel. Intenta nuevamente.',
         )
       }
     }
@@ -130,6 +161,24 @@ export class UsersService {
       await tx.project.deleteMany({
         where: { userId },
       })
+
+      if (user.hostingAccount?.id) {
+        await tx.hostedMailbox.deleteMany({
+          where: {
+            hostedSite: {
+              hostingAccountId: user.hostingAccount.id,
+            },
+          },
+        })
+        await tx.hostedSite.deleteMany({
+          where: {
+            hostingAccountId: user.hostingAccount.id,
+          },
+        })
+        await tx.hostingAccount.delete({
+          where: { id: user.hostingAccount.id },
+        })
+      }
 
       if (subscriptionIds.length > 0) {
         await tx.hostingSubscription.deleteMany({

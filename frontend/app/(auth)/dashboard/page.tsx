@@ -681,6 +681,15 @@ export default function DashboardPage() {
         const data = text ? JSON.parse(text) : [];
         if (!projectRes.ok) throw new Error((data as any)?.message || 'No se pudo cargar el proyecto');
         const list = Array.isArray(data) ? data : [];
+        if (list.length === 0 && meData?.role !== 'ADMIN') {
+          const hostingRes = await fetch(`${apiBase}/hosting/account`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (hostingRes.ok) {
+            window.location.href = '/dashboard/hosting';
+            return;
+          }
+        }
         setProjects(list);
         const current = list[0] ?? null;
         setProject(current);
@@ -804,8 +813,8 @@ export default function DashboardPage() {
     const startMs = startedMs ?? deadlineMs - totalMs;
     const elapsed = Math.max(now - startMs, 0);
     const rawProgress = Math.min(elapsed / totalMs, 1);
-    const isComplete = project.status === 'DELIVERED' || rawProgress >= 1;
-    const progress = isComplete ? 1 : rawProgress;
+    const isComplete = project.status === 'READY' || project.status === 'DELIVERED';
+    const progress = isComplete ? 1 : Math.min(rawProgress, 0.95);
     const step = isComplete ? 4 : Math.max(1, Math.min(4, Math.floor(progress * 4) + 1));
     const diff = Math.max(deadlineMs - now, 0);
     const days = Math.floor(diff / (1000 * 60 * 60 * 24));
@@ -822,10 +831,18 @@ export default function DashboardPage() {
   const resolvedPublicUrl = useMemo(() => {
     if (!project) return '';
     const data = project.onboardingData || {};
-    if (data.publicUrl) return data.publicUrl as string;
-    if (data.aiGeneration?.previewUrl) return data.aiGeneration.previewUrl as string;
-    if (data.publicDomain) return `https://${data.publicDomain}`;
-    if (data.subdomain) return `https://${data.subdomain}.${domainBase}`;
+    const aiGeneration = data.aiGeneration || {};
+    if (project.status === 'DELIVERED') {
+      if (data.publicUrl) return data.publicUrl as string;
+      if (data.publicDomain) return `https://${data.publicDomain}`;
+    }
+    if (
+      (project.status === 'READY' || project.status === 'DELIVERED') &&
+      aiGeneration.status === 'READY' &&
+      aiGeneration.previewUrl
+    ) {
+      return aiGeneration.previewUrl as string;
+    }
     return '';
   }, [project, project?.onboardingData, domainBase]);
 
@@ -2412,7 +2429,7 @@ export default function DashboardPage() {
                       <div className="flex items-center justify-between">
                         <span className="text-sm text-muted-foreground">Entrega estimada</span>
                         <span className="text-sm font-semibold">
-                          {project?.type === 'LANDING' ? '48 horas' : '5 dias'}
+                          {project?.type === 'LANDING' ? '24 horas' : '2 dias'}
                         </span>
                       </div>
                       <div className="rounded-xl border border-border p-3 text-xs text-muted-foreground">
@@ -2553,6 +2570,12 @@ export default function DashboardPage() {
                           <p className="text-xs text-muted-foreground">
                             Avanzando segun el plazo de tu plan.
                           </p>
+                        )}
+                        {project.onboardingData?.aiGeneration?.status === 'FAILED' && (
+                          <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">
+                            {project.onboardingData?.aiGeneration?.error ||
+                              'La generacion automatica fallo. El equipo debe revisar este proyecto antes de publicarlo.'}
+                          </div>
                         )}
 
                         <div className="flex flex-wrap items-center gap-4 text-xs">

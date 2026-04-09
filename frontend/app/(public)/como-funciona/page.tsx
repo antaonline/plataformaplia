@@ -25,7 +25,7 @@ const detailedSteps = [
     icon: Palette,
     title: "Diseñamos tu página",
     description: "Nuestro equipo de diseño crea tu página web usando la información que nos diste. Elegimos colores, tipografías y un diseño que represente tu marca. Puedes ver el diseño de tu web desde el panel de tu cuenta antes de que sea publicada.",
-    duration: "2-5 días hábiles según Plan",
+    duration: "1-2 días hábiles según Plan",
   },
   {
     number: 3,

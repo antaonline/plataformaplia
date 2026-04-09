@@ -5,6 +5,7 @@ import { join } from 'path';
 import { AiGenerationResult, AiMode, SiteSpec } from './ai.types';
 import { PrismaService } from '../prisma/prisma.service';
 import { NextExportService } from '../integrations/next-export/next-export.service';
+import { ProjectStatus } from '@prisma/client';
 
 type PlanType = 'LANDING' | 'WEB';
 
@@ -335,6 +336,17 @@ export class AiService {
   }
 
   private persistGeneratedAssets(projectId: number, domain: string | null, html: string, pages?: Array<{ slug: string; html: string }>) {
+    const previewRoot = join(process.cwd(), 'uploads', 'previews', String(projectId));
+    fs.mkdirSync(previewRoot, { recursive: true });
+    fs.writeFileSync(join(previewRoot, 'index.html'), html, 'utf-8');
+    if (pages?.length) {
+      for (const page of pages) {
+        const fileName = page.slug === 'index' ? 'index.html' : `${page.slug}.html`;
+        fs.writeFileSync(join(previewRoot, fileName), page.html, 'utf-8');
+      }
+    }
+    const appUrl = (process.env.APP_URL || 'http://localhost:3001').replace(/\/$/, '');
+
     let siteRoot: string | null = null;
     if (domain) {
       const root = process.env.CYBERPANEL_SITES_ROOT || '/home';
@@ -354,16 +366,7 @@ export class AiService {
         throw new Error(`No se encontro index.html en el destino publicado: ${targetIndex}`);
       }
     }
-    const previewRoot = join(process.cwd(), 'uploads', 'previews', String(projectId));
-    fs.mkdirSync(previewRoot, { recursive: true });
-    fs.writeFileSync(join(previewRoot, 'index.html'), html, 'utf-8');
-    if (pages?.length) {
-      for (const page of pages) {
-        const fileName = page.slug === 'index' ? 'index.html' : `${page.slug}.html`;
-        fs.writeFileSync(join(previewRoot, fileName), page.html, 'utf-8');
-      }
-    }
-    const appUrl = (process.env.APP_URL || 'http://localhost:3001').replace(/\/$/, '');
+
     return {
       target: siteRoot,
       previewUrl: `${appUrl}/uploads/previews/${projectId}/index.html`,
@@ -429,6 +432,10 @@ export class AiService {
       const systemPrompt = this.buildSystemPrompt(plan);
       const userPrompt = this.buildUserPrompt(project.onboardingData || {}, plan);
       const model = this.getModel(plan, mode);
+      const currentDomain = (project.onboardingData as any)?.publicDomain || null;
+      this.logger.log(
+        `AI start project=${projectId} plan=${plan} mode=${mode} model=${model} domain=${currentDomain ?? 'preview-only'}`,
+      );
       const spec = await this.chatJson<SiteSpec>(model, systemPrompt, userPrompt);
     if (!spec.brand) {
       spec.brand = {
@@ -490,7 +497,7 @@ export class AiService {
       html = pages.find((p) => p.slug === 'index')?.html || pages[0]?.html || '';
     }
 
-    const domain = (project.onboardingData as any)?.publicDomain || '';
+    const domain = currentDomain || '';
     let deployment: { target?: string | null; previewUrl?: string } = {};
     if (domain && html) {
       try {
@@ -515,9 +522,21 @@ export class AiService {
       score,
     };
 
+    const previewPath = join(process.cwd(), 'uploads', 'previews', String(projectId), 'index.html');
+    const targetPath = deployment.target ? join(deployment.target, 'index.html') : null;
+    const previewExists = fs.existsSync(previewPath);
+    const targetExists = targetPath ? fs.existsSync(targetPath) : false;
+    this.logger.log(
+      `AI done project=${projectId} preview=${previewExists ? previewPath : 'missing'} target=${targetPath ?? 'n/a'} targetExists=${targetExists}`,
+    );
+
     await this.prisma.project.update({
       where: { id: projectId },
       data: {
+        status:
+          project.status === ProjectStatus.DELIVERED
+            ? ProjectStatus.DELIVERED
+            : ProjectStatus.READY,
         onboardingData: {
           ...(project.onboardingData as any || {}),
           aiGeneration: {
@@ -528,6 +547,15 @@ export class AiService {
             images: storedImages,
             previewUrl: deployment.previewUrl || null,
             target: deployment.target || null,
+            finishedAt: new Date().toISOString(),
+            model,
+            domain: domain || null,
+            checks: {
+              previewPath,
+              previewExists,
+              targetPath,
+              targetExists,
+            },
           },
         },
       },
@@ -536,6 +564,9 @@ export class AiService {
     return result;
     } catch (error: any) {
       this.logger.error(`Fallo AI generateForProject ${projectId}: ${error?.message || error}`);
+      const previewPath = join(process.cwd(), 'uploads', 'previews', String(projectId), 'index.html');
+      const previewExists = fs.existsSync(previewPath);
+      const appUrl = (process.env.APP_URL || 'http://localhost:3001').replace(/\/$/, '');
       await this.prisma.project.update({
         where: { id: projectId },
         data: {
@@ -546,6 +577,11 @@ export class AiService {
               status: 'FAILED',
               error: error?.message || 'Error generando el sitio',
               updatedAt: new Date().toISOString(),
+              previewUrl: previewExists ? `${appUrl}/uploads/previews/${projectId}/index.html` : null,
+              checks: {
+                previewPath,
+                previewExists,
+              },
             },
           },
         },
