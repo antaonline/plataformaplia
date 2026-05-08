@@ -358,8 +358,8 @@ export class AiService {
       this.logger.log(`Intentando persistir sitio en CyberPanel. Dominio: ${domain}, Ruta: ${siteRoot}`);
       
       // Lógica de sondeo inteligente: esperamos a que aparezca el archivo de CyberPanel como señal
-      const maxAttempts = 15;
-      const pollIntervalMs = 1000; // Revisar cada 1 segundo
+      const maxAttempts = 30;
+      const pollIntervalMs = 2000; // Revisar cada 2 segundos (Total 60 seg)
       let success = false;
 
       this.logger.log(`Iniciando sondeo de carpeta para ${domain}...`);
