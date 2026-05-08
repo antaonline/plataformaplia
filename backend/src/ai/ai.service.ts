@@ -337,7 +337,7 @@ export class AiService {
 </html>`;
   }
 
-  private persistGeneratedAssets(projectId: number, domain: string | null, html: string, pages?: Array<{ slug: string; html: string }>) {
+  private async persistGeneratedAssets(projectId: number, domain: string | null, html: string, pages?: Array<{ slug: string; html: string }>) {
     const previewRoot = join(process.cwd(), 'uploads', 'previews', String(projectId));
     fs.mkdirSync(previewRoot, { recursive: true });
     fs.writeFileSync(join(previewRoot, 'index.html'), html, 'utf-8');
@@ -357,27 +357,49 @@ export class AiService {
       
       this.logger.log(`Intentando persistir sitio en CyberPanel. Dominio: ${domain}, Ruta: ${siteRoot}`);
       
-      try {
-        if (!fs.existsSync(siteRoot)) {
-          this.logger.warn(`La ruta de destino no existe, intentando crearla: ${siteRoot}`);
-          fs.mkdirSync(siteRoot, { recursive: true });
-        }
+      // Lógica de reintento: CyberPanel puede tardar unos segundos en crear la carpeta
+      const maxAttempts = 5;
+      const delayMs = 4000; // 4 segundos entre intentos
+      let success = false;
 
-        const indexPath = join(siteRoot, 'index.html');
-        fs.writeFileSync(indexPath, html, 'utf-8');
-        this.logger.log(`Archivo principal escrito en: ${indexPath}`);
-
-        if (pages?.length) {
-          for (const page of pages) {
-            const fileName = page.slug === 'index' ? 'index.html' : `${page.slug}.html`;
-            const pagePath = join(siteRoot, fileName);
-            fs.writeFileSync(pagePath, page.html, 'utf-8');
-            this.logger.log(`Página secundaria escrita: ${pagePath}`);
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+          if (!fs.existsSync(siteRoot)) {
+            this.logger.warn(`[Intento ${attempt}/${maxAttempts}] La ruta ${siteRoot} no existe. Esperando ${delayMs / 1000}s a CyberPanel...`);
+            await this.sleep(delayMs);
+            
+            // Re-verificar
+            if (!fs.existsSync(siteRoot)) {
+              if (attempt === maxAttempts) {
+                throw new Error(`CyberPanel no creo la carpeta despues de ${maxAttempts} intentos.`);
+              }
+              continue;
+            }
           }
+
+          const indexPath = join(siteRoot, 'index.html');
+          fs.writeFileSync(indexPath, html, 'utf-8');
+          this.logger.log(`Archivo principal escrito en: ${indexPath}`);
+
+          if (pages?.length) {
+            for (const page of pages) {
+              const fileName = page.slug === 'index' ? 'index.html' : `${page.slug}.html`;
+              const pagePath = join(siteRoot, fileName);
+              fs.writeFileSync(pagePath, page.html, 'utf-8');
+              this.logger.log(`Página secundaria escrita: ${pagePath}`);
+            }
+          }
+          success = true;
+          break; // Salir del bucle si tuvo éxito
+        } catch (err: any) {
+          this.logger.error(`[Intento ${attempt}/${maxAttempts}] Error al escribir archivos: ${err.message}`);
+          if (attempt === maxAttempts) throw err;
+          await this.sleep(delayMs);
         }
-      } catch (err: any) {
-        this.logger.error(`Error crítico al escribir archivos en el hosting (${domain}): ${err.message}`, err.stack);
-        throw err;
+      }
+
+      if (!success) {
+        throw new Error(`No se pudo persistir el sitio tras varios intentos en ${domain}`);
       }
 
       const targetIndex = join(siteRoot, 'index.html');
