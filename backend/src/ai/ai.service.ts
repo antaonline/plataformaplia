@@ -261,6 +261,7 @@ export class AiService {
     const testimonials = spec.sections.find((s) => s.type === 'testimonials');
 
     return `<!doctype html>
+<!-- GENERATED_BY_PLIA_IA: ${new Date().toISOString()} -->
 <html lang="es">
 <head>
   <meta charset="utf-8" />
@@ -307,6 +308,7 @@ export class AiService {
   private renderSimplePage(spec: SiteSpec, page: NonNullable<SiteSpec['pages']>[number]) {
     const palette = spec.palette;
     return `<!doctype html>
+<!-- GENERATED_BY_PLIA_IA: ${new Date().toISOString()} -->
 <html lang="es">
 <head>
   <meta charset="utf-8" />
