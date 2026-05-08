@@ -545,14 +545,14 @@ export class AiService {
         if (plan === 'WEB') {
           deployment = this.nextExportService.exportSite(projectId, spec, domain);
         } else {
-          deployment = this.persistGeneratedAssets(projectId, domain, html, pages);
+          deployment = await this.persistGeneratedAssets(projectId, domain, html, pages);
         }
       } catch (error: any) {
         this.logger.error(`No se pudo escribir en el sitio ${domain}`, error?.message || error);
         throw new Error(`No se pudo publicar el sitio en ${domain}: ${error?.message || error}`);
       }
     } else if (html) {
-      deployment = this.persistGeneratedAssets(projectId, null, html, pages);
+      deployment = await this.persistGeneratedAssets(projectId, null, html, pages);
     }
 
     const result: AiGenerationResult = {
