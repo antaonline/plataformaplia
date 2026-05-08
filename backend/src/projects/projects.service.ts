@@ -290,7 +290,9 @@ export class ProjectsService {
           },
         });
       }
-      void this.aiService.generateForProject(projectId).catch(() => undefined);
+      void this.aiService.generateForProject(projectId).catch((err) => {
+        this.logger.error(`Error en la generación automática de IA para el proyecto ${projectId}: ${err.message}`, err.stack);
+      });
     }
 
     return updated;

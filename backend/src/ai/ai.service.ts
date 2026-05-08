@@ -352,15 +352,32 @@ export class AiService {
       const root = process.env.CYBERPANEL_SITES_ROOT || '/home';
       const publicDir = process.env.CYBERPANEL_PUBLIC_DIR || 'public_html';
       siteRoot = join(root, domain, publicDir);
-      fs.mkdirSync(siteRoot, { recursive: true });
-
-      fs.writeFileSync(join(siteRoot, 'index.html'), html, 'utf-8');
-      if (pages?.length) {
-        for (const page of pages) {
-          const fileName = page.slug === 'index' ? 'index.html' : `${page.slug}.html`;
-          fs.writeFileSync(join(siteRoot, fileName), page.html, 'utf-8');
+      
+      this.logger.log(`Intentando persistir sitio en CyberPanel. Dominio: ${domain}, Ruta: ${siteRoot}`);
+      
+      try {
+        if (!fs.existsSync(siteRoot)) {
+          this.logger.warn(`La ruta de destino no existe, intentando crearla: ${siteRoot}`);
+          fs.mkdirSync(siteRoot, { recursive: true });
         }
+
+        const indexPath = join(siteRoot, 'index.html');
+        fs.writeFileSync(indexPath, html, 'utf-8');
+        this.logger.log(`Archivo principal escrito en: ${indexPath}`);
+
+        if (pages?.length) {
+          for (const page of pages) {
+            const fileName = page.slug === 'index' ? 'index.html' : `${page.slug}.html`;
+            const pagePath = join(siteRoot, fileName);
+            fs.writeFileSync(pagePath, page.html, 'utf-8');
+            this.logger.log(`Página secundaria escrita: ${pagePath}`);
+          }
+        }
+      } catch (err: any) {
+        this.logger.error(`Error crítico al escribir archivos en el hosting (${domain}): ${err.message}`, err.stack);
+        throw err;
       }
+
       const targetIndex = join(siteRoot, 'index.html');
       if (!fs.existsSync(targetIndex)) {
         throw new Error(`No se encontro index.html en el destino publicado: ${targetIndex}`);
