@@ -357,45 +357,51 @@ export class AiService {
       
       this.logger.log(`Intentando persistir sitio en CyberPanel. Dominio: ${domain}, Ruta: ${siteRoot}`);
       
-      // Lógica de reintento: CyberPanel puede tardar unos segundos en crear la carpeta
-      const maxAttempts = 5;
-      const delayMs = 4000; // 4 segundos entre intentos
+      // Lógica de sondeo inteligente: esperamos a que aparezca el archivo de CyberPanel como señal
+      const maxAttempts = 15;
+      const pollIntervalMs = 1000; // Revisar cada 1 segundo
       let success = false;
 
+      this.logger.log(`Iniciando sondeo de carpeta para ${domain}...`);
+
       for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-        try {
-          if (!fs.existsSync(siteRoot)) {
-            this.logger.warn(`[Intento ${attempt}/${maxAttempts}] La ruta ${siteRoot} no existe. Esperando ${delayMs / 1000}s a CyberPanel...`);
-            await this.sleep(delayMs);
-            
-            // Re-verificar
-            if (!fs.existsSync(siteRoot)) {
-              if (attempt === maxAttempts) {
-                throw new Error(`CyberPanel no creo la carpeta despues de ${maxAttempts} intentos.`);
-              }
-              continue;
-            }
+        const indexPath = join(siteRoot, 'index.html');
+        
+        // ¿Ya existe la carpeta y el archivo index.html?
+        if (fs.existsSync(siteRoot) && fs.existsSync(indexPath)) {
+          const currentContent = fs.readFileSync(indexPath, 'utf-8');
+          
+          // Si el archivo contiene "CyberPanel Installed", es nuestra señal de que CyberPanel ya termino
+          if (currentContent.includes('CyberPanel Installed')) {
+            this.logger.log(`[Intento ${attempt}] ¡Señal recibida! CyberPanel instalo su pagina por defecto. Sobrescribiendo ahora...`);
+            fs.writeFileSync(indexPath, html, 'utf-8');
+            success = true;
+          } else if (currentContent.includes('GENERATED_BY_PLIA_IA')) {
+            this.logger.log(`[Intento ${attempt}] El archivo ya parece ser de PLIA. Sobrescribiendo para asegurar version...`);
+            fs.writeFileSync(indexPath, html, 'utf-8');
+            success = true;
+          } else {
+            // Es un archivo desconocido, lo sobrescribimos por si acaso
+            this.logger.log(`[Intento ${attempt}] Archivo detectado. Sobrescribiendo...`);
+            fs.writeFileSync(indexPath, html, 'utf-8');
+            success = true;
           }
+        }
 
-          const indexPath = join(siteRoot, 'index.html');
-          fs.writeFileSync(indexPath, html, 'utf-8');
-          this.logger.log(`Archivo principal escrito en: ${indexPath}`);
-
+        if (success) {
+          // Escribir paginas secundarias si existen
           if (pages?.length) {
             for (const page of pages) {
               const fileName = page.slug === 'index' ? 'index.html' : `${page.slug}.html`;
               const pagePath = join(siteRoot, fileName);
               fs.writeFileSync(pagePath, page.html, 'utf-8');
-              this.logger.log(`Página secundaria escrita: ${pagePath}`);
             }
           }
-          success = true;
-          break; // Salir del bucle si tuvo éxito
-        } catch (err: any) {
-          this.logger.error(`[Intento ${attempt}/${maxAttempts}] Error al escribir archivos: ${err.message}`);
-          if (attempt === maxAttempts) throw err;
-          await this.sleep(delayMs);
+          break;
         }
+
+        this.logger.warn(`[Intento ${attempt}/${maxAttempts}] Esperando señal de CyberPanel en ${domain}...`);
+        await this.sleep(pollIntervalMs);
       }
 
       if (!success) {
