@@ -1,6 +1,6 @@
 
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { IzipayService } from '../payments/izipay.service';
 import { CyberpanelService } from '../integrations/cyberpanel/cyberpanel.service';
@@ -9,6 +9,8 @@ import { addDays, addMonths, differenceInDays } from 'date-fns';
 
 @Injectable()
 export class RenewHostingCron {
+  private readonly logger = new Logger(RenewHostingCron.name);
+
   constructor(
     private prisma: PrismaService,
     private izipay: IzipayService,
