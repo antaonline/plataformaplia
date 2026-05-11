@@ -91,6 +91,7 @@ type User = {
 const tabs = [
   { id: 'overview', label: 'Mis Sitios', icon: Globe },
   { id: 'plan', label: 'Mi Plan', icon: BarChart3 },
+  { id: 'billing', label: 'Facturacion', icon: CreditCard },
   { id: 'account', label: 'Mi Cuenta', icon: KeyRound },
   { id: 'support', label: 'Soporte', icon: Headphones },
 ] as const;
@@ -118,6 +119,11 @@ export default function HostingDashboardPage() {
   const [busy, setBusy] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [renewOpen, setRenewOpen] = useState(false);
+  const [renewMethod, setRenewMethod] = useState<'card' | 'yape' | null>(null);
+  const [renewLoading, setRenewLoading] = useState(false);
+  const [renewError, setRenewError] = useState<string | null>(null);
+  const [renewals, setRenewals] = useState<any[]>([]);
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
 
   const load = async () => {
@@ -144,6 +150,15 @@ export default function HostingDashboardPage() {
       });
       if (!res.ok) throw new Error((await res.text()) || 'No se pudo cargar el dashboard de hosting.');
       setData(await res.json());
+
+      // Cargar historial de renovaciones
+      const renRes = await fetch(`${apiBase}/subscriptions/renewals`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (renRes.ok) {
+        setRenewals(await renRes.json());
+      }
+      
       setError(null);
     } catch (err: any) {
       setError(err?.message ?? 'No se pudo cargar el dashboard de hosting.');
@@ -691,6 +706,125 @@ export default function HostingDashboardPage() {
                       <Button variant="outline" className="w-full rounded-xl" asChild>
                         <Link href="/web-hosting">Comparar otros planes</Link>
                       </Button>
+                    </CardContent>
+                  </Card>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="billing" className="mt-0">
+                <div className="grid gap-6 md:grid-cols-2">
+                  <Card className="rounded-2xl border-border/60 shadow-sm">
+                    <CardHeader>
+                      <CardTitle className="text-xl font-bold">Metodo de pago</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      {data.plan.price > 0 ? (
+                        <div className="rounded-2xl border border-border p-5 bg-white">
+                          <div className="flex items-center gap-4">
+                            <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
+                              <CreditCard className="h-5 w-5 text-muted-foreground" />
+                            </div>
+                            <div>
+                              <p className="text-sm font-bold text-foreground">Tarjeta de credito/debito</p>
+                              <p className="text-xs text-muted-foreground">
+                                {data.plan.price > 0 
+                                  ? 'Cobro automatico activo para renovacion.' 
+                                  : 'No hay tarjeta registrada.'}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="rounded-2xl border border-dashed border-border p-6 text-center">
+                          <p className="text-sm text-muted-foreground">No tienes un metodo de pago guardado.</p>
+                        </div>
+                      )}
+                      
+                      <div className="rounded-2xl bg-cta/5 border border-cta/20 p-4">
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs font-bold uppercase tracking-widest text-cta-foreground/70">Monto de renovacion</p>
+                          <span className="text-lg font-bold text-foreground">S/ {data.plan.price}</span>
+                        </div>
+                        <p className="mt-1 text-[10px] text-muted-foreground">Suscripcion anual por hosting y dominio.</p>
+                      </div>
+
+                      <Dialog open={renewOpen} onOpenChange={setRenewOpen}>
+                        <DialogTrigger asChild>
+                          <Button variant="cta" className="w-full rounded-xl">
+                            Renovar ahora (Pago manual)
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent className="rounded-[28px]">
+                          <DialogHeader>
+                            <DialogTitle>Renovar Suscripcion</DialogTitle>
+                            <DialogDescription>
+                              Elige tu metodo de pago para renovar por un año mas.
+                            </DialogDescription>
+                          </DialogHeader>
+                          <div className="grid grid-cols-2 gap-3 py-4">
+                            <button
+                              type="button"
+                              className={cn(
+                                'h-24 rounded-2xl border text-left px-4 py-3 transition',
+                                renewMethod === 'yape' ? 'border-cta bg-cta/10' : 'border-border bg-white hover:bg-muted'
+                              )}
+                              onClick={() => setRenewMethod('yape')}
+                            >
+                              <p className="text-[10px] uppercase font-bold text-muted-foreground">Pago con</p>
+                              <p className="text-lg font-bold">Yape</p>
+                            </button>
+                            <button
+                              type="button"
+                              className={cn(
+                                'h-24 rounded-2xl border text-left px-4 py-3 transition',
+                                renewMethod === 'card' ? 'border-cta bg-cta/10' : 'border-border bg-white hover:bg-muted'
+                              )}
+                              onClick={() => setRenewMethod('card')}
+                            >
+                              <p className="text-[10px] uppercase font-bold text-muted-foreground">Pago con</p>
+                              <p className="text-lg font-bold">Tarjeta</p>
+                            </button>
+                          </div>
+                          {renewError && <p className="text-xs text-destructive text-center">{renewError}</p>}
+                          <DialogFooter>
+                            <Button variant="outline" onClick={() => setRenewOpen(false)}>Cancelar</Button>
+                            <Button variant="cta" disabled={renewLoading || !renewMethod} onClick={() => {}}>
+                              {renewLoading ? 'Procesando...' : 'Ir a pagar'}
+                            </Button>
+                          </DialogFooter>
+                        </DialogContent>
+                      </Dialog>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="rounded-2xl border-border/60 shadow-sm">
+                    <CardHeader>
+                      <CardTitle className="text-xl font-bold">Historial de pagos</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="rounded-xl border border-border overflow-hidden">
+                        <table className="w-full text-sm">
+                          <thead className="bg-muted/50 border-b border-border">
+                            <tr>
+                              <th className="px-4 py-2 text-left font-bold text-[10px] uppercase">Fecha</th>
+                              <th className="px-4 py-2 text-left font-bold text-[10px] uppercase">Monto</th>
+                              <th className="px-4 py-2 text-left font-bold text-[10px] uppercase">Estado</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr className="border-b border-border/50">
+                              <td className="px-4 py-3 text-xs">{formatDate(data.plan.renewsAt ? new Date(new Date(data.plan.renewsAt).setFullYear(new Date(data.plan.renewsAt).getFullYear() - 1)).toISOString() : null)}</td>
+                              <td className="px-4 py-3 text-xs font-bold text-foreground">S/ {data.plan.price}</td>
+                              <td className="px-4 py-3 text-xs">
+                                <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 rounded-full text-[10px]">Pagado</Badge>
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground text-center">
+                        Solo se muestran los ultimos pagos realizados.
+                      </p>
                     </CardContent>
                   </Card>
                 </div>

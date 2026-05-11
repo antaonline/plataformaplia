@@ -13,7 +13,7 @@ export class SubscriptionsService {
   ) {}
 
   async createAnnual(projectId: number, type: 'LANDING' | 'WEB', cardToken?: string) {
-    const amount = type === 'LANDING' ? 13500 : 16500;
+    const amount = type === 'LANDING' ? 135 : 165;
 
     const project = await this.prisma.project.findUnique({
       where: { id: projectId },
@@ -47,8 +47,6 @@ export class SubscriptionsService {
         status: 'ACTIVE',
       },
     });
-
-
   }
 
 
@@ -184,5 +182,18 @@ export class SubscriptionsService {
     });
 
     return { ok: true };
+  }
+
+  async getUserRenewals(userId: number) {
+    return this.prisma.hostingRenewal.findMany({
+      where: {
+        subscription: {
+          userId,
+        },
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
   }
 }

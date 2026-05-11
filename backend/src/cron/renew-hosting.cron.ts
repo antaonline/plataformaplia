@@ -34,13 +34,33 @@ export class RenewHostingCron {
     for (const sub of subs) {
       const dueAt = sub.renewalDueAt ?? sub.endDate;
       const daysPastDue = differenceInDays(now, dueAt);
+      const daysUntilDue = differenceInDays(dueAt, now);
       const graceEndsAt = addDays(dueAt, 14);
 
+      // Notificaciones PRE-vencimiento
+      if (sub.status === 'ACTIVE' && daysUntilDue <= 14 && daysUntilDue > 0) {
+        if (daysUntilDue === 14 && !sub.renewalNoticeSentAt) {
+          await this.mailService.sendRenewalNotice(sub.user.email, 14);
+          await this.prisma.hostingSubscription.update({
+            where: { id: sub.id },
+            data: { renewalNoticeSentAt: now },
+          });
+        } else if (daysUntilDue === 7 && !sub.renewalReminderSentAt) {
+          await this.mailService.sendRenewalNotice(sub.user.email, 7);
+          await this.prisma.hostingSubscription.update({
+            where: { id: sub.id },
+            data: { renewalReminderSentAt: now },
+          });
+        }
+      }
+
       if (sub.status === 'ACTIVE' && now >= dueAt) {
+        const renewalAmount = Number(sub.cycleAmount ?? (sub.planId === 1 ? 135 : 165));
+        
         if (sub.cardToken) {
           try {
             await this.izipay.chargeTokenized({
-              amount: Number(sub.cycleAmount ?? (sub.planId === 1 ? 135 : 165)),
+              amount: renewalAmount,
               cardToken: sub.cardToken,
               currency: 'PEN',
               orderId: sub.id,
@@ -61,7 +81,8 @@ export class RenewHostingCron {
               },
             });
             continue;
-          } catch {
+          } catch (error) {
+            this.logger.error(`Fallo cobro automatico para sub=${sub.id}: ${error.message}`);
             await this.prisma.hostingSubscription.update({
               where: { id: sub.id },
               data: { status: 'PAST_DUE' },
@@ -75,20 +96,9 @@ export class RenewHostingCron {
         }
       }
 
-      if (sub.status !== 'ACTIVE') {
-        if (!sub.renewalNoticeSentAt) {
-          await this.mailService.sendRenewalNotice(sub.user.email, 14);
-          await this.prisma.hostingSubscription.update({
-            where: { id: sub.id },
-            data: { renewalNoticeSentAt: now },
-          });
-        } else if (daysPastDue >= 7 && !sub.renewalReminderSentAt) {
-          await this.mailService.sendRenewalNotice(sub.user.email, 7);
-          await this.prisma.hostingSubscription.update({
-            where: { id: sub.id },
-            data: { renewalReminderSentAt: now },
-          });
-        } else if (daysPastDue >= 13 && !sub.renewalFinalNoticeSentAt) {
+      // Notificaciones POST-vencimiento y suspensión
+      if (sub.status === 'PAST_DUE') {
+        if (daysPastDue >= 13 && !sub.renewalFinalNoticeSentAt) {
           await this.mailService.sendRenewalNotice(sub.user.email, 1);
           await this.prisma.hostingSubscription.update({
             where: { id: sub.id },
@@ -97,6 +107,7 @@ export class RenewHostingCron {
         }
 
         if (now > graceEndsAt) {
+          this.logger.warn(`Cancelando suscripcion sub=${sub.id} por falta de pago tras periodo de gracia.`);
           const project = sub.projects?.[0];
           if (project) {
             await this.cyberpanel.deleteSiteByProject(project.id);

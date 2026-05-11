@@ -1,10 +1,16 @@
-import { Body, Controller, Post, UseGuards, Req, HttpCode } from '@nestjs/common';
+import { Body, Controller, Post, UseGuards, Req, HttpCode, Get } from '@nestjs/common';
 import { SubscriptionsService } from './subscriptions.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 @Controller('subscriptions')
 export class SubscriptionsController {
   constructor(private subscriptionsService: SubscriptionsService) {}
+
+  @UseGuards(JwtAuthGuard)
+  @Get('renewals')
+  async getUserRenewals(@Req() req: any) {
+    return this.subscriptionsService.getUserRenewals(req.user.id);
+  }
 
   @UseGuards(JwtAuthGuard)
   @Post('renew/session')

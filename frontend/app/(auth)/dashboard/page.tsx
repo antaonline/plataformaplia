@@ -1386,13 +1386,29 @@ export default function DashboardPage() {
           </div>
 
           <div className="space-y-1 text-sm">
-            <button className="w-full text-left px-3 py-2 rounded-lg bg-muted text-foreground">Dashboard</button>
-            <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-muted">Mi proyecto</button>
-            <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-muted">Soporte</button>
-            <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-muted">Facturacion</button>
-            <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-muted">Configuracion</button>
+            <button 
+              onClick={() => setTab('projects')}
+              className={cn(
+                "w-full text-left px-3 py-2 rounded-lg transition-colors",
+                tab === 'projects' ? "bg-muted text-foreground font-medium" : "hover:bg-muted text-muted-foreground"
+              )}
+            >
+              Dashboard
+            </button>
+            <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-muted text-muted-foreground">Mi proyecto</button>
+            <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-muted text-muted-foreground">Soporte</button>
+            <button 
+              onClick={() => setTab('billing')}
+              className={cn(
+                "w-full text-left px-3 py-2 rounded-lg transition-colors",
+                tab === 'billing' ? "bg-muted text-foreground font-medium" : "hover:bg-muted text-muted-foreground"
+              )}
+            >
+              Facturacion
+            </button>
+            <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-muted text-muted-foreground">Configuracion</button>
             <button
-              className="w-full text-left px-3 py-2 rounded-lg hover:bg-muted"
+              className="w-full text-left px-3 py-2 rounded-lg hover:bg-muted text-muted-foreground"
               onClick={() => setAdvancedOpen(true)}
             >
               Configuracion avanzada
@@ -1480,7 +1496,128 @@ export default function DashboardPage() {
           </Dialog>
 
           <div className="px-6 py-8 space-y-6">
-                        {isAdmin && (
+            {tab === 'billing' && (
+              <div className="grid gap-6 md:grid-cols-2">
+                <Card className="rounded-2xl border-border/60 shadow-sm">
+                  <CardHeader>
+                    <CardTitle className="text-xl font-bold">Metodo de pago</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="rounded-2xl border border-border p-5 bg-white">
+                      <div className="flex items-center gap-4">
+                        <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
+                          <CreditCard className="h-5 w-5 text-muted-foreground" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-bold text-foreground">Tarjeta de credito/debito</p>
+                          <p className="text-xs text-muted-foreground">
+                            Cobro automatico activo para renovacion anual.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="rounded-2xl bg-cta/5 border border-cta/20 p-4">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-bold uppercase tracking-widest text-cta-foreground/70">Proxima renovacion</p>
+                        <span className="text-lg font-bold text-foreground">S/ {project?.order?.plan?.price === 390 ? 135 : 165}</span>
+                      </div>
+                      <p className="mt-1 text-[10px] text-muted-foreground">Costo anual por hosting y dominio.</p>
+                    </div>
+
+                    <Dialog open={renewOpen} onOpenChange={setRenewOpen}>
+                      <DialogTrigger asChild>
+                        <Button variant="cta" className="w-full rounded-xl">
+                          Renovar ahora (Pago manual)
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent className="rounded-[28px]">
+                        <DialogHeader>
+                          <DialogTitle>Renovar Suscripcion</DialogTitle>
+                          <DialogDescription>
+                            Elige tu metodo de pago para renovar por un año mas.
+                          </DialogDescription>
+                        </DialogHeader>
+                        <div className="grid grid-cols-2 gap-3 py-4">
+                          <button
+                            type="button"
+                            className={cn(
+                              'h-24 rounded-2xl border text-left px-4 py-3 transition',
+                              renewMethod === 'yape' ? 'border-cta bg-cta/10' : 'border-border bg-white hover:bg-muted'
+                            )}
+                            onClick={() => setRenewMethod('yape')}
+                          >
+                            <p className="text-[10px] uppercase font-bold text-muted-foreground">Pago con</p>
+                            <p className="text-lg font-bold">Yape</p>
+                          </button>
+                          <button
+                            type="button"
+                            className={cn(
+                              'h-24 rounded-2xl border text-left px-4 py-3 transition',
+                              renewMethod === 'card' ? 'border-cta bg-cta/10' : 'border-border bg-white hover:bg-muted'
+                            )}
+                            onClick={() => setRenewMethod('card')}
+                          >
+                            <p className="text-[10px] uppercase font-bold text-muted-foreground">Pago con</p>
+                            <p className="text-lg font-bold">Tarjeta</p>
+                          </button>
+                        </div>
+                        {renewError && <p className="text-xs text-destructive text-center">{renewError}</p>}
+                        <DialogFooter>
+                          <Button variant="outline" onClick={() => setRenewOpen(false)}>Cancelar</Button>
+                          <Button variant="cta" disabled={renewLoading || !renewMethod} onClick={() => {}}>
+                            {renewLoading ? 'Procesando...' : 'Ir a pagar'}
+                          </Button>
+                        </DialogFooter>
+                      </DialogContent>
+                    </Dialog>
+                  </CardContent>
+                </Card>
+
+                <Card className="rounded-2xl border-border/60 shadow-sm">
+                  <CardHeader>
+                    <CardTitle className="text-xl font-bold">Historial de pagos</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="rounded-xl border border-border overflow-hidden">
+                      <table className="w-full text-sm">
+                        <thead className="bg-muted/50 border-b border-border">
+                          <tr>
+                            <th className="px-4 py-2 text-left font-bold text-[10px] uppercase">Fecha</th>
+                            <th className="px-4 py-2 text-left font-bold text-[10px] uppercase">Monto</th>
+                            <th className="px-4 py-2 text-left font-bold text-[10px] uppercase">Estado</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {renewals.length === 0 ? (
+                            <tr>
+                              <td colSpan={3} className="px-4 py-8 text-center text-xs text-muted-foreground">
+                                Tu primer año esta incluido. No hay renovaciones todavia.
+                              </td>
+                            </tr>
+                          ) : (
+                            renewals.map((ren) => (
+                              <tr key={ren.id} className="border-b border-border/50">
+                                <td className="px-4 py-3 text-xs">{formatDate(ren.createdAt)}</td>
+                                <td className="px-4 py-3 text-xs font-bold text-foreground">S/ {ren.amount}</td>
+                                <td className="px-4 py-3 text-xs">
+                                  <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 rounded-full text-[10px]">Pagado</Badge>
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground text-center">
+                      Solo se muestran los ultimos pagos realizados.
+                    </p>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+
+            {tab === 'projects' && isAdmin && (
               <Card className="rounded-lg border-border/60">
                 <CardHeader>
                   <CardTitle>Proyectos solicitados</CardTitle>

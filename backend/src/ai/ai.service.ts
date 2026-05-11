@@ -570,20 +570,16 @@ export class AiService {
     };
 
     const previewPath = join(process.cwd(), 'uploads', 'previews', String(projectId), 'index.html');
-    const targetPath = deployment.target ? join(deployment.target, 'index.html') : null;
     const previewExists = fs.existsSync(previewPath);
-    const targetExists = targetPath ? fs.existsSync(targetPath) : false;
+    
     this.logger.log(
-      `AI done project=${projectId} preview=${previewExists ? previewPath : 'missing'} target=${targetPath ?? 'n/a'} targetExists=${targetExists}`,
+      `AI done project=${projectId} preview=${previewExists ? previewPath : 'missing'} (Pending auto-publish at deadline)`,
     );
 
     await this.prisma.project.update({
       where: { id: projectId },
       data: {
-        status:
-          project.status === ProjectStatus.DELIVERED
-            ? ProjectStatus.DELIVERED
-            : ProjectStatus.READY,
+        status: ProjectStatus.READY,
         onboardingData: {
           ...(project.onboardingData as any || {}),
           aiGeneration: {
@@ -600,8 +596,6 @@ export class AiService {
             checks: {
               previewPath,
               previewExists,
-              targetPath,
-              targetExists,
             },
           },
         },
