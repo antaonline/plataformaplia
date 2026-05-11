@@ -603,12 +603,8 @@ export class ProjectsService {
   async autoPublishReadyProjects() {
     const readyProjects = await this.prisma.project.findMany({
       where: {
-        status: ProjectStatus.IN_PROGRESS, // Buscamos los que están en espera
+        status: ProjectStatus.IN_PROGRESS,
         deadline: { lte: new Date() },
-        onboardingData: {
-          path: ['aiGeneration', 'status'],
-          equals: 'READY', // Pero que ya tengan la IA terminada
-        },
       },
       include: {
         user: true,
@@ -617,14 +613,22 @@ export class ProjectsService {
 
     for (const project of readyProjects) {
       const data = (project.onboardingData as any) || {};
+      
+      // Filtrar manualmente los que tengan la IA lista (evita problemas de tipos con JSON path en Prisma)
+      if (data.aiGeneration?.status !== 'READY') {
+        continue;
+      }
+
       if (!this.hasGeneratedOutput(project.id, data)) {
         this.logger.warn(
           `Auto publish omitido para project=${project.id}: no existe salida verificada para publicar.`,
         );
         continue;
       }
+
       const publicUrl = data.publicUrl;
       await this.publishProject(project.id, { publicUrl });
+
       if (project.user?.email) {
         const loginUrl = `${process.env.APP_URL ?? 'http://localhost:3001'}/login`;
         await this.mailService.sendProjectReady(project.user.email, {
