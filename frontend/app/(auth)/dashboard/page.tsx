@@ -602,6 +602,8 @@ export default function DashboardPage() {
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [tab, setTab] = useState<'projects' | 'billing'>('projects');
+  const [renewals, setRenewals] = useState<any[]>([]);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [revisionOpen, setRevisionOpen] = useState(false);
   const [revisionMessage, setRevisionMessage] = useState('');
