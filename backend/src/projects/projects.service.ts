@@ -601,17 +601,21 @@ export class ProjectsService {
   }
 
   async autoPublishReadyProjects() {
-    const ready = await this.prisma.project.findMany({
+    const readyProjects = await this.prisma.project.findMany({
       where: {
-        status: ProjectStatus.READY,
+        status: ProjectStatus.IN_PROGRESS, // Buscamos los que están en espera
         deadline: { lte: new Date() },
+        onboardingData: {
+          path: ['aiGeneration', 'status'],
+          equals: 'READY', // Pero que ya tengan la IA terminada
+        },
       },
       include: {
         user: true,
       },
     });
 
-    for (const project of ready) {
+    for (const project of readyProjects) {
       const data = (project.onboardingData as any) || {};
       if (!this.hasGeneratedOutput(project.id, data)) {
         this.logger.warn(

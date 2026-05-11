@@ -579,11 +579,11 @@ export class AiService {
     await this.prisma.project.update({
       where: { id: projectId },
       data: {
-        status: ProjectStatus.READY,
+        status: ProjectStatus.IN_PROGRESS, // Mantener en progreso hasta el deadline
         onboardingData: {
           ...(project.onboardingData as any || {}),
           aiGeneration: {
-            status: 'READY',
+            status: 'READY', // La IA ya terminó su parte
             mode,
             updatedAt: new Date().toISOString(),
             score,

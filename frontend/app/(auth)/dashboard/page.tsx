@@ -816,18 +816,25 @@ export default function DashboardPage() {
     if (!project?.deadline) return null;
     const deadlineMs = new Date(project.deadline).getTime();
     const startedMs = project.startedAt ? new Date(project.startedAt).getTime() : null;
+    
+    // Usar los nuevos tiempos: 24h para Landing, 48h para Web
     const defaultTotal =
-      project.type === 'LANDING' ? 48 * 60 * 60 * 1000 : 5 * 24 * 60 * 60 * 1000;
+      project.type === 'LANDING' ? 24 * 60 * 60 * 1000 : 48 * 60 * 60 * 1000;
+    
     const totalMs = startedMs ? Math.max(deadlineMs - startedMs, 1) : defaultTotal;
     const startMs = startedMs ?? deadlineMs - totalMs;
     const elapsed = Math.max(now - startMs, 0);
     const rawProgress = Math.min(elapsed / totalMs, 1);
-    const isComplete = project.status === 'READY' || project.status === 'DELIVERED';
+    
+    // Solo está completo si ya fue ENTREGADO (DELIVERED)
+    const isComplete = project.status === 'DELIVERED';
     const progress = isComplete ? 1 : Math.min(rawProgress, 0.95);
     const step = isComplete ? 4 : Math.max(1, Math.min(4, Math.floor(progress * 4) + 1));
+    
     const diff = Math.max(deadlineMs - now, 0);
     const days = Math.floor(diff / (1000 * 60 * 60 * 24));
     const hours = Math.floor((diff / (1000 * 60 * 60)) % 24);
+    
     return {
       progressPercent: Math.round(progress * 100),
       currentStep: step,
@@ -841,17 +848,23 @@ export default function DashboardPage() {
     if (!project) return '';
     const data = project.onboardingData || {};
     const aiGeneration = data.aiGeneration || {};
+    
+    // Si ya está entregado, mostrar URL final
     if (project.status === 'DELIVERED') {
       if (data.publicUrl) return data.publicUrl as string;
       if (data.publicDomain) return `https://${data.publicDomain}`;
     }
-    if (
-      (project.status === 'READY' || project.status === 'DELIVERED') &&
-      aiGeneration.status === 'READY' &&
-      aiGeneration.previewUrl
-    ) {
+    
+    // Si la IA ya terminó (READY internamente), mostrar previsualización
+    if (aiGeneration.status === 'READY' && aiGeneration.previewUrl) {
       return aiGeneration.previewUrl as string;
     }
+    
+    // Fallback: mostrar el subdominio que el usuario eligió mientras espera
+    if (data.subdomain) {
+      return `https://${data.subdomain}.${domainBase}`;
+    }
+
     return '';
   }, [project, project?.onboardingData, domainBase]);
 
