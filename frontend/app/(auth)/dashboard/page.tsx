@@ -621,6 +621,11 @@ export default function DashboardPage() {
   const [renewError, setRenewError] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
 
+  const formatDate = (value: string | null) =>
+    value
+      ? new Intl.DateTimeFormat('es-PE', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))
+      : 'Sin fecha';
+
   const [formData, setFormData] = useState({
     domainOption: 'subdomain',
     subdomain: '',
