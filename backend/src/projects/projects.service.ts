@@ -191,7 +191,7 @@ export class ProjectsService {
     const project = await this.prisma.project.findUnique({
       where: { id: projectId },
       include: {
-        order: true,
+        order: { include: { plan: true } },
         user: true,
       },
     });
@@ -214,9 +214,13 @@ export class ProjectsService {
     const startedAt = project.startedAt ?? (shouldStart ? new Date() : null);
     let deadline = project.deadline ?? null;
 
-    if (shouldStart && project.order?.planId) {
-      const planId = project.order.planId;
-      if (planId === 1) {
+    if (shouldStart) {
+      const isLanding =
+        project.type === 'LANDING' ||
+        project.order?.plan?.slug?.toLowerCase().includes('landing') ||
+        project.order?.plan?.name?.toLowerCase().includes('landing');
+
+      if (isLanding) {
         deadline = addHours(new Date(), LANDING_DEVELOPMENT_HOURS);
       } else {
         deadline = addDays(new Date(), WEB_DEVELOPMENT_DAYS);
@@ -300,9 +304,10 @@ export class ProjectsService {
 
   // ✅ CREAR PROYECTO DESDE ORDEN (CORRECTO)
   async createFromOrder(orderOrId: any) {
-    const order = typeof orderOrId === 'number'
-      ? await this.prisma.order.findUnique({ where: { id: orderOrId } })
-      : orderOrId;
+    const order =
+      typeof orderOrId === 'number'
+        ? await this.prisma.order.findUnique({ where: { id: orderOrId }, include: { plan: true } })
+        : orderOrId;
 
     if (!order) {
       throw new NotFoundException('Order no encontrada');
@@ -311,10 +316,16 @@ export class ProjectsService {
       throw new BadRequestException('Order sin usuario');
     }
 
+    // Determinar tipo por slug o nombre if available
+    const planSlug = order.plan?.slug?.toLowerCase() || '';
+    const planName = order.plan?.name?.toLowerCase() || '';
+    const isLanding =
+      planSlug.includes('landing') || planName.includes('landing') || order.planId === 1;
+
     return this.prisma.project.create({
       data: {
         name: `Proyecto ${order.id}`,
-        type: order.planId === 1 ? 'LANDING' : 'WEB',
+        type: isLanding ? 'LANDING' : 'WEB',
         status: ProjectStatus.WAITING_INFO,
 
         user: {
@@ -414,7 +425,7 @@ export class ProjectsService {
     }
 
     const publishedAt = new Date();
-    const revisionsAllowed = project.order?.planId === 1 ? 1 : 2;
+    const revisionsAllowed = project.type === 'LANDING' ? 1 : 2;
     const revisionWindowEndsAt = addHours(publishedAt, 48);
 
     const mergedData = {
@@ -567,7 +578,7 @@ export class ProjectsService {
       throw new BadRequestException('El periodo de cambios ya vencio.');
     }
 
-    const allowed = project.order?.planId === 1 ? 1 : 2;
+    const allowed = project.type === 'LANDING' ? 1 : 2;
     const existing = Array.isArray(data.revisionRequests) ? data.revisionRequests : [];
     if (existing.length >= allowed) {
       throw new BadRequestException('Ya alcanzaste el limite de revisiones.');

@@ -25,6 +25,7 @@ export class RenewHostingCron {
       include: {
         user: true,
         projects: true,
+        plan: true,
         account: {
           include: {
             sites: true,
@@ -57,7 +58,8 @@ export class RenewHostingCron {
       }
 
       if (sub.status === 'ACTIVE' && now >= dueAt) {
-        const renewalAmount = Number(sub.cycleAmount ?? (sub.planId === 1 ? 135 : 165));
+        const isLanding = sub.plan?.slug?.toLowerCase().includes('landing') || sub.planId === 1;
+        const renewalAmount = Number(sub.cycleAmount ?? (isLanding ? 135 : 165));
         
         if (sub.cardToken) {
           try {

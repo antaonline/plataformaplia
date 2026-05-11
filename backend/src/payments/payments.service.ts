@@ -140,14 +140,16 @@ export class PaymentsService {
         where: { projectId: project.id },
       });
 
+      const isLanding = order.plan?.slug?.toLowerCase().includes('landing') || order.planId === 1;
+
       if (!existingSubscription) {
         await this.subscriptionsService.createAnnual(
           project.id,
-          order.planId === 1 ? 'LANDING' : 'WEB',
+          isLanding ? 'LANDING' : 'WEB',
           cardToken,
         );
       } else {
-        const nextPlanId = order.planId === 1 ? existingSubscription.planId : 2;
+        const nextPlanId = isLanding ? existingSubscription.planId : (order.planId || 2);
         const update: any = {
           ...(cardToken ? { cardToken } : {}),
         };
