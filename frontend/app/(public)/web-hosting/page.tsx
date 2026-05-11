@@ -136,7 +136,17 @@ const valueBlocks = [
   },
 ] as const;
 
-const comparisonRows = [
+type ComparisonRow = {
+  feature: string;
+  profesional: string;
+  profesionalCheck?: boolean;
+  premium: string;
+  premiumCheck?: boolean;
+  agencia: string;
+  agenciaCheck?: boolean;
+};
+
+const comparisonRows: ComparisonRow[] = [
   { feature: "Sitios web incluidos", profesional: "2", premium: "5", agencia: "50" },
   { feature: "Almacenamiento NVMe", profesional: "5 GB", premium: "15 GB", agencia: "100 GB" },
   { feature: "Tecnología Servidor", profesional: "LiteSpeed", premium: "LiteSpeed Enterprise", agencia: "LiteSpeed Enterprise" },
@@ -144,7 +154,7 @@ const comparisonRows = [
   { feature: "Mailbox profesional", profesional: "1 por sitio", profesionalCheck: true, premium: "2 por sitio", premiumCheck: true, agencia: "5 por sitio", agenciaCheck: true },
   { feature: "Backups automáticos", profesional: "Semanales", premium: "Diarios", agencia: "Diarios (On-demand)" },
   { feature: "Migración gratuita", profesional: "Incluida", profesionalCheck: true, premium: "Incluida", premiumCheck: true, agencia: "Incluida", agenciaCheck: true },
-] as const;
+];
 
 const faqs = [
   {
