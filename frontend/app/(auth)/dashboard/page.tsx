@@ -34,6 +34,7 @@ import {
 
 import Image from "next/image";
 import Link from "next/link";
+import { cn } from '@/lib/utils';
 
 const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3002';
 const apiBase = apiUrl.endsWith('/api') ? apiUrl : `${apiUrl}/api`;
