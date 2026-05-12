@@ -226,7 +226,7 @@ export class CyberpanelService {
       const cookies = res.headers['set-cookie'];
       if (cookies && cookies.length > 0) {
         const cookieStr = cookies.map(c => c.split(';')[0]).join('; ');
-        let csrfToken = undefined;
+        let csrfToken: string | undefined = undefined;
         for (const c of cookies) {
           const match = c.match(/csrftoken=([^;]+)/);
           if (match) csrfToken = match[1];
