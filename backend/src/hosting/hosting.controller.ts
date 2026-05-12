@@ -132,7 +132,21 @@ export class HostingController {
 
   @UseGuards(JwtAuthGuard)
   @Post('upgrade/:slug')
-  async upgradePlan(@Req() req: any, @Param('slug') slug: string) {
-    return this.hostingService.upgradePlan(req.user.id, slug);
+  async upgradePlan(
+    @Req() req: any,
+    @Param('slug') slug: string,
+    @Body() body: { useSavedCard?: boolean },
+  ) {
+    return this.hostingService.upgradePlan(req.user.id, slug, body.useSavedCard ?? true);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('upgrade/:slug/confirm')
+  async confirmUpgrade(
+    @Req() req: any,
+    @Param('slug') slug: string,
+    @Body() payload: any,
+  ) {
+    return this.hostingService.confirmUpgrade(req.user.id, payload, slug);
   }
 }

@@ -124,6 +124,7 @@ export default function HostingDashboardPage() {
   const [upgradeTarget, setUpgradeTarget] = useState<string | null>(null);
   const [upgradeBusy, setUpgradeBusy] = useState(false);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
+  const [useSavedCardUpgrade, setUseSavedCardUpgrade] = useState(true);
 
   const [manageSiteId, setManageSiteId] = useState<number | null>(null);
   const [manageMode, setManageMode] = useState<'choose' | 'upload' | 'wordpress' | 'upsell'>('choose');
@@ -242,9 +243,60 @@ export default function HostingDashboardPage() {
     try {
       const res = await fetch(`${apiBase}/hosting/upgrade/${upgradeTarget}`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ useSavedCard: useSavedCardUpgrade }),
       });
-      if (!res.ok) throw new Error(await res.text());
+      
+      const resData = await res.json();
+      if (!res.ok) throw new Error(resData?.message || 'Error al procesar la mejora.');
+
+      if (resData.requiresManualPayment) {
+        // Iniciar pago con Izipay (Nueva tarjeta)
+        if (!window.Izipay) throw new Error('SDK de Izipay no cargado.');
+        const { session, upgradeData } = resData;
+        
+        const tokenSession = session.token || session.tokenSession || session.token_session;
+        const keyRSA = session.keyRSA || session.publicKey || session.public_key;
+
+        const iziConfig: any = {
+          merchantCode: process.env.NEXT_PUBLIC_IZIPAY_MERCHANT_CODE,
+          order: {
+            orderNumber: session.orderId || `UPG-${Date.now()}`,
+            currency: 'PEN',
+            amount: upgradeData.cost,
+            processType: 'AT',
+          },
+          billing: {
+            firstName: user?.name?.split(' ')[0] ?? 'Cliente',
+            lastName: user?.name?.split(' ').slice(1).join(' ') || '-',
+            email: user?.email ?? '',
+            address: user?.billingAddress || '-',
+            city: user?.billingDepartment || 'Lima',
+            country: 'PE',
+          },
+          render: { typeForm: 'pop-up' },
+        };
+
+        const izi = new window.Izipay({ config: iziConfig });
+        izi.LoadForm({
+          authorization: tokenSession,
+          keyRSA,
+          callbackResponse: async (response: any) => {
+            const confirmRes = await fetch(`${apiBase}/hosting/upgrade/${upgradeTarget}/confirm`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+              body: JSON.stringify(response),
+            });
+            if (!confirmRes.ok) throw new Error('No se pudo confirmar la mejora.');
+            setUpgradeOpen(false);
+            await load();
+            setTab('overview');
+          },
+        });
+        return;
+      }
+
+      // Si no requiere pago manual (fue tokenizado con exito)
       setUpgradeOpen(false);
       await load();
       setTab('overview');
@@ -821,17 +873,43 @@ export default function HostingDashboardPage() {
                         Al upgradear, tus limites se actualizan al instante y tu fecha de renovacion se mantiene igual.
                       </p>
                       <div className="grid gap-3">
-                        {plans.filter(p => p.name !== data.plan.name).map((p) => (
-                          <div key={p.slug} className="flex items-center justify-between p-4 rounded-xl border border-border bg-muted/20">
-                            <div>
-                              <p className="font-bold text-sm">{p.name}</p>
-                              <p className="text-[10px] text-muted-foreground uppercase">{p.maxSites} sitios · {formatStorage(p.storageMb)}</p>
-                            </div>
-                            <Button variant="cta" size="sm" className="h-8 rounded-lg text-xs" onClick={() => fetchUpgradePreview(p.slug)} disabled={upgradeBusy}>
-                              Upgrade
-                            </Button>
-                          </div>
-                        ))}
+                        {(() => {
+                          const hierarchy = ['profesional', 'premium', 'agencia'];
+                          const currentIndex = hierarchy.indexOf(data.plan.slug || '');
+                          
+                          return plans.map((p) => {
+                            const pIndex = hierarchy.indexOf(p.slug);
+                            const isCurrent = p.slug === data.plan.slug || p.name === data.plan.name;
+                            const isLower = pIndex !== -1 && currentIndex !== -1 && pIndex < currentIndex;
+
+                            if (isLower) return null;
+
+                            return (
+                              <div key={p.slug} className={cn(
+                                "flex items-center justify-between p-4 rounded-xl border transition",
+                                isCurrent ? "border-cta/30 bg-cta/5 opacity-80" : "border-border bg-muted/20 hover:bg-muted/30"
+                              )}>
+                                <div>
+                                  <p className="font-bold text-sm">{p.name}</p>
+                                  <p className="text-[10px] text-muted-foreground uppercase">{p.maxSites} sitios · {formatStorage(p.storageMb)}</p>
+                                </div>
+                                {isCurrent ? (
+                                  <Badge variant="outline" className="bg-white text-[10px] font-bold uppercase tracking-wider">Plan Actual</Badge>
+                                ) : (
+                                  <Button 
+                                    variant="cta" 
+                                    size="sm" 
+                                    className="h-8 rounded-lg text-xs" 
+                                    onClick={() => fetchUpgradePreview(p.slug)} 
+                                    disabled={upgradeBusy}
+                                  >
+                                    Upgrade
+                                  </Button>
+                                )}
+                              </div>
+                            );
+                          });
+                        })()}
                       </div>
                     </CardContent>
                   </Card>
@@ -850,15 +928,61 @@ export default function HostingDashboardPage() {
                         <div className="rounded-2xl bg-muted/50 p-5 space-y-3">
                           <div className="flex items-center justify-between text-sm">
                             <span className="text-muted-foreground">Dias restantes de suscripcion</span>
-                            <span className="font-bold">{upgradePreview.remainingDays} dias</span>
+                            <span className="font-bold text-foreground">{upgradePreview.remainingDays} dias</span>
                           </div>
-                          <div className="flex items-center justify-between text-sm">
+                          <div className="flex items-center justify-between text-sm border-t border-muted-foreground/10 pt-3">
                             <span className="text-muted-foreground">Diferencia a pagar</span>
-                            <span className="text-lg font-black text-foreground">S/ {upgradePreview.upgradeCost}</span>
+                            <span className="text-xl font-black text-foreground">S/ {upgradePreview.upgradeCost}</span>
                           </div>
                         </div>
 
-                        <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-xl text-xs text-emerald-800 flex gap-3">
+                        <div className="space-y-3">
+                          <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Metodo de pago</p>
+                          <div className="grid gap-2">
+                            {upgradePreview.hasSavedCard && (
+                              <button
+                                type="button"
+                                className={cn(
+                                  "flex items-center justify-between p-4 rounded-xl border transition text-left",
+                                  useSavedCardUpgrade ? "border-cta bg-cta/10 shadow-sm shadow-cta/5" : "border-border bg-white"
+                                )}
+                                onClick={() => setUseSavedCardUpgrade(true)}
+                              >
+                                <div className="flex items-center gap-3">
+                                  <div className={cn("h-4 w-4 rounded-full border flex items-center justify-center", useSavedCardUpgrade ? "border-cta bg-cta text-white" : "border-border")}>
+                                    {useSavedCardUpgrade && <Check className="h-2 w-2" />}
+                                  </div>
+                                  <div>
+                                    <p className="text-xs font-bold">Usar tarjeta guardada</p>
+                                    <p className="text-[10px] text-muted-foreground">Cobro automatico seguro</p>
+                                  </div>
+                                </div>
+                                <CreditCard className="h-4 w-4 text-muted-foreground" />
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              className={cn(
+                                "flex items-center justify-between p-4 rounded-xl border transition text-left",
+                                !useSavedCardUpgrade ? "border-cta bg-cta/10 shadow-sm shadow-cta/5" : "border-border bg-white"
+                              )}
+                              onClick={() => setUseSavedCardUpgrade(false)}
+                            >
+                              <div className="flex items-center gap-3">
+                                <div className={cn("h-4 w-4 rounded-full border flex items-center justify-center", !useSavedCardUpgrade ? "border-cta bg-cta text-white" : "border-border")}>
+                                  {!useSavedCardUpgrade && <Check className="h-2 w-2" />}
+                                </div>
+                                <div>
+                                  <p className="text-xs font-bold">Pagar con otra tarjeta</p>
+                                  <p className="text-[10px] text-muted-foreground">Se abrira el portal de Izipay</p>
+                                </div>
+                              </div>
+                              <Plus className="h-4 w-4 text-muted-foreground" />
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-xl text-[11px] text-emerald-800 flex gap-3">
                           <Rocket className="h-4 w-4 shrink-0" />
                           <p>Tu capacidad de sitios y almacenamiento aumentara inmediatamente despues del pago.</p>
                         </div>
@@ -866,9 +990,6 @@ export default function HostingDashboardPage() {
                         <Button variant="cta" className="w-full py-6 rounded-2xl font-bold text-base shadow-lg shadow-cta/20" onClick={processUpgrade} disabled={upgradeBusy}>
                           {upgradeBusy ? 'Procesando mejora...' : `Pagar S/ ${upgradePreview.upgradeCost} y Mejorar`}
                         </Button>
-                        <p className="text-[10px] text-center text-muted-foreground italic">
-                          * El cargo se realizara a tu tarjeta guardada. Si no tienes una, se te solicitara en el siguiente paso.
-                        </p>
                       </div>
                     )}
                   </DialogContent>
@@ -1374,7 +1495,7 @@ export default function HostingDashboardPage() {
                         <h4 className="text-lg font-bold mb-1">Plan Landing</h4>
                         <p className="text-xs text-muted-foreground mb-4">Ideal para campañas de venta directa y conversiones rápidas.</p>
                         <div className="text-2xl font-black mb-6">
-                          S/ 499 <span className="text-xs font-normal text-muted-foreground">pago unico</span>
+                          S/ 390 <span className="text-xs font-normal text-muted-foreground">pago unico</span>
                         </div>
                         <ul className="space-y-2 text-xs text-muted-foreground mb-6">
                           <li className="flex items-center gap-2">
@@ -1388,7 +1509,7 @@ export default function HostingDashboardPage() {
                           </li>
                         </ul>
                         <Button variant="cta" className="w-full rounded-xl" asChild>
-                          <Link href="/checkout?plan=landing">Contratar Landing</Link>
+                          <Link href={`/checkout?plan=landing&domain=${currentSite?.domain}`}>Contratar Landing</Link>
                         </Button>
                       </div>
                     </Card>
@@ -1401,7 +1522,7 @@ export default function HostingDashboardPage() {
                         <h4 className="text-lg font-bold mb-1">Web Institucional</h4>
                         <p className="text-xs text-muted-foreground mb-4">Una web completa con múltiples secciones para tu empresa.</p>
                         <div className="text-2xl font-black mb-6">
-                          S/ 890 <span className="text-xs font-normal text-muted-foreground">pago unico</span>
+                          S/ 690 <span className="text-xs font-normal text-muted-foreground">pago unico</span>
                         </div>
                         <ul className="space-y-2 text-xs text-muted-foreground mb-6">
                           <li className="flex items-center gap-2">
@@ -1415,7 +1536,7 @@ export default function HostingDashboardPage() {
                           </li>
                         </ul>
                         <Button variant="outline" className="w-full rounded-xl" asChild>
-                          <Link href="/checkout?plan=web">Contratar Web</Link>
+                          <Link href={`/checkout?plan=web&domain=${currentSite?.domain}`}>Contratar Web</Link>
                         </Button>
                       </div>
                     </Card>

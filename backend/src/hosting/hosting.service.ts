@@ -3,6 +3,8 @@ import {
   Injectable,
   NotFoundException,
   Logger,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { addMonths, formatDistanceToNowStrict } from 'date-fns';
 import { HostingAccount, HostingAccountStatus, HostedSiteType, PlanServiceType, Prisma } from '@prisma/client';
@@ -12,6 +14,7 @@ import { dirname, join, resolve, sep } from 'path';
 import { CyberpanelService, StoredCyberpanelAccount } from '../integrations/cyberpanel/cyberpanel.service';
 import { MailService } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { IzipayService } from '../payments/izipay.service';
 import { CreateHostedSiteDto } from './dto/create-hosted-site.dto';
 import { InstallWordPressDto } from './dto/install-wordpress.dto';
 import { PrepareHostingCheckoutDto } from './dto/prepare-hosting-checkout.dto';
@@ -35,6 +38,8 @@ export class HostingService {
     private prisma: PrismaService,
     private cyberpanelService: CyberpanelService,
     private mailService: MailService,
+    @Inject(forwardRef(() => IzipayService))
+    private izipay: IzipayService,
   ) {}
 
   private get baseDomain() {
@@ -196,37 +201,110 @@ export class HostingService {
       remainingDays,
       upgradeCost,
       currency: 'PEN',
+      hasSavedCard: !!sub.cardToken,
     };
   }
 
-  async upgradePlan(userId: number, targetSlug: string) {
+  async upgradePlan(userId: number, targetSlug: string, useSavedCard = true) {
     const preview = await this.getUpgradePreview(userId, targetSlug);
     const targetDef = getHostingPlanDefinition(targetSlug)!;
     
     const sub = await this.prisma.hostingSubscription.findFirst({
       where: { userId, status: 'ACTIVE' },
-      include: { plan: true, account: true },
+      include: { plan: true, account: true, user: true },
     });
 
     if (!sub) throw new BadRequestException('Suscripcion no encontrada.');
 
-    // 1. Simular o procesar pago (en un entorno real aqui iria Izipay)
-    // Para esta fase, asumimos que el pago se aprueba si llegamos aqui.
+    // 1. Procesar Pago
+    if (useSavedCard && sub.cardToken) {
+      // Intento de cobro tokenizado
+      try {
+        const charge = await this.izipay.chargeTokenized({
+          amount: preview.upgradeCost,
+          cardToken: sub.cardToken,
+          orderId: sub.id, // O crear una orden especifica
+        });
+        
+        const state = charge?.order?.[0]?.status ?? charge?.status;
+        if (state !== 'PAID' && state !== 'APPROVED' && state !== 'AUTHORIZED' && state !== 'SUCCESS') {
+          throw new Error('Pago tokenizado rechazado');
+        }
+      } catch (err: any) {
+        this.logger.error(`Error en cobro tokenizado para upgrade: ${err.message}`);
+        throw new BadRequestException('No se pudo procesar el pago con tu tarjeta guardada. Por favor usa una nueva.');
+      }
+    } else {
+      // Generar sesion para pago manual (Izipay pop-up)
+      const session = await this.izipay.createSession({
+        amount: preview.upgradeCost,
+        orderNumber: `UPG-${sub.id}-${Date.now()}`,
+      });
+      return {
+        requiresManualPayment: true,
+        session,
+        upgradeData: { targetSlug, cost: preview.upgradeCost },
+      };
+    }
 
-    // 2. Actualizar suscripcion en DB
-    const targetPlan = await this.prisma.plan.findUnique({ where: { slug: `hosting-${targetSlug}` } });
+    // 2. Aplicar Upgrade (Si el pago fue exitoso o tokenizado)
+    return this.executeUpgradeLogic(sub, targetDef, preview.upgradeCost);
+  }
+
+  async confirmUpgrade(userId: number, payload: any, targetSlug: string) {
+    const response = payload?.response ?? payload;
+    const signature = payload?.signature ?? payload?.hash ?? '';
+    if (signature && !this.izipay.validateResponse(response, signature)) {
+      throw new BadRequestException('Firma invalida');
+    }
+
+    const state = response?.order?.[0]?.status ?? response?.status;
+    const successCodes = ['00', 'AUTHORIZED', 'APPROVED', 'PAID', 'SUCCESS'];
+    if (state && !successCodes.includes(state)) {
+      throw new BadRequestException('Pago de mejora rechazado');
+    }
+
+    const sub = await this.prisma.hostingSubscription.findFirst({
+      where: { userId, status: 'ACTIVE' },
+      include: { plan: true, account: true },
+    });
+    if (!sub) throw new NotFoundException('Suscripcion no encontrada');
+
+    const targetDef = getHostingPlanDefinition(targetSlug);
+    if (!targetDef) throw new NotFoundException('Plan destino no encontrado');
+
+    const cardToken = response?.token?.cardToken ?? response?.cardToken ?? null;
+    if (cardToken) {
+      await this.prisma.hostingSubscription.update({
+        where: { id: sub.id },
+        data: { cardToken },
+      });
+    }
+
+    const preview = await this.getUpgradePreview(userId, targetSlug);
+    return this.executeUpgradeLogic(sub, targetDef, preview.upgradeCost);
+  }
+
+  private async executeUpgradeLogic(sub: any, targetDef: HostingPlanDefinition, cost: number) {
+    const targetPlan = await this.prisma.plan.findUnique({ where: { slug: `hosting-${targetDef.slug}` } });
     if (!targetPlan) throw new NotFoundException('Plan destino no encontrado en DB.');
 
+    // 1. Actualizar Suscripcion
     await this.prisma.hostingSubscription.update({
       where: { id: sub.id },
       data: {
         planId: targetPlan.id,
-        // Opcional: actualizar cycleAmount para la proxima renovacion automatica
         cycleAmount: (targetDef.monthlyPricing[12] || targetDef.regularMonthlyPrice) * 12,
+        metadata: {
+          ...(sub.metadata as any || {}),
+          upgradedAt: new Date().toISOString(),
+          upgradeCostPaid: cost,
+          previousPlan: sub.plan.slug,
+        },
       },
     });
 
-    // 3. Actualizar HostingAccount (limites locales)
+    // 2. Actualizar HostingAccount (limites)
     if (sub.account) {
       await this.prisma.hostingAccount.update({
         where: { id: sub.account.id },
@@ -239,7 +317,7 @@ export class HostingService {
         },
       });
 
-      // 4. Actualizar en CyberPanel (Sincronizar paquete)
+      // 3. CyberPanel Sync
       try {
         await this.cyberpanelService.changePackage(
           sub.account.cyberpanelUsername,
@@ -247,14 +325,13 @@ export class HostingService {
         );
       } catch (err: any) {
         this.logger.error(`Error actualizando paquete en CyberPanel para ${sub.account.cyberpanelUsername}: ${err.message}`);
-        // No lanzamos error para no romper la transaccion local, pero lo logueamos
       }
     }
 
     return {
       ok: true,
       message: `Tu plan ha sido mejorado a ${targetDef.name} correctamente.`,
-      costPaid: preview.upgradeCost,
+      costPaid: cost,
     };
   }
 
