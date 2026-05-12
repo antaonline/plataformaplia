@@ -1465,8 +1465,6 @@ export default function DashboardPage() {
             >
               Dashboard
             </button>
-            <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-muted text-muted-foreground">Mi proyecto</button>
-            <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-muted text-muted-foreground">Soporte</button>
             <button 
               onClick={() => setTab('billing')}
               className={cn(
@@ -1476,7 +1474,15 @@ export default function DashboardPage() {
             >
               Facturacion
             </button>
-            <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-muted text-muted-foreground">Configuracion</button>
+            <button 
+              onClick={() => setTab('account')}
+              className={cn(
+                "w-full text-left px-3 py-2 rounded-lg transition-colors",
+                tab === 'account' ? "bg-muted text-foreground font-medium" : "hover:bg-muted text-muted-foreground"
+              )}
+            >
+              Mi cuenta
+            </button>
             <button
               className="w-full text-left px-3 py-2 rounded-lg hover:bg-muted text-muted-foreground"
               onClick={() => setAdvancedOpen(true)}
