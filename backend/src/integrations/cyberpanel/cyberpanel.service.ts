@@ -161,14 +161,19 @@ export class CyberpanelService {
     return /(already exists|exists already|duplicate|taken|is not unique)/i.test(message);
   }
 
-  private async request(path: string, body: Record<string, any>, timeout = 60000) {
+  private async request(path: string, body: Record<string, any>, timeout = 60000, authCookie?: string) {
     const url = `${this.baseUrl}${path}`;
     this.logger.log(
       `CyberPanel request ${path} adminUser=${body.adminUser || 'missing'} hasAdminPass=${Boolean(body.adminPass)}`,
     );
     try {
+      const reqHeaders = { ...this.headers };
+      if (authCookie) {
+        reqHeaders['Cookie'] = authCookie;
+      }
+      
       const res = await axios.post(url, body, {
-        headers: this.headers,
+        headers: reqHeaders,
         httpsAgent: this.httpsAgent,
         timeout,
       });
@@ -197,6 +202,34 @@ export class CyberpanelService {
       }
       throw new BadRequestException(`CyberPanel error en ${url}: ${message}`);
     }
+  }
+
+  private async getAuthCookie(): Promise<string | undefined> {
+    const adminUser = process.env.CYBERPANEL_ADMIN_USER;
+    const adminPass = process.env.CYBERPANEL_ADMIN_PASS;
+    if (!adminUser || !adminPass) return undefined;
+
+    const url = `${this.baseUrl}/api/loginAPI`;
+    try {
+      const data = new URLSearchParams();
+      data.append('username', adminUser);
+      data.append('password', adminPass);
+
+      const res = await axios.post(url, data.toString(), {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        httpsAgent: this.httpsAgent,
+      });
+
+      const cookies = res.headers['set-cookie'];
+      if (cookies && cookies.length > 0) {
+        // Encontrar el CSRFToken y el sessionid si existen
+        const cookieStr = cookies.map(c => c.split(';')[0]).join('; ');
+        return cookieStr;
+      }
+    } catch (error) {
+      this.logger.warn('No se pudo obtener la cookie de sesion de CyberPanel', error);
+    }
+    return undefined;
   }
 
   private buildSharedAdminAccount(sourceLabel?: string): StoredCyberpanelAccount {
@@ -726,8 +759,12 @@ export class CyberpanelService {
       // The headers getter in this service already sets Basic Auth.
     }
 
+    // Obtenemos una cookie de sesion real porque este endpoint interno (/websites/installWordpress)
+    // requiere que haya un request.session válido.
+    const cookie = await this.getAuthCookie();
+
     // Aumentamos el timeout para WordPress ya que es una operacion pesada (2 minutos)
-    return this.request(this.installWPPath, body, 120000);
+    return this.request(this.installWPPath, body, 120000, cookie);
   }
 
   async changePackage(username: string, packageName: string) {
