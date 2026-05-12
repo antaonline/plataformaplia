@@ -76,8 +76,8 @@ export class CyberpanelService {
   }
 
   private get installWPPath() {
-    // Probamos con la ruta mas compatible de la Local API
-    return '/api/oneClickWP';
+    // Usamos el endpoint exacto del Quick App Installer (apartado individual del website)
+    return '/websites/installWordpress';
   }
 
   private get panelUrl() {
@@ -136,6 +136,7 @@ export class CyberpanelService {
       data.submitUserDeletion,
       data.fetchStatus,
       data.success,
+      data.installStatus,
       data.wpInstallStatus,
       data.submitWPInstall,
       data.submitWPInstallStatus,
@@ -706,19 +707,23 @@ export class CyberpanelService {
     installPath?: string;
   }) {
     const body: Record<string, any> = {
-      controller: 'submitWordPressInstall',
-      serverUserName: process.env.CYBERPANEL_ADMIN_USER || 'admin',
-      domainName: options.domainName,
+      domain: options.domainName,
       blogTitle: options.blogTitle,
       adminUser: options.wpUser,
-      adminPass: options.wpPass,
+      passwordByPass: options.wpPass,
       adminEmail: options.wpEmail,
-      installPath: options.installPath || '',
+      home: options.installPath ? '0' : '1',
+      path: options.installPath || '',
     };
 
     if (process.env.CYBERPANEL_ADMIN_USER && process.env.CYBERPANEL_ADMIN_PASS) {
-      body.adminUser = process.env.CYBERPANEL_ADMIN_USER;
-      body.adminPass = process.env.CYBERPANEL_ADMIN_PASS;
+      body.adminUserHeader = process.env.CYBERPANEL_ADMIN_USER;
+      body.adminPassHeader = process.env.CYBERPANEL_ADMIN_PASS;
+      // CyberPanel general API interceptor uses adminUser and adminPass keys for auth,
+      // but since WP install form also uses 'adminUser' / 'adminPass' for the WP login credentials,
+      // we must send them safely. The CyberPanel basic auth header is used for actual auth anyway.
+      // However, if basic auth fails, we should be careful. 
+      // The headers getter in this service already sets Basic Auth.
     }
 
     // Aumentamos el timeout para WordPress ya que es una operacion pesada (2 minutos)
