@@ -69,7 +69,7 @@ export class CyberpanelService {
   }
 
   private get installWPPath() {
-    return process.env.CYBERPANEL_API_INSTALL_WP_PATH || '/api/installWP';
+    return process.env.CYBERPANEL_API_INSTALL_WP_PATH || '/api/';
   }
 
   private get panelUrl() {
@@ -690,11 +690,12 @@ export class CyberpanelService {
     installPath?: string;
   }) {
     const body: Record<string, any> = {
+      controller: 'submitWPInstall',
       domainName: options.domainName,
       blogTitle: options.blogTitle,
-      wpUser: options.wpUser,
-      wpPass: options.wpPass,
-      wpEmail: options.wpEmail,
+      adminUserWP: options.wpUser,
+      adminPassWP: options.wpPass,
+      adminEmail: options.wpEmail,
       websiteOwner: options.websiteOwner,
       installPath: options.installPath || '',
     };
