@@ -28,6 +28,7 @@ import {
   CheckCircle2,
   AlertCircle,
   Monitor,
+  Check,
 } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
