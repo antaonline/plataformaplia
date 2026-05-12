@@ -136,6 +136,13 @@ export default function HostingDashboardPage() {
     wpEmail: '',
     installPath: '',
   });
+
+  useEffect(() => {
+    if (manageMode === 'wordpress' && user?.email && !wpForm.wpEmail) {
+      setWpForm(prev => ({ ...prev, wpEmail: user.email }));
+    }
+  }, [manageMode, user?.email]);
+
   const [wpBusy, setWpBusy] = useState(false);
   const [createForm, setCreateForm] = useState({
     name: '',
@@ -1470,12 +1477,19 @@ export default function HostingDashboardPage() {
                   <div className="p-4 bg-cta/5 rounded-xl border border-cta/20 text-xs text-cta-foreground">
                     <div className="flex gap-3">
                       <CheckCircle2 className="h-4 w-4 shrink-0" />
-                      <p>Instalaremos la ultima version de WordPress con optimizacion de caché LSCache incluida.</p>
+                      <div>
+                        <p className="font-bold">Instalaremos la ultima version de WordPress.</p>
+                        <p className="mt-1 opacity-80">Este proceso puede tardar hasta 2 minutos mientras configuramos tu base de datos y archivos. Por favor, no cierres esta ventana.</p>
+                      </div>
                     </div>
                   </div>
 
                   <Button variant="cta" className="w-full py-6 rounded-2xl font-bold" onClick={installWordPress} disabled={wpBusy}>
-                    {wpBusy ? 'Instalando WordPress...' : 'Comenzar Instalacion'}
+                    {wpBusy ? (
+                      <span className="flex items-center gap-2">
+                        <Clock className="h-4 w-4 animate-spin-slow" /> Instalando WordPress...
+                      </span>
+                    ) : 'Comenzar Instalacion'}
                   </Button>
                 </div>
               )}

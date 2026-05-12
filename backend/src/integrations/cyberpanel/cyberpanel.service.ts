@@ -120,8 +120,11 @@ export class CyberpanelService {
       data.submitUserDeletion,
       data.fetchStatus,
       data.success,
+      data.wpInstallStatus,
+      data.submitWPInstall,
+      data.submitWPInstallStatus,
     ];
-    return candidates.some((value) => value === 1 || value === '1' || value === true);
+    return candidates.some((value) => value === 1 || value === '1' || value === true || (typeof value === 'string' && value.toLowerCase() === 'success'));
   }
 
   private extractErrorMessage(data: any) {
@@ -132,6 +135,7 @@ export class CyberpanelService {
       data.errorMessage ||
       data.message ||
       data.error ||
+      data.status_message ||
       JSON.stringify(data)
     );
   }
@@ -140,7 +144,7 @@ export class CyberpanelService {
     return /(already exists|exists already|duplicate|taken|is not unique)/i.test(message);
   }
 
-  private async request(path: string, body: Record<string, any>) {
+  private async request(path: string, body: Record<string, any>, timeout = 60000) {
     const url = `${this.baseUrl}${path}`;
     this.logger.log(
       `CyberPanel request ${path} adminUser=${body.adminUser || 'missing'} hasAdminPass=${Boolean(body.adminPass)}`,
@@ -149,6 +153,7 @@ export class CyberpanelService {
       const res = await axios.post(url, body, {
         headers: this.headers,
         httpsAgent: this.httpsAgent,
+        timeout,
       });
       if (!this.isSuccessResponse(res.data)) {
         throw new BadRequestException(this.extractErrorMessage(res.data));
@@ -158,6 +163,11 @@ export class CyberpanelService {
       const status = error?.response?.status;
       const responseData = error?.response?.data;
       const message = this.extractErrorMessage(responseData || error?.message || error);
+
+      if (error.code === 'ECONNABORTED') {
+        throw new BadRequestException('La operacion en CyberPanel tardo demasiado. Es posible que continue en segundo plano, por favor espera un momento y recarga.');
+      }
+
       if (status === 404) {
         throw new BadRequestException(
           `CyberPanel devolvio 404 al llamar ${url}. Revisa CYBERPANEL_API_URL, puerto y la ruta configurada.`,
@@ -676,6 +686,7 @@ export class CyberpanelService {
     wpUser: string;
     wpPass: string;
     wpEmail: string;
+    websiteOwner: string;
     installPath?: string;
   }) {
     const body: Record<string, any> = {
@@ -684,6 +695,7 @@ export class CyberpanelService {
       wpUser: options.wpUser,
       wpPass: options.wpPass,
       wpEmail: options.wpEmail,
+      websiteOwner: options.websiteOwner,
       installPath: options.installPath || '',
     };
 
@@ -692,7 +704,8 @@ export class CyberpanelService {
       body.adminPass = process.env.CYBERPANEL_ADMIN_PASS;
     }
 
-    return this.request(this.installWPPath, body);
+    // Aumentamos el timeout para WordPress ya que es una operacion pesada (2 minutos)
+    return this.request(this.installWPPath, body, 120000);
   }
 
   async changePackage(username: string, packageName: string) {

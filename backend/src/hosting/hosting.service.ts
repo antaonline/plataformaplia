@@ -1040,7 +1040,11 @@ export class HostingService {
     const site = await this.prisma.hostedSite.findUnique({
       where: { id: siteId },
       include: {
-        hostingAccount: true,
+        hostingAccount: {
+          include: {
+            activeSubscription: true,
+          },
+        },
       },
     });
 
@@ -1057,6 +1061,7 @@ export class HostingService {
         wpUser: dto.wpUser,
         wpPass: dto.wpPass,
         wpEmail: dto.wpEmail,
+        websiteOwner: site.hostingAccount.cyberpanelUsername,
         installPath: dto.installPath,
       });
 
