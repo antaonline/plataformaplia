@@ -107,7 +107,8 @@ function Content() {
       }
 
       loadUser();
-      // ... rest of loadPlans ...
+
+      async function loadPlans() {
         setPlansLoading(true);
         setPlansError(null);
         try {

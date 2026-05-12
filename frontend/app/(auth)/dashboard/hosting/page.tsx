@@ -185,7 +185,7 @@ export default function HostingDashboardPage() {
         });
       }
 
-      // ... rest of load ...
+      // Cargar datos de hosting
       const res = await fetch(`${apiBase}/hosting/dashboard`, {
         headers: { Authorization: `Bearer ${token}` },
       });

@@ -695,6 +695,12 @@ export default function DashboardPage() {
         const meData = meText ? JSON.parse(meText) : null;
         if (!meRes.ok) throw new Error(meData?.message || 'No se pudo cargar el usuario');
         setUser(meData);
+        setProfileForm({
+          billingName: meData.billingName || '',
+          billingAddress: meData.billingAddress || '',
+          billingDepartment: meData.billingDepartment || 'Lima',
+          billingEmail: meData.billingEmail || '',
+        });
 
         const projectRes = await fetch(`${apiBase}/projects/list`, {
           headers: { Authorization: `Bearer ${token}` },
