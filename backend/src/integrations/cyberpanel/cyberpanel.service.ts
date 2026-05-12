@@ -36,16 +36,23 @@ export class CyberpanelService {
   constructor(private prisma: PrismaService) {}
 
   private get baseUrl() {
-    const raw = process.env.CYBERPANEL_API_URL || '';
-    const port = process.env.CYBERPANEL_API_PORT;
+    const raw = (process.env.CYBERPANEL_API_URL || '').trim();
     if (!raw) return '';
-    if (raw.includes(':') && raw.includes('://')) {
-      return raw;
+    
+    // Limpiamos la URL de posibles sufijos /api o slashes
+    let clean = raw.replace(/\/api\/?$/, '').replace(/\/$/, '');
+
+    // Si ya incluye un puerto (indicado por dos puntos después del protocolo), lo devolvemos tal cual
+    const hasPort = clean.split('://')[1]?.includes(':');
+    if (hasPort) {
+      return clean;
     }
+
+    const port = process.env.CYBERPANEL_API_PORT;
     if (port) {
-      return `${raw.replace(/\/$/, '')}:${port}`;
+      return `${clean}:${port}`;
     }
-    return raw.replace(/\/$/, '');
+    return clean;
   }
 
   private get createPath() {
@@ -69,7 +76,8 @@ export class CyberpanelService {
   }
 
   private get installWPPath() {
-    return process.env.CYBERPANEL_API_INSTALL_WP_PATH || '/api/';
+    // Probamos con la ruta mas compatible de la Local API
+    return '/api/oneClickWP';
   }
 
   private get panelUrl() {
@@ -89,9 +97,17 @@ export class CyberpanelService {
 
   private get headers() {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (process.env.CYBERPANEL_API_KEY) {
+    
+    // CloudAPI prefiere Basic Auth
+    const adminUser = process.env.CYBERPANEL_ADMIN_USER;
+    const adminPass = process.env.CYBERPANEL_ADMIN_PASS;
+    if (adminUser && adminPass) {
+      const token = Buffer.from(`${adminUser}:${adminPass}`).toString('base64');
+      headers.Authorization = `Basic ${token}`;
+    } else if (process.env.CYBERPANEL_API_KEY) {
       headers.Authorization = process.env.CYBERPANEL_API_KEY;
     }
+    
     return headers;
   }
 
@@ -690,13 +706,13 @@ export class CyberpanelService {
     installPath?: string;
   }) {
     const body: Record<string, any> = {
-      controller: 'submitWPInstall',
+      controller: 'submitWordPressInstall',
+      serverUserName: process.env.CYBERPANEL_ADMIN_USER || 'admin',
       domainName: options.domainName,
       blogTitle: options.blogTitle,
-      adminUserWP: options.wpUser,
-      adminPassWP: options.wpPass,
+      adminUser: options.wpUser,
+      adminPass: options.wpPass,
       adminEmail: options.wpEmail,
-      websiteOwner: options.websiteOwner,
       installPath: options.installPath || '',
     };
 
