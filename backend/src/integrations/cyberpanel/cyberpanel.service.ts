@@ -212,27 +212,48 @@ export class CyberpanelService {
     const adminPass = process.env.CYBERPANEL_ADMIN_PASS;
     if (!adminUser || !adminPass) return undefined;
 
-    const url = `${this.baseUrl}/api/loginAPI`;
     try {
+      // 1. Obtener csrftoken inicial
+      const r1 = await axios.get(`${this.baseUrl}/`, {
+        httpsAgent: this.httpsAgent,
+      });
+      const cookies1 = r1.headers['set-cookie'] || [];
+      const csrfCookieRaw = cookies1.find(c => c.startsWith('csrftoken=')) || '';
+      const csrfCookie = csrfCookieRaw.split(';')[0];
+      const csrfToken = csrfCookie.split('=')[1];
+
+      if (!csrfToken) return undefined;
+
+      // 2. Hacer login para obtener sessionid (CyberPanel hace un redirect 302 si es exitoso)
       const data = new URLSearchParams();
       data.append('username', adminUser);
       data.append('password', adminPass);
 
-      const res = await axios.post(url, data.toString(), {
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        httpsAgent: this.httpsAgent,
-      });
-
-      const cookies = res.headers['set-cookie'];
-      if (cookies && cookies.length > 0) {
-        const cookieStr = cookies.map(c => c.split(';')[0]).join('; ');
-        let csrfToken: string | undefined = undefined;
-        for (const c of cookies) {
-          const match = c.match(/csrftoken=([^;]+)/);
-          if (match) csrfToken = match[1];
+      let sessionIdCookie = '';
+      try {
+        await axios.post(`${this.baseUrl}/api/loginAPI`, data.toString(), {
+          headers: { 
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Cookie': csrfCookie,
+            'X-CSRFToken': csrfToken,
+            'Referer': `${this.baseUrl}/`
+          },
+          httpsAgent: this.httpsAgent,
+          maxRedirects: 0,
+        });
+      } catch (e: any) {
+        if (e.response && e.response.status === 302) {
+          const cookies2 = e.response.headers['set-cookie'] || [];
+          const sessionRaw = cookies2.find((c: string) => c.startsWith('sessionid=')) || '';
+          sessionIdCookie = sessionRaw.split(';')[0];
+        } else {
+          throw e;
         }
-        return { cookie: cookieStr, csrfToken };
       }
+
+      if (!sessionIdCookie) return undefined;
+
+      return { cookie: `${csrfCookie}; ${sessionIdCookie}`, csrfToken };
     } catch (error) {
       this.logger.warn('No se pudo obtener la cookie de sesion de CyberPanel', error);
     }
