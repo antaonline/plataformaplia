@@ -172,6 +172,7 @@ export class CyberpanelService {
         reqHeaders['Cookie'] = authContext.cookie;
         if (authContext.csrfToken) {
           reqHeaders['X-CSRFToken'] = authContext.csrfToken;
+          reqHeaders['Referer'] = `${this.baseUrl}/`;
         }
       }
       
