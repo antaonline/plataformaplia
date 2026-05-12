@@ -69,7 +69,7 @@ export class CyberpanelService {
   }
 
   private get installWPPath() {
-    return process.env.CYBERPANEL_API_INSTALL_WP_PATH || '/api/submitWPInstall';
+    return process.env.CYBERPANEL_API_INSTALL_WP_PATH || '/api/installWP';
   }
 
   private get panelUrl() {
