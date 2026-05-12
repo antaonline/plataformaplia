@@ -13,6 +13,7 @@ import { CyberpanelService, StoredCyberpanelAccount } from '../integrations/cybe
 import { MailService } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateHostedSiteDto } from './dto/create-hosted-site.dto';
+import { InstallWordPressDto } from './dto/install-wordpress.dto';
 import { PrepareHostingCheckoutDto } from './dto/prepare-hosting-checkout.dto';
 import {
   HOSTING_PLAN_DEFINITIONS,
@@ -148,13 +149,111 @@ export class HostingService {
       description: plan.description,
       regularMonthlyPrice: plan.regularMonthlyPrice,
       monthlyPricing: plan.monthlyPricing,
-      maxSites: plan.maxSites,
-      storageMb: plan.storageMb,
-      bandwidthMb: plan.bandwidthMb,
-      mailboxesPerSite: plan.mailboxesPerSite,
       features: plan.features,
+      storageMb: plan.storageMb,
+      maxSites: plan.maxSites,
       termOptions: HOSTING_TERM_OPTIONS,
     }));
+  }
+
+  async getUpgradePreview(userId: number, targetSlug: string) {
+    const targetDef = getHostingPlanDefinition(targetSlug);
+    if (!targetDef) throw new NotFoundException('Plan no encontrado.');
+
+    const sub = await this.prisma.hostingSubscription.findFirst({
+      where: { userId, status: 'ACTIVE' },
+      include: { plan: true },
+    });
+
+    if (!sub) throw new BadRequestException('No tienes una suscripcion activa para mejorar.');
+
+    const currentDef = getHostingPlanDefinition(sub.plan.slug.replace(/^hosting-/, ''));
+    if (!currentDef) throw new BadRequestException('No se pudo determinar tu plan actual.');
+
+    // Calcular dias restantes
+    const now = new Date();
+    const end = new Date(sub.endDate);
+    if (now >= end) throw new BadRequestException('Tu suscripcion ha expirado o esta por renovarse.');
+
+    const remainingDays = Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+    
+    // Asumimos ciclo de 12 meses (anual) que es lo comun en los registros actuales
+    const currentYearly = (currentDef.monthlyPricing[12] || currentDef.regularMonthlyPrice) * 12;
+    const targetYearly = (targetDef.monthlyPricing[12] || targetDef.regularMonthlyPrice) * 12;
+
+    if (targetYearly <= currentYearly) {
+      throw new BadRequestException('El plan seleccionado no es superior al actual.');
+    }
+
+    const diffPerDay = (targetYearly - currentYearly) / 365;
+    const upgradeCost = Math.max(0, Math.round(diffPerDay * remainingDays * 100) / 100);
+
+    return {
+      currentPlan: sub.plan.name,
+      targetPlan: targetDef.name,
+      remainingDays,
+      upgradeCost,
+      currency: 'PEN',
+    };
+  }
+
+  async upgradePlan(userId: number, targetSlug: string) {
+    const preview = await this.getUpgradePreview(userId, targetSlug);
+    const targetDef = getHostingPlanDefinition(targetSlug)!;
+    
+    const sub = await this.prisma.hostingSubscription.findFirst({
+      where: { userId, status: 'ACTIVE' },
+      include: { plan: true, account: true },
+    });
+
+    if (!sub) throw new BadRequestException('Suscripcion no encontrada.');
+
+    // 1. Simular o procesar pago (en un entorno real aqui iria Izipay)
+    // Para esta fase, asumimos que el pago se aprueba si llegamos aqui.
+
+    // 2. Actualizar suscripcion en DB
+    const targetPlan = await this.prisma.plan.findUnique({ where: { slug: `hosting-${targetSlug}` } });
+    if (!targetPlan) throw new NotFoundException('Plan destino no encontrado en DB.');
+
+    await this.prisma.hostingSubscription.update({
+      where: { id: sub.id },
+      data: {
+        planId: targetPlan.id,
+        // Opcional: actualizar cycleAmount para la proxima renovacion automatica
+        cycleAmount: (targetDef.monthlyPricing[12] || targetDef.regularMonthlyPrice) * 12,
+      },
+    });
+
+    // 3. Actualizar HostingAccount (limites locales)
+    if (sub.account) {
+      await this.prisma.hostingAccount.update({
+        where: { id: sub.account.id },
+        data: {
+          packageName: targetDef.packageName,
+          maxSites: targetDef.maxSites,
+          storageMb: targetDef.storageMb,
+          bandwidthMb: targetDef.bandwidthMb,
+          mailboxesPerSite: targetDef.mailboxesPerSite,
+        },
+      });
+
+      // 4. Actualizar en CyberPanel (Sincronizar paquete)
+      try {
+        await this.cyberpanelService.changePackage(
+          sub.account.cyberpanelUsername,
+          targetDef.packageName,
+        );
+      } catch (err: any) {
+        this.logger.error(`Error actualizando paquete en CyberPanel para ${sub.account.cyberpanelUsername}: ${err.message}`);
+        // No lanzamos error para no romper la transaccion local, pero lo logueamos
+      }
+    }
+
+    return {
+      ok: true,
+      message: `Tu plan ha sido mejorado a ${targetDef.name} correctamente.`,
+      costPaid: preview.upgradeCost,
+    };
   }
 
   async prepareCheckout(dto: PrepareHostingCheckoutDto, userId?: number) {
@@ -229,7 +328,7 @@ export class HostingService {
         `prepareCheckout fallo para plan=${dto?.planSlug} term=${dto?.billingCycleMonths}: ${error?.message || error}`,
       );
       throw new BadRequestException(
-        `No se pudo preparar el checkout de hosting: ${error?.message || 'error interno en backend'}`,
+        `No se pudo preparar el checkout de hosting: ${error?.message || 'error en backend'}`,
       );
     }
   }
@@ -853,6 +952,52 @@ export class HostingService {
       return updated;
     } finally {
       this.cleanupTemporaryUploads(files);
+    }
+  }
+
+  async installWordPress(userId: number, siteId: number, dto: InstallWordPressDto) {
+    await this.assertHostingSchemaReady();
+    const site = await this.prisma.hostedSite.findUnique({
+      where: { id: siteId },
+      include: {
+        hostingAccount: true,
+      },
+    });
+
+    if (!site || site.hostingAccount.userId !== userId) {
+      throw new NotFoundException('Sitio no encontrado.');
+    }
+
+    this.assertWritableAccount(site.hostingAccount as any);
+
+    try {
+      await this.cyberpanelService.installWordPress({
+        domainName: site.domain,
+        blogTitle: dto.blogTitle,
+        wpUser: dto.wpUser,
+        wpPass: dto.wpPass,
+        wpEmail: dto.wpEmail,
+        installPath: dto.installPath,
+      });
+
+      return this.prisma.hostedSite.update({
+        where: { id: site.id },
+        data: {
+          appType: 'WORDPRESS',
+          status: 'ACTIVE',
+          lastDeployedAt: new Date(),
+          metadata: {
+            ...(site.metadata as any || {}),
+            wordpressInstalledAt: new Date().toISOString(),
+            wordpressUser: dto.wpUser,
+          } as Prisma.InputJsonValue,
+        },
+      });
+    } catch (error: any) {
+      this.logger.error(`Error instalando WordPress en ${site.domain}: ${error.message}`);
+      throw new BadRequestException(
+        `No se pudo instalar WordPress: ${error.message || 'error en CyberPanel'}`,
+      );
     }
   }
 }

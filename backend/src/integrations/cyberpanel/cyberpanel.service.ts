@@ -64,6 +64,14 @@ export class CyberpanelService {
     return process.env.CYBERPANEL_API_DELETE_USER_PATH || '/api/submitUserDeletion';
   }
 
+  private get changePackagePath() {
+    return process.env.CYBERPANEL_API_CHANGE_PACKAGE_PATH || '/api/changePackage';
+  }
+
+  private get installWPPath() {
+    return process.env.CYBERPANEL_API_INSTALL_WP_PATH || '/api/submitWPInstall';
+  }
+
   private get panelUrl() {
     const raw = process.env.CYBERPANEL_PANEL_URL || this.baseUrl;
     return raw.replace(/\/?$/, '/');
@@ -660,5 +668,44 @@ export class CyberpanelService {
       );
       return false;
     }
+  }
+
+  async installWordPress(options: {
+    domainName: string;
+    blogTitle: string;
+    wpUser: string;
+    wpPass: string;
+    wpEmail: string;
+    installPath?: string;
+  }) {
+    const body: Record<string, any> = {
+      domainName: options.domainName,
+      blogTitle: options.blogTitle,
+      wpUser: options.wpUser,
+      wpPass: options.wpPass,
+      wpEmail: options.wpEmail,
+      installPath: options.installPath || '',
+    };
+
+    if (process.env.CYBERPANEL_ADMIN_USER && process.env.CYBERPANEL_ADMIN_PASS) {
+      body.adminUser = process.env.CYBERPANEL_ADMIN_USER;
+      body.adminPass = process.env.CYBERPANEL_ADMIN_PASS;
+    }
+
+    return this.request(this.installWPPath, body);
+  }
+
+  async changePackage(username: string, packageName: string) {
+    const body: Record<string, any> = {
+      websiteOwner: username,
+      packageName,
+    };
+
+    if (process.env.CYBERPANEL_ADMIN_USER && process.env.CYBERPANEL_ADMIN_PASS) {
+      body.adminUser = process.env.CYBERPANEL_ADMIN_USER;
+      body.adminPass = process.env.CYBERPANEL_ADMIN_PASS;
+    }
+
+    return this.request(this.changePackagePath, body);
   }
 }

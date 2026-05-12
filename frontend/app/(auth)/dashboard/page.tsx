@@ -46,6 +46,10 @@ type User = {
   name: string;
   email: string;
   role: 'USER' | 'ADMIN';
+  billingName?: string;
+  billingAddress?: string;
+  billingDepartment?: string;
+  billingEmail?: string;
 };
 
 type Project = {
@@ -604,8 +608,17 @@ export default function DashboardPage() {
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [tab, setTab] = useState<'projects' | 'billing'>('projects');
+  const [tab, setTab] = useState<'projects' | 'billing' | 'account'>('projects');
   const [renewals, setRenewals] = useState<any[]>([]);
+  const [profileBusy, setProfileBusy] = useState(false);
+  const [profileSuccess, setProfileSuccess] = useState(false);
+  const [profileForm, setProfileForm] = useState({
+    billingName: '',
+    billingAddress: '',
+    billingDepartment: 'Lima',
+    billingEmail: '',
+  });
+
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [revisionOpen, setRevisionOpen] = useState(false);
   const [revisionMessage, setRevisionMessage] = useState('');
@@ -1283,6 +1296,35 @@ export default function DashboardPage() {
     }
   };
 
+  const updateProfile = async () => {
+    const token = localStorage.getItem('access_token');
+    if (!token) return;
+    setProfileBusy(true);
+    setProfileSuccess(false);
+    try {
+      const res = await fetch(`${apiBase}/users/profile`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(profileForm),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      setProfileSuccess(true);
+      setTimeout(() => setProfileSuccess(false), 3000);
+      
+      const meRes = await fetch(`${apiBase}/auth/me`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (meRes.ok) {
+        setUser(await meRes.json());
+      }
+    } catch (err: any) {
+      setError(err.message || 'No se pudo actualizar el perfil.');
+    } finally {
+      setProfileBusy(false);
+    }
+  };
+
   const handleLogout = async () => {
     try {
       await fetch(`${apiBase}/auth/logout`, { method: 'POST', credentials: 'include' });
@@ -1518,6 +1560,94 @@ export default function DashboardPage() {
           </Dialog>
 
           <div className="px-6 py-8 space-y-6">
+            {tab === 'account' && (
+              <div className="grid gap-6 md:grid-cols-[1fr_0.7fr]">
+                <Card className="rounded-2xl border-border/60 shadow-sm">
+                  <CardHeader>
+                    <CardTitle className="text-xl font-bold">Datos de Facturación</CardTitle>
+                    <CardDescription>Información persistente para tus comprobantes de pago.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid gap-4">
+                      <div className="space-y-2">
+                        <label className="text-xs font-bold uppercase text-muted-foreground">Nombre Completo o Razón Social</label>
+                        <Input
+                          placeholder="Ej. Juan Perez"
+                          value={profileForm.billingName}
+                          onChange={(e) => setProfileForm(p => ({ ...p, billingName: e.target.value }))}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-bold uppercase text-muted-foreground">Dirección de Facturación</label>
+                        <Input
+                          placeholder="Av. Principal 123, Int 4"
+                          value={profileForm.billingAddress}
+                          onChange={(e) => setProfileForm(p => ({ ...p, billingAddress: e.target.value }))}
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <label className="text-xs font-bold uppercase text-muted-foreground">Departamento</label>
+                          <select
+                            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                            value={profileForm.billingDepartment}
+                            onChange={(e) => setProfileForm(p => ({ ...p, billingDepartment: e.target.value }))}
+                          >
+                            <option value="Lima">Lima</option>
+                            <option value="Arequipa">Arequipa</option>
+                            <option value="Cusco">Cusco</option>
+                            <option value="La Libertad">La Libertad</option>
+                            <option value="Piura">Piura</option>
+                          </select>
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-xs font-bold uppercase text-muted-foreground">Email de Facturación</label>
+                          <Input
+                            type="email"
+                            placeholder="factura@tuempresa.com"
+                            value={profileForm.billingEmail}
+                            onChange={(e) => setProfileForm(p => ({ ...p, billingEmail: e.target.value }))}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {profileSuccess && (
+                      <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-xl text-xs flex items-center gap-2">
+                        <CheckCircle2 className="h-4 w-4" /> Datos guardados correctamente.
+                      </div>
+                    )}
+
+                    <Button variant="cta" className="w-full rounded-xl" onClick={updateProfile} disabled={profileBusy}>
+                      {profileBusy ? 'Guardando...' : 'Guardar Información'}
+                    </Button>
+                  </CardContent>
+                </Card>
+
+                <div className="space-y-6">
+                  <Card className="rounded-2xl border-border/60 shadow-sm">
+                    <CardHeader>
+                      <CardTitle className="text-xl font-bold">Perfil de Usuario</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="rounded-xl border border-border px-4 py-3">
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Nombre</p>
+                        <p className="mt-1 text-sm font-bold text-foreground">{user?.name}</p>
+                      </div>
+                      <div className="rounded-xl border border-border px-4 py-3">
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Email</p>
+                        <p className="mt-1 text-sm font-bold text-foreground">{user?.email}</p>
+                      </div>
+                      <div className="rounded-xl border border-border px-4 py-3">
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Rol</p>
+                        <Badge variant="outline" className="mt-1">{user?.role}</Badge>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              </div>
+            )}
+
             {tab === 'billing' && (
               <div className="grid gap-6 md:grid-cols-2">
                 <Card className="rounded-2xl border-border/60 shadow-sm">

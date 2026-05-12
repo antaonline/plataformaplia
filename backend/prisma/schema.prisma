@@ -147,6 +147,13 @@ model user {
   password      String
   createdAt     DateTime              @default(now())
   role          user_role             @default(USER)
+
+  // Datos de facturación persistentes
+  billingName       String?
+  billingAddress    String?
+  billingDepartment String?
+  billingEmail      String?
+
   order         Order[]
   subscription  HostingSubscription[]
   refreshTokens RefreshToken[]

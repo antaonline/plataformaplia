@@ -19,6 +19,7 @@ import { extname, join } from 'path';
 
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CreateHostedSiteDto } from './dto/create-hosted-site.dto';
+import { InstallWordPressDto } from './dto/install-wordpress.dto';
 import { PrepareHostingCheckoutDto } from './dto/prepare-hosting-checkout.dto';
 import { HostingService } from './hosting.service';
 
@@ -111,5 +112,27 @@ export class HostingController {
     }
 
     return this.hostingService.uploadSiteFiles(req.user.id, id, files, rawPaths);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('sites/:id/install-wordpress')
+  async installWordPress(
+    @Req() req: any,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: InstallWordPressDto,
+  ) {
+    return this.hostingService.installWordPress(req.user.id, id, dto);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('upgrade/preview/:slug')
+  async getUpgradePreview(@Req() req: any, @Param('slug') slug: string) {
+    return this.hostingService.getUpgradePreview(req.user.id, slug);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('upgrade/:slug')
+  async upgradePlan(@Req() req: any, @Param('slug') slug: string) {
+    return this.hostingService.upgradePlan(req.user.id, slug);
   }
 }

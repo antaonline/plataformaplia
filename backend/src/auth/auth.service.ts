@@ -271,4 +271,20 @@ export class AuthService {
     await this.mailService.sendAccountSetup(email, token)
     return { ok: true }
   }
+
+  async getUserProfile(userId: number) {
+    return this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        billingName: true,
+        billingAddress: true,
+        billingDepartment: true,
+        billingEmail: true,
+      },
+    });
+  }
 }

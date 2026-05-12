@@ -69,12 +69,45 @@ function Content() {
   const [formToken, setFormToken] = useState<string | null>(null);
   const [publicKey, setPublicKey] = useState<string | null>(null);
 
+  const [useSavedBilling, setUseSavedBilling] = useState(true);
+  const [currentUser, setCurrentUser] = useState<any>(null);
 
   // 2. TODAS tus funciones de lógica (handleNext, etc.) van AQUÍ
 
     useEffect(() => {
       let mounted = true;
-      async function loadPlans() {
+      const token = localStorage.getItem('access_token');
+      
+      async function loadUser() {
+        if (!token) return;
+        try {
+          const res = await fetch(`${apiBase}/auth/me`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (res.ok) {
+            const u = await res.json();
+            if (mounted) {
+              setCurrentUser(u);
+              if (u.billingName) {
+                setFullName(u.billingName);
+                setAddress(u.billingAddress || '');
+                setDepartment(u.billingDepartment || 'Lima');
+                setEmail(u.billingEmail || u.email);
+              } else {
+                setFullName(u.name || '');
+                setEmail(u.email || '');
+                setUseSavedBilling(false);
+              }
+            }
+          }
+        } catch (err) {
+          console.error('Error loading user profile', err);
+        }
+      }
+
+      loadUser();
+      // ... rest of loadPlans ...
         setPlansLoading(true);
         setPlansError(null);
         try {
@@ -561,8 +594,32 @@ function Content() {
 
                     {!formToken && (
                     <div className="pt-2">
-                      <h3 className="text-sm font-semibold text-foreground mb-3">Direccion de facturacion</h3>
-                      <div className="space-y-4">
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-sm font-semibold text-foreground">Direccion de facturacion</h3>
+                        {currentUser && currentUser.billingName && (
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              id="useSavedBilling"
+                              checked={useSavedBilling}
+                              onChange={(e) => {
+                                setUseSavedBilling(e.target.checked);
+                                if (e.target.checked) {
+                                  setFullName(currentUser.billingName);
+                                  setAddress(currentUser.billingAddress || '');
+                                  setDepartment(currentUser.billingDepartment || 'Lima');
+                                  setEmail(currentUser.billingEmail || currentUser.email);
+                                }
+                              }}
+                              className="h-4 w-4 rounded border-gray-300 text-cta focus:ring-cta"
+                            />
+                            <label htmlFor="useSavedBilling" className="text-xs text-muted-foreground cursor-pointer">
+                              Usar mis datos guardados
+                            </label>
+                          </div>
+                        )}
+                      </div>
+                      <div className={cn("space-y-4", useSavedBilling && currentUser?.billingName ? "opacity-60 pointer-events-none" : "")}>
                         <div className="space-y-2">
                           <label className="text-sm font-medium text-muted-foreground">Nombre completo</label>
                           <Input

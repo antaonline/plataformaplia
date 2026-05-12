@@ -126,8 +126,9 @@ export class AuthController {
 
   @UseGuards(JwtAuthGuard)
   @Post('me')
-  me(@Req() req) {
-    return req.user
+  async me(@Req() req) {
+    const user = await this.authService.getUserProfile(req.user.id);
+    return user;
   }
 
   @Get('sessions')

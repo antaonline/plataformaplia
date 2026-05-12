@@ -219,4 +219,10 @@ export class UsersService {
     return { ok: true }
   }
 
+  async updateProfile(userId: number, dto: any) {
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: dto,
+    });
+  }
 }

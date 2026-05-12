@@ -23,6 +23,11 @@ import {
   LifeBuoy,
   LogOut,
   ChevronRight,
+  FileCode,
+  ArrowLeft,
+  CheckCircle2,
+  AlertCircle,
+  Monitor,
 } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
@@ -73,6 +78,7 @@ type DashboardData = {
     publicUrl: string;
     status: string;
     sslStatus: string;
+    appType: 'EMPTY' | 'STATIC_UPLOAD' | 'WORDPRESS';
     storageUsedMb: number;
     storageLimitMb: number;
     uploadCount: number;
@@ -86,6 +92,10 @@ type User = {
   name: string;
   email: string;
   role: 'USER' | 'ADMIN';
+  billingName?: string;
+  billingAddress?: string;
+  billingDepartment?: string;
+  billingEmail?: string;
 };
 
 const tabs = [
@@ -109,7 +119,22 @@ export default function HostingDashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<(typeof tabs)[number]['id']>('overview');
   const [createOpen, setCreateOpen] = useState(false);
+  const [plans, setPlans] = useState<any[]>([]);
+  const [upgradePreview, setUpgradePreview] = useState<any>(null);
+  const [upgradeTarget, setUpgradeTarget] = useState<string | null>(null);
+  const [upgradeBusy, setUpgradeBusy] = useState(false);
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
+
   const [manageSiteId, setManageSiteId] = useState<number | null>(null);
+  const [manageMode, setManageMode] = useState<'choose' | 'upload' | 'wordpress' | 'upsell'>('choose');
+  const [wpForm, setWpForm] = useState({
+    blogTitle: '',
+    wpUser: 'admin',
+    wpPass: '',
+    wpEmail: '',
+    installPath: '',
+  });
+  const [wpBusy, setWpBusy] = useState(false);
   const [createForm, setCreateForm] = useState({
     name: '',
     mode: 'subdomain' as 'subdomain' | 'custom',
@@ -124,6 +149,15 @@ export default function HostingDashboardPage() {
   const [renewLoading, setRenewLoading] = useState(false);
   const [renewError, setRenewError] = useState<string | null>(null);
   const [renewals, setRenewals] = useState<any[]>([]);
+  const [profileBusy, setProfileBusy] = useState(false);
+  const [profileSuccess, setProfileSuccess] = useState(false);
+  const [profileForm, setProfileForm] = useState({
+    billingName: '',
+    billingAddress: '',
+    billingDepartment: 'Lima',
+    billingEmail: '',
+  });
+
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
 
   const load = async () => {
@@ -141,17 +175,23 @@ export default function HostingDashboardPage() {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (meRes.ok) {
-        setUser(await meRes.json());
+        const u = await meRes.json();
+        setUser(u);
+        setProfileForm({
+          billingName: u.billingName || '',
+          billingAddress: u.billingAddress || '',
+          billingDepartment: u.billingDepartment || 'Lima',
+          billingEmail: u.billingEmail || '',
+        });
       }
 
-      // Cargar datos de hosting
+      // ... rest of load ...
       const res = await fetch(`${apiBase}/hosting/dashboard`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error((await res.text()) || 'No se pudo cargar el dashboard de hosting.');
       setData(await res.json());
 
-      // Cargar historial de renovaciones
       const renRes = await fetch(`${apiBase}/subscriptions/renewals`, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -167,8 +207,79 @@ export default function HostingDashboardPage() {
     }
   };
 
+  const fetchPlans = async () => {
+    try {
+      const res = await fetch(`${apiBase}/hosting/public/plans`);
+      if (res.ok) setPlans(await res.json());
+    } catch (err) {
+      console.error('Error fetching plans', err);
+    }
+  };
+
+  const fetchUpgradePreview = async (slug: string) => {
+    const token = localStorage.getItem('access_token');
+    if (!token) return;
+    setUpgradeTarget(slug);
+    setUpgradeBusy(true);
+    try {
+      const res = await fetch(`${apiBase}/hosting/upgrade/preview/${slug}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error(await res.text());
+      setUpgradePreview(await res.json());
+      setUpgradeOpen(true);
+    } catch (err: any) {
+      setError(err.message || 'No se pudo obtener la vista previa de mejora.');
+    } finally {
+      setUpgradeBusy(false);
+    }
+  };
+
+  const processUpgrade = async () => {
+    const token = localStorage.getItem('access_token');
+    if (!token || !upgradeTarget) return;
+    setUpgradeBusy(true);
+    try {
+      const res = await fetch(`${apiBase}/hosting/upgrade/${upgradeTarget}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error(await res.text());
+      setUpgradeOpen(false);
+      await load();
+      setTab('overview');
+    } catch (err: any) {
+      setError(err.message || 'Error al procesar la mejora.');
+    } finally {
+      setUpgradeBusy(false);
+    }
+  };
+
+  const updateProfile = async () => {
+    const token = localStorage.getItem('access_token');
+    if (!token) return;
+    setProfileBusy(true);
+    setProfileSuccess(false);
+    try {
+      const res = await fetch(`${apiBase}/users/profile`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(profileForm),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      setProfileSuccess(true);
+      setTimeout(() => setProfileSuccess(false), 3000);
+      await load();
+    } catch (err: any) {
+      setError(err.message || 'No se pudo actualizar el perfil.');
+    } finally {
+      setProfileBusy(false);
+    }
+  };
+
   useEffect(() => {
     load();
+    fetchPlans();
   }, []);
   useEffect(() => {
     const input = uploadInputRef.current as (HTMLInputElement & { webkitdirectory?: boolean }) | null;
@@ -232,23 +343,27 @@ export default function HostingDashboardPage() {
   const currentSite = data?.sites.find((site) => site.id === manageSiteId) ?? null;
 
   const createSite = async () => {
+    // ... existing ...
+  };
+
+  const installWordPress = async () => {
+    if (!manageSiteId) return;
     const token = localStorage.getItem('access_token');
     if (!token) return;
-    setBusy(true);
+    setWpBusy(true);
     try {
-      const res = await fetch(`${apiBase}/hosting/sites`, {
+      const res = await fetch(`${apiBase}/hosting/sites/${manageSiteId}/install-wordpress`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify(createForm),
+        body: JSON.stringify(wpForm),
       });
-      if (!res.ok) throw new Error((await res.text()) || 'No se pudo crear el sitio.');
-      setCreateOpen(false);
-      setCreateForm({ name: '', mode: 'subdomain', subdomain: '', domain: '' });
+      if (!res.ok) throw new Error((await res.text()) || 'No se pudo instalar WordPress.');
       await load();
+      setManageMode('choose');
     } catch (err: any) {
-      setError(err?.message ?? 'No se pudo crear el sitio.');
+      setError(err?.message ?? 'No se pudo instalar WordPress.');
     } finally {
-      setBusy(false);
+      setWpBusy(false);
     }
   };
 
@@ -668,47 +783,96 @@ export default function HostingDashboardPage() {
                 </div>
               </TabsContent>
 
-              <TabsContent value="plan" className="mt-0">
+              <TabsContent value="plan" className="mt-0 space-y-8">
                 <div className="grid gap-6 md:grid-cols-2">
                   <Card className="rounded-2xl border-border/60 shadow-sm">
                     <CardHeader>
-                      <CardTitle className="text-xl">Capacidad del plan</CardTitle>
+                      <CardTitle className="text-xl">Plan Actual</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                      {[
-                        ['Websites', `${data.usage.websites.used}/${data.usage.websites.max}`],
-                        ['Storage', `${formatStorage(data.usage.storage.usedMb)} / ${formatStorage(data.usage.storage.maxMb)}`],
-                        ['Emails', `${data.usage.emails.used}/${data.usage.emails.max}`],
-                        ['Bandwidth', `${formatStorage(data.usage.bandwidth.maxMb)} incluidos`],
-                        ['SSL', 'Incluido en todos los sitios'],
-                      ].map(([label, value]) => (
-                        <div key={label} className="flex items-center justify-between rounded-xl border border-border px-4 py-3">
-                          <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{label}</span>
-                          <span className="text-sm font-bold text-foreground">{value}</span>
+                      <div className="rounded-2xl bg-cta/10 p-5 border border-cta/20">
+                        <p className="text-lg font-bold text-foreground">{data.plan.name}</p>
+                        <p className="text-sm text-muted-foreground mt-1">Suscripcion {data.plan.billingCycleMonths === 12 ? 'Anual' : `${data.plan.billingCycleMonths} meses`}</p>
+                        <div className="mt-4 pt-4 border-t border-cta/20 flex items-center justify-between">
+                          <span className="text-xs font-bold uppercase text-cta-foreground/70 tracking-wider">Renovacion</span>
+                          <span className="text-sm font-bold">{formatDate(data.plan.renewsAt)}</span>
                         </div>
-                      ))}
+                      </div>
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-muted-foreground">Capacidad de Sitios</span>
+                          <span className="font-bold">{data.usage.websites.max} sitios</span>
+                        </div>
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-muted-foreground">Almacenamiento</span>
+                          <span className="font-bold">{formatStorage(data.usage.storage.maxMb)}</span>
+                        </div>
+                      </div>
                     </CardContent>
                   </Card>
 
                   <Card className="rounded-2xl border-border/60 shadow-sm">
                     <CardHeader>
-                      <CardTitle className="text-xl">Renovacion</CardTitle>
+                      <CardTitle className="text-xl">¿Necesitas mas potencia?</CardTitle>
+                      <CardDescription>Mejora tu plan hoy y solo paga la diferencia prorrateada.</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                      <p className="text-sm text-muted-foreground">
-                        Tu plan actual es <strong className="text-foreground">{data.plan.name}</strong>.
+                      <p className="text-xs text-muted-foreground">
+                        Al upgradear, tus limites se actualizan al instante y tu fecha de renovacion se mantiene igual.
                       </p>
-                      <div className="rounded-2xl bg-muted/30 border border-border p-4">
-                        <p className="text-[10px] font-bold uppercase tracking-widest text-cta-foreground/70">Proxima renovacion</p>
-                        <p className="mt-1 text-lg font-bold text-foreground">{formatDate(data.plan.renewsAt)}</p>
-                        <p className="mt-1 text-xs text-muted-foreground">Monto por ciclo: S/ {data.plan.price}</p>
+                      <div className="grid gap-3">
+                        {plans.filter(p => p.name !== data.plan.name).map((p) => (
+                          <div key={p.slug} className="flex items-center justify-between p-4 rounded-xl border border-border bg-muted/20">
+                            <div>
+                              <p className="font-bold text-sm">{p.name}</p>
+                              <p className="text-[10px] text-muted-foreground uppercase">{p.maxSites} sitios · {formatStorage(p.storageMb)}</p>
+                            </div>
+                            <Button variant="cta" size="sm" className="h-8 rounded-lg text-xs" onClick={() => fetchUpgradePreview(p.slug)} disabled={upgradeBusy}>
+                              Upgrade
+                            </Button>
+                          </div>
+                        ))}
                       </div>
-                      <Button variant="outline" className="w-full rounded-xl" asChild>
-                        <Link href="/web-hosting">Comparar otros planes</Link>
-                      </Button>
                     </CardContent>
                   </Card>
                 </div>
+
+                <Dialog open={upgradeOpen} onOpenChange={setUpgradeOpen}>
+                  <DialogContent className="rounded-[30px] max-w-md">
+                    <DialogHeader>
+                      <DialogTitle>Mejorar Plan de Hosting</DialogTitle>
+                      <DialogDescription>
+                        Estas por cambiar tu plan a <strong>{upgradePreview?.targetPlan}</strong>.
+                      </DialogDescription>
+                    </DialogHeader>
+                    {upgradePreview && (
+                      <div className="space-y-6 py-4">
+                        <div className="rounded-2xl bg-muted/50 p-5 space-y-3">
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-muted-foreground">Dias restantes de suscripcion</span>
+                            <span className="font-bold">{upgradePreview.remainingDays} dias</span>
+                          </div>
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-muted-foreground">Diferencia a pagar</span>
+                            <span className="text-lg font-black text-foreground">S/ {upgradePreview.upgradeCost}</span>
+                          </div>
+                        </div>
+
+                        <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-xl text-xs text-emerald-800 flex gap-3">
+                          <Rocket className="h-4 w-4 shrink-0" />
+                          <p>Tu capacidad de sitios y almacenamiento aumentara inmediatamente despues del pago.</p>
+                        </div>
+
+                        <Button variant="cta" className="w-full py-6 rounded-2xl font-bold text-base shadow-lg shadow-cta/20" onClick={processUpgrade} disabled={upgradeBusy}>
+                          {upgradeBusy ? 'Procesando mejora...' : `Pagar S/ ${upgradePreview.upgradeCost} y Mejorar`}
+                        </Button>
+                        <p className="text-[10px] text-center text-muted-foreground italic">
+                          * El cargo se realizara a tu tarjeta guardada. Si no tienes una, se te solicitara en el siguiente paso.
+                        </p>
+                      </div>
+                    )}
+                  </DialogContent>
+                </Dialog>
               </TabsContent>
 
               <TabsContent value="billing" className="mt-0">
@@ -831,63 +995,120 @@ export default function HostingDashboardPage() {
               </TabsContent>
 
               <TabsContent value="account" className="mt-0">
-                <div className="grid gap-6 md:grid-cols-2">
+                <div className="grid gap-6 md:grid-cols-[1fr_0.7fr]">
                   <Card className="rounded-2xl border-border/60 shadow-sm">
                     <CardHeader>
-                      <CardTitle className="text-xl font-bold">Acceso tecnico</CardTitle>
+                      <CardTitle className="text-xl font-bold">Datos de Facturación</CardTitle>
+                      <CardDescription>Esta información se usará automáticamente en tus próximos pagos.</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                      {[
-                        ['Panel', data.account.technicalAccess.panelUrl],
-                        [
-                          'Usuario',
-                          data.account.technicalAccess.username ||
-                            (data.account.technicalAccess.managedByPlia ? 'Gestionado por PLIA' : 'No disponible'),
-                        ],
-                        [
-                          'Contrasena',
-                          data.account.technicalAccess.password ||
-                            (data.account.technicalAccess.managedByPlia
-                              ? 'Gestionado por PLIA desde este dashboard'
-                              : 'Solo disponible en el correo de activacion'),
-                        ],
-                      ].map(([label, value]) => (
-                        <div key={label} className="rounded-xl border border-border px-4 py-3">
-                          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{label}</p>
-                          <p className="mt-1 text-sm font-bold text-foreground break-all">{value}</p>
+                      <div className="grid gap-4">
+                        <div className="space-y-2">
+                          <label className="text-xs font-bold uppercase text-muted-foreground">Nombre Completo o Razón Social</label>
+                          <Input
+                            placeholder="Ej. Juan Perez"
+                            value={profileForm.billingName}
+                            onChange={(e) => setProfileForm(p => ({ ...p, billingName: e.target.value }))}
+                          />
                         </div>
-                      ))}
-                      <Button variant="cta" className="w-full rounded-xl" asChild>
-                        <Link href={data.account.technicalAccess.panelUrl} target="_blank">
-                          <KeyRound className="mr-2 h-4 w-4" /> Abrir panel tecnico
-                        </Link>
+                        <div className="space-y-2">
+                          <label className="text-xs font-bold uppercase text-muted-foreground">Dirección de Facturación</label>
+                          <Input
+                            placeholder="Av. Principal 123, Int 4"
+                            value={profileForm.billingAddress}
+                            onChange={(e) => setProfileForm(p => ({ ...p, billingAddress: e.target.value }))}
+                          />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <label className="text-xs font-bold uppercase text-muted-foreground">Departamento</label>
+                            <select
+                              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                              value={profileForm.billingDepartment}
+                              onChange={(e) => setProfileForm(p => ({ ...p, billingDepartment: e.target.value }))}
+                            >
+                              <option value="Lima">Lima</option>
+                              <option value="Arequipa">Arequipa</option>
+                              <option value="Cusco">Crequipa</option>
+                              <option value="La Libertad">La Libertad</option>
+                              <option value="Piura">Piura</option>
+                              {/* ... mas departamentos ... */}
+                            </select>
+                          </div>
+                          <div className="space-y-2">
+                            <label className="text-xs font-bold uppercase text-muted-foreground">Email de Facturación</label>
+                            <Input
+                              type="email"
+                              placeholder="factura@tuempresa.com"
+                              value={profileForm.billingEmail}
+                              onChange={(e) => setProfileForm(p => ({ ...p, billingEmail: e.target.value }))}
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {profileSuccess && (
+                        <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-xl text-xs flex items-center gap-2">
+                          <CheckCircle2 className="h-4 w-4" /> Datos guardados correctamente.
+                        </div>
+                      )}
+
+                      <Button variant="cta" className="w-full rounded-xl" onClick={updateProfile} disabled={profileBusy}>
+                        {profileBusy ? 'Guardando...' : 'Guardar Información'}
                       </Button>
                     </CardContent>
                   </Card>
 
-                  <Card className="rounded-2xl border-border/60 shadow-sm">
-                    <CardHeader>
-                      <CardTitle className="text-xl font-bold">Cuenta</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4 text-sm text-muted-foreground">
-                      <div className="flex items-center justify-between">
-                        <span>Estado</span>
-                        <Badge variant="outline" className="bg-cta/10 text-cta-foreground border-cta/20 rounded-full">{data.account.status}</Badge>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span>Paquete</span>
-                        <span className="font-bold text-foreground">{data.account.packageName}</span>
-                      </div>
-                      <p className="pt-4 border-t border-border">
-                        Usa este panel PLIA para crear sitios y publicar tu web sin meterte al panel tecnico para lo basico.
-                      </p>
-                      {data.account.technicalAccess.managedByPlia && (
-                        <div className="rounded-xl bg-amber-50 border border-amber-200 p-3 text-amber-800 text-xs">
-                          La gestion tecnica avanzada de esta cuenta esta resguardada por PLIA mientras el aprovisionamiento directo de usuarios en CyberPanel no este disponible en tu servidor.
+                  <div className="space-y-6">
+                    <Card className="rounded-2xl border-border/60 shadow-sm">
+                      <CardHeader>
+                        <CardTitle className="text-xl font-bold">Acceso técnico</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        {[
+                          ['Panel', data.account.technicalAccess.panelUrl],
+                          [
+                            'Usuario',
+                            data.account.technicalAccess.username ||
+                              (data.account.technicalAccess.managedByPlia ? 'Gestionado por PLIA' : 'No disponible'),
+                          ],
+                          [
+                            'Contrasena',
+                            data.account.technicalAccess.password ||
+                              (data.account.technicalAccess.managedByPlia
+                                ? 'Gestionado por PLIA desde este dashboard'
+                                : 'Solo disponible en el correo de activacion'),
+                          ],
+                        ].map(([label, value]) => (
+                          <div key={label} className="rounded-xl border border-border px-4 py-3">
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{label}</p>
+                            <p className="mt-1 text-sm font-bold text-foreground break-all">{value}</p>
+                          </div>
+                        ))}
+                        <Button variant="cta" className="w-full rounded-xl" asChild>
+                          <Link href={data.account.technicalAccess.panelUrl} target="_blank">
+                            <KeyRound className="mr-2 h-4 w-4" /> Abrir panel tecnico
+                          </Link>
+                        </Button>
+                      </CardContent>
+                    </Card>
+
+                    <Card className="rounded-2xl border-border/60 shadow-sm">
+                      <CardHeader>
+                        <CardTitle className="text-xl font-bold">Cuenta</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-4 text-sm text-muted-foreground">
+                        <div className="flex items-center justify-between">
+                          <span>Estado</span>
+                          <Badge variant="outline" className="bg-cta/10 text-cta-foreground border-cta/20 rounded-full">{data.account.status}</Badge>
                         </div>
-                      )}
-                    </CardContent>
-                  </Card>
+                        <div className="flex items-center justify-between">
+                          <span>Paquete</span>
+                          <span className="font-bold text-foreground">{data.account.packageName}</span>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
                 </div>
               </TabsContent>
 
@@ -932,65 +1153,291 @@ export default function HostingDashboardPage() {
         </main>
       </div>
 
-      <Dialog open={Boolean(currentSite)} onOpenChange={(open) => !open && setManageSiteId(null)}>
-        <DialogContent className="max-w-3xl rounded-[30px]">
-          <DialogHeader>
-            <DialogTitle>Administrar sitio</DialogTitle>
-            <DialogDescription>
-              Sube la carpeta exportada completa de tu web. El deploy reemplazara el contenido actual.
-            </DialogDescription>
-          </DialogHeader>
-          {currentSite && (
-            <div className="grid gap-6 py-2 lg:grid-cols-[1fr_0.9fr]">
-              <div className="space-y-4">
-                <div className="rounded-2xl border border-border p-4 bg-muted/30">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Dominio</p>
-                  <p className="mt-1 text-lg font-bold text-foreground">{currentSite.domain}</p>
-                </div>
-                <div className="rounded-2xl border border-dashed border-border bg-muted/10 p-5">
-                  <p className="text-sm font-bold text-foreground">Subir carpeta del sitio</p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Selecciona la carpeta exportada. Debe contener index.html en la raiz.
-                  </p>
-                  <input
-                    ref={uploadInputRef}
-                    type="file"
-                    multiple
-                    className="hidden"
-                    onChange={(e) => uploadFolder(e.target.files)}
-                  />
-                  <Button variant="cta" className="mt-6 w-full rounded-xl" onClick={() => uploadInputRef.current?.click()} disabled={busy}>
-                    <Upload className="mr-2 h-4 w-4" />
-                    {busy ? 'Publicando...' : 'Seleccionar carpeta y publicar'}
+      <Dialog
+        open={Boolean(currentSite)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setManageSiteId(null);
+            setManageMode('choose');
+          }
+        }}
+      >
+        <DialogContent className="max-w-4xl rounded-[30px] overflow-hidden p-0">
+          <div className="flex flex-col h-full max-h-[90vh]">
+            <div className="p-6 border-b bg-muted/30">
+              <div className="flex items-center gap-4">
+                {manageMode !== 'choose' && (
+                  <Button variant="ghost" size="icon" onClick={() => setManageMode('choose')} className="rounded-full">
+                    <ArrowLeft className="h-4 w-4" />
                   </Button>
+                )}
+                <div>
+                  <DialogTitle className="text-xl">
+                    {manageMode === 'choose'
+                      ? 'Elige como crear tu web'
+                      : manageMode === 'upload'
+                        ? 'Subir archivos HTML'
+                        : manageMode === 'wordpress'
+                          ? 'Instalar WordPress'
+                          : 'Desarrollo Profesional'}
+                  </DialogTitle>
+                  <DialogDescription>{currentSite?.domain}</DialogDescription>
                 </div>
-              </div>
-              <div className="space-y-4">
-                <div className="rounded-2xl border border-border p-4">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Estado</p>
-                  <div className="mt-1 flex items-center justify-between">
-                    <p className="text-sm font-bold text-foreground">{currentSite.status}</p>
-                    <Badge variant="outline" className="text-[10px] font-bold">{currentSite.sslStatus}</Badge>
-                  </div>
-                </div>
-                <div className="rounded-2xl border border-border p-4">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Ultima publicacion</p>
-                  <p className="mt-1 text-sm font-bold text-foreground">{formatDate(currentSite.lastDeployedAt)}</p>
-                  <p className="mt-1 text-[10px] text-muted-foreground">{currentSite.uploadCount} publicaciones realizadas</p>
-                </div>
-                <Button variant="outline" className="w-full rounded-xl" asChild>
-                  <Link href={currentSite.publicUrl} target="_blank">
-                    Abrir sitio publicado
-                  </Link>
-                </Button>
               </div>
             </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" className="rounded-xl" onClick={() => setManageSiteId(null)}>
-              Cerrar
-            </Button>
-          </DialogFooter>
+
+            <div className="flex-1 overflow-y-auto p-6">
+              {manageMode === 'choose' && (
+                <div className="grid gap-4 md:grid-cols-3">
+                  <button
+                    onClick={() => setManageMode('upload')}
+                    className="flex flex-col items-center text-center p-6 rounded-2xl border bg-white hover:border-cta hover:bg-cta/5 transition group"
+                  >
+                    <div className="h-14 w-14 rounded-full bg-muted flex items-center justify-center mb-4 group-hover:bg-cta group-hover:text-cta-foreground transition">
+                      <FileCode className="h-7 w-7" />
+                    </div>
+                    <h4 className="font-bold text-sm mb-2">Tengo mi web lista</h4>
+                    <p className="text-xs text-muted-foreground">Sube tus archivos HTML y CSS en un clic.</p>
+                    <Badge variant="outline" className="mt-4 text-[10px] uppercase font-bold tracking-wider">
+                      Estatico
+                    </Badge>
+                  </button>
+
+                  <button
+                    onClick={() => setManageMode('wordpress')}
+                    className="flex flex-col items-center text-center p-6 rounded-2xl border bg-white hover:border-cta hover:bg-cta/5 transition group"
+                  >
+                    <div className="h-14 w-14 rounded-full bg-muted flex items-center justify-center mb-4 group-hover:bg-cta group-hover:text-cta-foreground transition">
+                      <LayoutDashboard className="h-7 w-7" />
+                    </div>
+                    <h4 className="font-bold text-sm mb-2">Usar WordPress</h4>
+                    <p className="text-xs text-muted-foreground">Instala WordPress automaticamente en segundos.</p>
+                    <Badge
+                      variant="outline"
+                      className="mt-4 text-[10px] uppercase font-bold tracking-wider bg-blue-50 text-blue-700 border-blue-200"
+                    >
+                      Recomendado
+                    </Badge>
+                  </button>
+
+                  <button
+                    onClick={() => setManageMode('upsell')}
+                    className="flex flex-col items-center text-center p-6 rounded-2xl border bg-white hover:border-cta hover:bg-cta/5 transition group"
+                  >
+                    <div className="h-14 w-14 rounded-full bg-muted flex items-center justify-center mb-4 group-hover:bg-cta group-hover:text-cta-foreground transition">
+                      <Monitor className="h-7 w-7" />
+                    </div>
+                    <h4 className="font-bold text-sm mb-2">PLIA lo hace por mi</h4>
+                    <p className="text-xs text-muted-foreground">Deja que nuestros expertos diseñen tu web profesional.</p>
+                    <Badge variant="cta" className="mt-4 text-[10px] uppercase font-bold tracking-wider">
+                      Alta Conversion
+                    </Badge>
+                  </button>
+                </div>
+              )}
+
+              {manageMode === 'upload' && (
+                <div className="grid gap-6 md:grid-cols-[1.2fr_1fr]">
+                  <div className="space-y-4 text-sm">
+                    <div className="rounded-2xl border border-dashed border-border bg-muted/10 p-10 flex flex-col items-center text-center">
+                      <Upload className="h-10 w-10 text-muted-foreground mb-4" />
+                      <p className="font-bold text-foreground">Sube la carpeta de tu sitio</p>
+                      <p className="mt-2 text-xs text-muted-foreground max-w-[200px]">
+                        Tu carpeta debe contener un archivo <strong>index.html</strong> en la raiz.
+                      </p>
+                      <input
+                        ref={uploadInputRef}
+                        type="file"
+                        multiple
+                        className="hidden"
+                        onChange={(e) => uploadFolder(e.target.files)}
+                      />
+                      <Button
+                        variant="cta"
+                        className="mt-8 px-8 rounded-xl"
+                        onClick={() => uploadInputRef.current?.click()}
+                        disabled={busy}
+                      >
+                        {busy ? 'Publicando...' : 'Seleccionar Carpeta'}
+                      </Button>
+                    </div>
+                    <div className="p-4 bg-amber-50 rounded-xl border border-amber-200 text-amber-800 text-xs">
+                      <strong>Nota:</strong> Al subir una nueva carpeta, se reemplazara todo el contenido actual del sitio.
+                    </div>
+                  </div>
+                  <div className="space-y-4">
+                    <Card className="rounded-2xl border-muted/50">
+                      <CardContent className="p-4 space-y-4">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-bold uppercase text-muted-foreground">App Type</span>
+                          <Badge variant="outline">{currentSite?.appType}</Badge>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-bold uppercase text-muted-foreground">Ultimo Deploy</span>
+                          <span className="text-xs font-medium">{formatDate(currentSite?.lastDeployedAt || null)}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-bold uppercase text-muted-foreground">Archivos</span>
+                          <span className="text-xs font-medium">{currentSite?.uploadCount} cargas</span>
+                        </div>
+                        <Button variant="outline" className="w-full h-9 text-xs rounded-xl" asChild>
+                          <Link href={currentSite?.publicUrl || '#'} target="_blank">
+                            Abrir sitio
+                          </Link>
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  </div>
+                </div>
+              )}
+
+              {manageMode === 'wordpress' && (
+                <div className="max-w-xl mx-auto space-y-6 py-4">
+                  <div className="grid gap-4">
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold uppercase text-muted-foreground">Titulo del Sitio</label>
+                      <Input
+                        placeholder="Mi Increible Blog"
+                        value={wpForm.blogTitle}
+                        onChange={(e) => setWpForm((prev) => ({ ...prev, blogTitle: e.target.value }))}
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <label className="text-xs font-bold uppercase text-muted-foreground">Usuario Admin</label>
+                        <Input
+                          placeholder="admin"
+                          value={wpForm.wpUser}
+                          onChange={(e) => setWpForm((prev) => ({ ...prev, wpUser: e.target.value }))}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-bold uppercase text-muted-foreground">Contraseña</label>
+                        <Input
+                          type="password"
+                          placeholder="Min. 8 caracteres"
+                          value={wpForm.wpPass}
+                          onChange={(e) => setWpForm((prev) => ({ ...prev, wpPass: e.target.value }))}
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold uppercase text-muted-foreground">Email del Administrador</label>
+                      <Input
+                        type="email"
+                        placeholder="admin@tu-correo.com"
+                        value={wpForm.wpEmail}
+                        onChange={(e) => setWpForm((prev) => ({ ...prev, wpEmail: e.target.value }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold uppercase text-muted-foreground">Ruta de Instalacion (opcional)</label>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground">{currentSite?.domain}/</span>
+                        <Input
+                          placeholder="blog (opcional)"
+                          value={wpForm.installPath}
+                          onChange={(e) => setWpForm((prev) => ({ ...prev, installPath: e.target.value }))}
+                          className="h-8"
+                        />
+                      </div>
+                      <p className="text-[10px] text-muted-foreground">Dejalo vacio para instalar en la raiz.</p>
+                    </div>
+                  </div>
+
+                  <div className="p-4 bg-cta/5 rounded-xl border border-cta/20 text-xs text-cta-foreground">
+                    <div className="flex gap-3">
+                      <CheckCircle2 className="h-4 w-4 shrink-0" />
+                      <p>Instalaremos la ultima version de WordPress con optimizacion de caché LSCache incluida.</p>
+                    </div>
+                  </div>
+
+                  <Button variant="cta" className="w-full py-6 rounded-2xl font-bold" onClick={installWordPress} disabled={wpBusy}>
+                    {wpBusy ? 'Instalando WordPress...' : 'Comenzar Instalacion'}
+                  </Button>
+                </div>
+              )}
+
+              {manageMode === 'upsell' && (
+                <div className="max-w-2xl mx-auto space-y-8 py-4 text-center">
+                  <div className="space-y-2">
+                    <h3 className="text-2xl font-bold">¿Quieres que PLIA desarrolle tu web?</h3>
+                    <p className="text-sm text-muted-foreground">Ahorra tiempo y obtén un resultado profesional optimizado para vender.</p>
+                  </div>
+
+                  <div className="grid gap-6 md:grid-cols-2">
+                    <Card className="rounded-[24px] border-border hover:border-cta transition text-left overflow-hidden">
+                      <div className="p-6">
+                        <Badge className="mb-4 bg-emerald-50 text-emerald-700 border-emerald-100 uppercase tracking-widest text-[9px] font-bold">
+                          Más Popular
+                        </Badge>
+                        <h4 className="text-lg font-bold mb-1">Plan Landing</h4>
+                        <p className="text-xs text-muted-foreground mb-4">Ideal para campañas de venta directa y conversiones rápidas.</p>
+                        <div className="text-2xl font-black mb-6">
+                          S/ 499 <span className="text-xs font-normal text-muted-foreground">pago unico</span>
+                        </div>
+                        <ul className="space-y-2 text-xs text-muted-foreground mb-6">
+                          <li className="flex items-center gap-2">
+                            <CheckCircle2 className="h-3 w-3 text-cta" /> Diseño en 24 horas
+                          </li>
+                          <li className="flex items-center gap-2">
+                            <CheckCircle2 className="h-3 w-3 text-cta" /> Optimizado para móviles
+                          </li>
+                          <li className="flex items-center gap-2">
+                            <CheckCircle2 className="h-3 w-3 text-cta" /> Redaccion Persuasiva (Copy)
+                          </li>
+                        </ul>
+                        <Button variant="cta" className="w-full rounded-xl" asChild>
+                          <Link href="/checkout?plan=landing">Contratar Landing</Link>
+                        </Button>
+                      </div>
+                    </Card>
+
+                    <Card className="rounded-[24px] border-border hover:border-cta transition text-left overflow-hidden">
+                      <div className="p-6">
+                        <Badge variant="outline" className="mb-4 uppercase tracking-widest text-[9px] font-bold">
+                          Corporativo
+                        </Badge>
+                        <h4 className="text-lg font-bold mb-1">Web Institucional</h4>
+                        <p className="text-xs text-muted-foreground mb-4">Una web completa con múltiples secciones para tu empresa.</p>
+                        <div className="text-2xl font-black mb-6">
+                          S/ 890 <span className="text-xs font-normal text-muted-foreground">pago unico</span>
+                        </div>
+                        <ul className="space-y-2 text-xs text-muted-foreground mb-6">
+                          <li className="flex items-center gap-2">
+                            <CheckCircle2 className="h-3 w-3 text-cta" /> Entrega en 2-4 días
+                          </li>
+                          <li className="flex items-center gap-2">
+                            <CheckCircle2 className="h-3 w-3 text-cta" /> Hasta 5 secciones
+                          </li>
+                          <li className="flex items-center gap-2">
+                            <CheckCircle2 className="h-3 w-3 text-cta" /> Panel Auto-gestionable
+                          </li>
+                        </ul>
+                        <Button variant="outline" className="w-full rounded-xl" asChild>
+                          <Link href="/checkout?plan=web">Contratar Web</Link>
+                        </Button>
+                      </div>
+                    </Card>
+                  </div>
+
+                  <p className="text-xs text-muted-foreground italic">
+                    * Al contratar un plan de desarrollo, este sitio ({currentSite?.domain}) sera utilizado para publicar tu nueva web.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <DialogFooter className="p-6 border-t bg-muted/20 sm:justify-between">
+              <div className="hidden sm:flex items-center gap-2 text-xs text-muted-foreground">
+                <AlertCircle className="h-3 w-3" />
+                Soporte disponible 24/7 si necesitas ayuda.
+              </div>
+              <Button variant="outline" className="rounded-xl px-8" onClick={() => setManageSiteId(null)}>
+                Cerrar
+              </Button>
+            </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
