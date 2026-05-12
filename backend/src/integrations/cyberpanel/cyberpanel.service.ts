@@ -161,15 +161,18 @@ export class CyberpanelService {
     return /(already exists|exists already|duplicate|taken|is not unique)/i.test(message);
   }
 
-  private async request(path: string, body: Record<string, any>, timeout = 60000, authCookie?: string) {
+  private async request(path: string, body: Record<string, any>, timeout = 60000, authContext?: { cookie: string, csrfToken?: string }) {
     const url = `${this.baseUrl}${path}`;
     this.logger.log(
       `CyberPanel request ${path} adminUser=${body.adminUser || 'missing'} hasAdminPass=${Boolean(body.adminPass)}`,
     );
     try {
       const reqHeaders = { ...this.headers };
-      if (authCookie) {
-        reqHeaders['Cookie'] = authCookie;
+      if (authContext) {
+        reqHeaders['Cookie'] = authContext.cookie;
+        if (authContext.csrfToken) {
+          reqHeaders['X-CSRFToken'] = authContext.csrfToken;
+        }
       }
       
       const res = await axios.post(url, body, {
@@ -204,7 +207,7 @@ export class CyberpanelService {
     }
   }
 
-  private async getAuthCookie(): Promise<string | undefined> {
+  private async getAuthCookie(): Promise<{ cookie: string, csrfToken?: string } | undefined> {
     const adminUser = process.env.CYBERPANEL_ADMIN_USER;
     const adminPass = process.env.CYBERPANEL_ADMIN_PASS;
     if (!adminUser || !adminPass) return undefined;
@@ -222,9 +225,13 @@ export class CyberpanelService {
 
       const cookies = res.headers['set-cookie'];
       if (cookies && cookies.length > 0) {
-        // Encontrar el CSRFToken y el sessionid si existen
         const cookieStr = cookies.map(c => c.split(';')[0]).join('; ');
-        return cookieStr;
+        let csrfToken = undefined;
+        for (const c of cookies) {
+          const match = c.match(/csrftoken=([^;]+)/);
+          if (match) csrfToken = match[1];
+        }
+        return { cookie: cookieStr, csrfToken };
       }
     } catch (error) {
       this.logger.warn('No se pudo obtener la cookie de sesion de CyberPanel', error);
@@ -761,10 +768,10 @@ export class CyberpanelService {
 
     // Obtenemos una cookie de sesion real porque este endpoint interno (/websites/installWordpress)
     // requiere que haya un request.session válido.
-    const cookie = await this.getAuthCookie();
+    const authContext = await this.getAuthCookie();
 
     // Aumentamos el timeout para WordPress ya que es una operacion pesada (2 minutos)
-    return this.request(this.installWPPath, body, 120000, cookie);
+    return this.request(this.installWPPath, body, 120000, authContext);
   }
 
   async changePackage(username: string, packageName: string) {
