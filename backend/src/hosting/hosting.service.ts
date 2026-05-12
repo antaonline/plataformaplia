@@ -166,8 +166,10 @@ export class HostingService {
     });
 
     if (!sub) throw new BadRequestException('No tienes una suscripcion activa para mejorar.');
+    const currentSlug = sub.plan.slug;
+    if (!currentSlug) throw new BadRequestException('El plan actual no es valido.');
 
-    const currentDef = getHostingPlanDefinition(sub.plan.slug.replace(/^hosting-/, ''));
+    const currentDef = getHostingPlanDefinition(currentSlug.replace(/^hosting-/, ''));
     if (!currentDef) throw new BadRequestException('No se pudo determinar tu plan actual.');
 
     // Calcular dias restantes
@@ -671,7 +673,8 @@ export class HostingService {
       return this.getDashboard(userId);
     }
 
-    const definition = this.getPlanDefinitionOrThrow(order.plan.slug.replace(/^hosting-/, ''));
+    const planSlug = order.plan.slug;
+    const definition = this.getPlanDefinitionOrThrow(planSlug.replace(/^hosting-/, ''));
     const cycleMonths = order.billingCycleMonths || 12;
     const cycleAmount = Number(order.amount);
     const endDate = addMonths(new Date(), cycleMonths);
