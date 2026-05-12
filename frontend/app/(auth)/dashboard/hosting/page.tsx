@@ -29,6 +29,7 @@ import {
   AlertCircle,
   Monitor,
   Check,
+  Clock,
 } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
@@ -883,13 +884,18 @@ export default function HostingDashboardPage() {
                       <div className="grid gap-3">
                         {(() => {
                           const hierarchy = ['profesional', 'premium', 'agencia'];
-                          const currentIndex = hierarchy.indexOf(data.plan.slug || '');
+                          // Normalizar el slug actual para la comparacion
+                          const currentSlug = (data.plan.slug || '').toLowerCase().replace(/^hosting-/, '');
+                          const currentIndex = hierarchy.indexOf(currentSlug);
                           
                           return plans.map((p) => {
-                            const pIndex = hierarchy.indexOf(p.slug);
-                            const isCurrent = p.slug === data.plan.slug || p.name === data.plan.name;
+                            const pSlug = p.slug.toLowerCase().replace(/^hosting-/, '');
+                            const pIndex = hierarchy.indexOf(pSlug);
+                            
+                            const isCurrent = pSlug === currentSlug || p.name === data.plan.name;
+                            
+                            // Si es un plan inferior, lo ocultamos por completo de esta seccion de "potencia"
                             const isLower = pIndex !== -1 && currentIndex !== -1 && pIndex < currentIndex;
-
                             if (isLower) return null;
 
                             return (

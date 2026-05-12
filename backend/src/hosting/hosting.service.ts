@@ -297,6 +297,7 @@ export class HostingService {
         cycleAmount: (targetDef.monthlyPricing[12] || targetDef.regularMonthlyPrice) * 12,
         metadata: {
           ...(sub.metadata as any || {}),
+          planSlug: targetDef.slug,
           upgradedAt: new Date().toISOString(),
           upgradeCostPaid: cost,
           previousPlan: sub.plan.slug,
@@ -568,7 +569,8 @@ export class HostingService {
       },
       plan: {
         name: account.activeSubscription?.plan?.name ?? 'Hosting PLIA',
-        slug: (account.activeSubscription?.metadata as any)?.planSlug ?? null,
+        slug: (account.activeSubscription?.metadata as any)?.planSlug ?? 
+              (account.activeSubscription?.plan?.slug ? account.activeSubscription.plan.slug.replace(/^hosting-/, '') : null),
         billingCycleMonths: account.activeSubscription?.billingCycleMonths ?? 12,
         renewsAt: account.activeSubscription?.endDate ?? null,
         price: Number(account.activeSubscription?.cycleAmount ?? 0),
