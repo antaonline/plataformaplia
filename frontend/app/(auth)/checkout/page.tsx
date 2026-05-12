@@ -42,6 +42,7 @@ function Content() {
   const searchParams = useSearchParams();
 
   const planParam = (searchParams.get('plan') ?? '').toLowerCase();
+  const domainParam = searchParams.get('domain') ?? '';
 
   const [step, setStep] = useState<1 | 2>(1);
   const [plans, setPlans] = useState<Plan[]>([]);
@@ -166,6 +167,17 @@ function Content() {
         setSelectedPlanId(null);
       }
     }, [planParam, plans]);
+
+    useEffect(() => {
+      if (domainParam) {
+        setSelectedDomain({
+          domain: domainParam,
+          available: true,
+          price: 0,
+          currency: 'PEN',
+        });
+      }
+    }, [domainParam]);
 
     const selectedPlan = useMemo(
       () => plans.find((p) => p.id === selectedPlanId) ?? null,
@@ -479,60 +491,77 @@ function Content() {
                     </CardContent>
                   </Card>
 
-                  <Card className="rounded-2xl">
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-xl">Asegura tu dominio</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <p className="text-sm text-muted-foreground">
-                        Busca un dominio disponible y agregalo a tu pedido.
-                      </p>
+                  {!domainParam && (
+                    <Card className="rounded-2xl">
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-xl">Asegura tu dominio</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <p className="text-sm text-muted-foreground">
+                          Busca un dominio disponible y agregalo a tu pedido.
+                        </p>
 
-                      <div className="flex flex-col md:flex-row gap-3">
-                        <Input
-                          placeholder="tudominio.com"
-                          value={domainQuery}
-                          onChange={(e) => setDomainQuery(e.target.value)}
-                        />
-                        <Button variant="cta" onClick={searchDomain} disabled={domainLoading}>
-                          {domainLoading ? 'Buscando...' : 'Buscar'}
-                        </Button>
-                      </div>
+                        <div className="flex flex-col md:flex-row gap-3">
+                          <Input
+                            placeholder="tudominio.com"
+                            value={domainQuery}
+                            onChange={(e) => setDomainQuery(e.target.value)}
+                          />
+                          <Button variant="cta" onClick={searchDomain} disabled={domainLoading}>
+                            {domainLoading ? 'Buscando...' : 'Buscar'}
+                          </Button>
+                        </div>
 
-                      {domainError && (
-                        <p className="text-sm text-destructive">{domainError}</p>
-                      )}
+                        {domainError && (
+                          <p className="text-sm text-destructive">{domainError}</p>
+                        )}
 
-                      <div className="space-y-3">
-                        {domainResults.map((result) => (
-                          <div
-                            key={result.domain}
-                            className="flex items-center justify-between rounded-xl border border-border bg-background px-4 py-3"
-                          >
-                            <div>
-                              <p className="font-medium">{result.domain}</p>
-                              <p className="text-xs text-muted-foreground">
-                                {result.available ? 'Disponible' : 'No disponible'}
-                              </p>
+                        <div className="space-y-3">
+                          {domainResults.map((result) => (
+                            <div
+                              key={result.domain}
+                              className="flex items-center justify-between rounded-xl border border-border bg-background px-4 py-3"
+                            >
+                              <div>
+                                <p className="font-medium">{result.domain}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  {result.available ? 'Disponible' : 'No disponible'}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <span className="text-sm font-semibold">
+                                  {result.currency} {result.price}
+                                </span>
+                                <Button
+                                  variant="cta"
+                                  size="sm"
+                                  disabled={!result.available}
+                                  onClick={() => setSelectedDomain(result)}
+                                >
+                                  Agregar
+                                </Button>
+                              </div>
                             </div>
-                            <div className="flex items-center gap-3">
-                              <span className="text-sm font-semibold">
-                                {result.currency} {result.price}
-                              </span>
-                              <Button
-                                variant="cta"
-                                size="sm"
-                                disabled={!result.available}
-                                onClick={() => setSelectedDomain(result)}
-                              >
-                                Agregar
-                              </Button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </CardContent>
-                  </Card>
+                          ))}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+                  {domainParam && (
+                    <Card className="rounded-2xl border-cta/20 bg-cta/5">
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-sm font-bold uppercase tracking-widest text-cta-foreground/70">
+                          Dominio Vinculado
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <p className="text-lg font-bold text-foreground">{domainParam}</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Este dominio sera utilizado para tu nuevo sitio web profesional.
+                        </p>
+                      </CardContent>
+                    </Card>
+                  )}
                 </>
               )}
 

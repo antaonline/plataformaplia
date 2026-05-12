@@ -62,7 +62,7 @@ type DashboardData = {
       managedByPlia?: boolean;
     };
   };
-  plan: { name: string; billingCycleMonths: number; renewsAt: string | null; price: number };
+  plan: { name: string; slug: string | null; billingCycleMonths: number; renewsAt: string | null; price: number };
   usage: {
     websites: { used: number; max: number };
     storage: { usedMb: number; maxMb: number };
