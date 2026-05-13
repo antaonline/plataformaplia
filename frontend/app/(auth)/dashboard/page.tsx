@@ -846,6 +846,9 @@ export default function DashboardPage() {
     const rawProgress = Math.min(elapsed / totalMs, 1);
     
     // Solo está completo si ya fue ENTREGADO (DELIVERED)
+    const data = (project.onboardingData as any) || {};
+    const aiGeneration = data.aiGeneration || {};
+    const hasAiError = aiGeneration.status === 'FAILED';
     const isComplete = project.status === 'DELIVERED';
     const progress = isComplete ? 1 : Math.min(rawProgress, 0.95);
     const step = isComplete ? 4 : Math.max(1, Math.min(4, Math.floor(progress * 4) + 1));
@@ -858,10 +861,12 @@ export default function DashboardPage() {
       progressPercent: Math.round(progress * 100),
       currentStep: step,
       isComplete,
+      hasAiError,
+      aiErrorMsg: aiGeneration.error,
       timeRemaining: { days, hours },
       deadlineMs,
     };
-  }, [project?.deadline, project?.startedAt, project?.status, project?.type, now]);
+  }, [project?.deadline, project?.startedAt, project?.status, project?.type, project?.onboardingData, now]);
 
   const resolvedPublicUrl = useMemo(() => {
     if (!project) return '';
@@ -1392,6 +1397,28 @@ export default function DashboardPage() {
     const eligibleAt = end - 30 * 24 * 60 * 60 * 1000;
     return now >= eligibleAt;
   }, [project?.subscription?.endDate, now]);
+
+  const handleRetryAi = async () => {
+    if (!project) return;
+    try {
+      const token = localStorage.getItem('access_token');
+      const res = await fetch(`${apiBase}/projects/${project.id}/generate-now`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({})
+      });
+      if (!res.ok) {
+        throw new Error(await res.text());
+      }
+      toast.success('Generación reiniciada. La IA esta trabajando de nuevo.');
+      loadProjects();
+    } catch (err: any) {
+      toast.error(err.message || 'Error al reiniciar la generación.');
+    }
+  };
 
   if (loading) {
     return (
@@ -2902,8 +2929,18 @@ export default function DashboardPage() {
                           })}
                         </div>
 
-                        {progressInfo?.timeRemaining && !progressInfo.isComplete && (
-                          <div className="rounded-xl border border-border bg-white p-4 flex items-center justify-between">
+                        {progressInfo?.hasAiError ? (
+                          <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 mt-4">
+                            <p className="font-bold text-sm text-destructive flex items-center gap-2">
+                              <AlertCircle className="h-4 w-4" /> Error en la generación IA
+                            </p>
+                            <p className="text-xs mt-1 text-muted-foreground">{progressInfo.aiErrorMsg || 'Ocurrió un problema de conexión con OpenAI.'}</p>
+                            <Button onClick={handleRetryAi} variant="outline" size="sm" className="mt-3 text-xs w-full">
+                              Reintentar Generacion
+                            </Button>
+                          </div>
+                        ) : progressInfo?.timeRemaining && !progressInfo.isComplete ? (
+                          <div className="rounded-xl border border-border bg-white p-4 flex items-center justify-between mt-4">
                             <div>
                               <p className="text-sm text-muted-foreground">Tiempo restante</p>
                               <p className="text-xl font-semibold">
@@ -2912,7 +2949,7 @@ export default function DashboardPage() {
                             </div>
                             <div className="text-sm text-muted-foreground">Entrega estimada</div>
                           </div>
-                        )}
+                        ) : null}
                       </div>
                     </CardContent>
                   </Card>

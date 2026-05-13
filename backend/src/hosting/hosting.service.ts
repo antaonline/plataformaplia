@@ -997,6 +997,22 @@ export class HostingService {
 
     try {
       fs.mkdirSync(targetRoot, { recursive: true });
+
+      // Si había WordPress, intentamos leer la BD para borrarla y dejar el entorno limpio.
+      const wpConfigPath = join(targetRoot, 'wp-config.php');
+      if (fs.existsSync(wpConfigPath)) {
+        try {
+          const wpConfig = fs.readFileSync(wpConfigPath, 'utf8');
+          const dbNameMatch = wpConfig.match(/define\(\s*'DB_NAME'\s*,\s*'([^']+)'\s*\);/);
+          if (dbNameMatch && dbNameMatch[1]) {
+            await this.cyberpanelService.deleteDatabase(dbNameMatch[1]);
+            this.logger.log(`Base de datos ${dbNameMatch[1]} eliminada tras sobreescribir WordPress.`);
+          }
+        } catch (e) {
+          this.logger.warn(`No se pudo eliminar la base de datos de WordPress del sitio ${site.domain}: ${e.message}`);
+        }
+      }
+
       this.cleanDirectoryPreserving(targetRoot, ['.well-known']);
 
       normalizedPaths.forEach((relativePath, index) => {

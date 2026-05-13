@@ -796,6 +796,16 @@ export class CyberpanelService {
     return this.request(this.installWPPath, body, 120000, authContext);
   }
 
+  public async deleteDatabase(dbName: string) {
+    const authContext = await this.getAuthCookie();
+    const res = await this.request('/dataBases/submitDatabaseDeletion', { dbName }, 60000, authContext);
+    
+    if (res.data?.status === 0 || res.data?.deleteStatus === 0) {
+      throw new Error(res.data.error_message || 'Error al eliminar base de datos');
+    }
+    return true;
+  }
+
   async changePackage(username: string, packageName: string) {
     const body: Record<string, any> = {
       websiteOwner: username,

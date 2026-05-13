@@ -30,6 +30,9 @@ import {
   Monitor,
   Check,
   Clock,
+  Eye,
+  EyeOff,
+  ExternalLink,
 } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
@@ -129,7 +132,7 @@ export default function HostingDashboardPage() {
   const [useSavedCardUpgrade, setUseSavedCardUpgrade] = useState(true);
 
   const [manageSiteId, setManageSiteId] = useState<number | null>(null);
-  const [manageMode, setManageMode] = useState<'choose' | 'upload' | 'wordpress' | 'upsell'>('choose');
+  const [manageMode, setManageMode] = useState<'choose' | 'upload' | 'wordpress' | 'wordpress_success' | 'upsell'>('choose');
   const [wpForm, setWpForm] = useState({
     blogTitle: '',
     wpUser: 'admin',
@@ -137,6 +140,9 @@ export default function HostingDashboardPage() {
     wpEmail: '',
     installPath: '',
   });
+  const [wpProgress, setWpProgress] = useState(0);
+  const [wpSuccessCreds, setWpSuccessCreds] = useState<{user: string, pass: string} | null>(null);
+  const [showWpPass, setShowWpPass] = useState(false);
 
   useEffect(() => {
     if (manageMode === 'wordpress' && user?.email && !wpForm.wpEmail) {
@@ -412,19 +418,34 @@ export default function HostingDashboardPage() {
     const token = localStorage.getItem('access_token');
     if (!token) return;
     setWpBusy(true);
+    setWpProgress(5);
+    const progressInterval = setInterval(() => {
+      setWpProgress((prev) => {
+        if (prev >= 90) return prev;
+        return prev + Math.floor(Math.random() * 8) + 2;
+      });
+    }, 1500);
+
     try {
       const res = await fetch(`${apiBase}/hosting/sites/${manageSiteId}/install-wordpress`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify(wpForm),
       });
+      clearInterval(progressInterval);
       if (!res.ok) throw new Error((await res.text()) || 'No se pudo instalar WordPress.');
+      setWpProgress(100);
       await load();
-      setManageMode('choose');
+      setTimeout(() => {
+        setWpBusy(false);
+        setWpSuccessCreds({ user: wpForm.wpUser, pass: wpForm.wpPass });
+        setManageMode('wordpress_success');
+      }, 500);
     } catch (err: any) {
+      clearInterval(progressInterval);
       setError(err?.message ?? 'No se pudo instalar WordPress.');
-    } finally {
       setWpBusy(false);
+      setWpProgress(0);
     }
   };
 
@@ -1309,12 +1330,14 @@ export default function HostingDashboardPage() {
                 <div>
                   <DialogTitle className="text-xl">
                     {manageMode === 'choose'
-                      ? 'Elige como crear tu web'
+                      ? currentSite?.appType === 'WORDPRESS' ? 'Administrar WordPress' : 'Elige como crear tu web'
                       : manageMode === 'upload'
                         ? 'Subir archivos HTML'
                         : manageMode === 'wordpress'
                           ? 'Instalar WordPress'
-                          : 'Desarrollo Profesional'}
+                          : manageMode === 'wordpress_success'
+                            ? '¡Instalacion Exitosa!'
+                            : 'Desarrollo Profesional'}
                   </DialogTitle>
                   <DialogDescription>{currentSite?.domain}</DialogDescription>
                 </div>
@@ -1322,7 +1345,7 @@ export default function HostingDashboardPage() {
             </div>
 
             <div className="flex-1 overflow-y-auto p-6">
-              {manageMode === 'choose' && (
+              {manageMode === 'choose' && currentSite?.appType !== 'WORDPRESS' && (
                 <div className="grid gap-4 md:grid-cols-3">
                   <button
                     onClick={() => setManageMode('upload')}
@@ -1368,6 +1391,50 @@ export default function HostingDashboardPage() {
                       Alta Conversion
                     </Badge>
                   </button>
+                </div>
+              )}
+
+              {manageMode === 'choose' && currentSite?.appType === 'WORDPRESS' && (
+                <div className="max-w-md mx-auto space-y-6 py-6 text-center">
+                  <div className="h-20 w-20 rounded-full bg-[#0073AA]/10 mx-auto flex items-center justify-center">
+                    <img src="https://s.w.org/style/images/about/WordPress-logotype-standard.png" className="w-12 h-12 object-contain opacity-80" alt="WordPress" />
+                  </div>
+                  <div>
+                    <h3 className="text-2xl font-bold">WordPress Activo</h3>
+                    <p className="text-sm text-muted-foreground mt-2">
+                      Tu sitio {currentSite.domain} esta ejecutando WordPress de forma nativa.
+                    </p>
+                  </div>
+                  
+                  <div className="grid gap-3 pt-2">
+                    <Button variant="cta" className="w-full py-6 rounded-xl font-bold text-base shadow-lg shadow-cta/20" asChild>
+                      <Link href={`https://${currentSite.domain}/wp-admin`} target="_blank">
+                        <LayoutDashboard className="mr-2 h-5 w-5" /> Ir a mi panel de WordPress
+                      </Link>
+                    </Button>
+                    <Button variant="outline" className="w-full py-6 rounded-xl bg-white" asChild>
+                      <Link href={`https://${currentSite.domain}`} target="_blank">
+                        <Globe className="mr-2 h-5 w-5" /> Ver mi sitio en vivo <ExternalLink className="ml-2 h-4 w-4" />
+                      </Link>
+                    </Button>
+                  </div>
+
+                  <div className="mt-8 border-t border-border pt-6">
+                    <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-3">¿Prefieres algo mas facil?</p>
+                    <Button variant="outline" className="w-full h-auto py-4 rounded-xl flex items-center gap-4 text-left group" onClick={() => setManageMode('upsell')}>
+                      <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center shrink-0 group-hover:bg-cta/10 group-hover:text-cta transition-colors">
+                        <Monitor className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <p className="font-bold text-sm">PLIA lo hace por mi</p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">Si WordPres es muy dificil, contrata el diseño web profesional y optimizado.</p>
+                      </div>
+                    </Button>
+                  </div>
+
+                  <div className="bg-amber-50 border border-amber-200 text-amber-800 text-xs p-4 rounded-xl mt-4 text-left">
+                    <p><strong>Nota:</strong> Si recien instalaste WordPress y no cargó inmediatamente, por favor espera unos minutos. Los servidores pueden tardar un poco en propagar los cambios.</p>
+                  </div>
                 </div>
               )}
 
@@ -1480,22 +1547,84 @@ export default function HostingDashboardPage() {
                     </div>
                   </div>
 
-                  <div className="p-4 bg-cta/5 rounded-xl border border-cta/20 text-xs text-cta-foreground">
-                    <div className="flex gap-3">
-                      <CheckCircle2 className="h-4 w-4 shrink-0" />
+                  {wpBusy ? (
+                    <div className="text-center py-10 space-y-6">
+                      <div className="inline-flex h-20 w-20 items-center justify-center rounded-full bg-cta/10">
+                        <Clock className="h-10 w-10 text-cta animate-spin-slow" />
+                      </div>
                       <div>
-                        <p className="font-bold">Instalaremos la ultima version de WordPress.</p>
-                        <p className="mt-1 opacity-80">Este proceso puede tardar hasta 2 minutos mientras configuramos tu base de datos y archivos. Por favor, no cierres esta ventana.</p>
+                        <h4 className="text-xl font-bold">Instalando WordPress...</h4>
+                        <p className="text-sm text-muted-foreground mt-2 max-w-sm mx-auto">
+                          Estamos configurando la base de datos y desplegando los archivos en tu servidor.
+                        </p>
+                      </div>
+                      <div className="max-w-xs mx-auto space-y-2">
+                        <Progress value={wpProgress} className="h-3" />
+                        <p className="text-xs font-bold text-muted-foreground text-right">{wpProgress}%</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="p-4 bg-cta/5 rounded-xl border border-cta/20 text-xs text-cta-foreground">
+                        <div className="flex gap-3">
+                          <CheckCircle2 className="h-4 w-4 shrink-0" />
+                          <div>
+                            <p className="font-bold">Instalaremos la ultima version de WordPress.</p>
+                            <p className="mt-1 opacity-80">Este proceso puede tardar un poco mientras configuramos tu base de datos y archivos.</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <Button variant="cta" className="w-full py-6 rounded-2xl font-bold text-base shadow-lg shadow-cta/20" onClick={installWordPress} disabled={wpBusy}>
+                        Comenzar Instalacion
+                      </Button>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {manageMode === 'wordpress_success' && (
+                <div className="max-w-md mx-auto space-y-6 py-6 text-center">
+                  <div className="inline-flex h-24 w-24 items-center justify-center rounded-full bg-emerald-100 mb-2">
+                    <CheckCircle2 className="h-12 w-12 text-emerald-600" />
+                  </div>
+                  <div>
+                    <h3 className="text-2xl font-bold text-foreground">¡Tu WordPress ya esta instalado!</h3>
+                    <p className="text-sm text-muted-foreground mt-2">
+                      Ya puedes ingresar a tu nuevo panel de administracion. Por favor, guarda tus credenciales en un lugar seguro.
+                    </p>
+                  </div>
+                  
+                  <div className="bg-muted/30 border border-border rounded-2xl p-5 text-left space-y-4">
+                    <p className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground border-b border-border/50 pb-2">Tus Credenciales</p>
+                    <div className="grid grid-cols-[100px_1fr] items-center gap-2">
+                      <span className="text-sm font-semibold text-muted-foreground">Usuario:</span>
+                      <span className="text-sm font-bold bg-white px-2 py-1 rounded border inline-block w-full">{wpSuccessCreds?.user}</span>
+                    </div>
+                    <div className="grid grid-cols-[100px_1fr] items-center gap-2">
+                      <span className="text-sm font-semibold text-muted-foreground">Contraseña:</span>
+                      <div className="relative">
+                        <input
+                          type={showWpPass ? 'text' : 'password'}
+                          readOnly
+                          value={wpSuccessCreds?.pass}
+                          className="text-sm font-bold bg-white px-2 py-1 rounded border w-full pr-10 outline-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowWpPass(!showWpPass)}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                        >
+                          {showWpPass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
                       </div>
                     </div>
                   </div>
 
-                  <Button variant="cta" className="w-full py-6 rounded-2xl font-bold" onClick={installWordPress} disabled={wpBusy}>
-                    {wpBusy ? (
-                      <span className="flex items-center gap-2">
-                        <Clock className="h-4 w-4 animate-spin-slow" /> Instalando WordPress...
-                      </span>
-                    ) : 'Comenzar Instalacion'}
+                  <Button variant="cta" className="w-full py-6 rounded-2xl font-bold text-base shadow-lg shadow-cta/20 mt-4" asChild>
+                    <Link href={`https://${currentSite?.domain}/wp-admin`} target="_blank">
+                      <LayoutDashboard className="mr-2 h-5 w-5" /> Ir a tu nuevo sitio (wp-admin)
+                    </Link>
                   </Button>
                 </div>
               )}
