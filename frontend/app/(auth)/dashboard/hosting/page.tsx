@@ -905,19 +905,32 @@ export default function HostingDashboardPage() {
                       <div className="grid gap-3">
                         {(() => {
                           const hierarchy = ['profesional', 'premium', 'agencia'];
-                          // Normalizar el slug actual para la comparacion
-                          const currentSlug = (data.plan.slug || '').toLowerCase().replace(/^hosting-/, '');
+                          
+                          // Normalizar slug actual: quitar 'hosting-' y cualquier sufijo (-anual, -mensual, etc)
+                          const rawCurrentSlug = (data.plan.slug || '').toLowerCase();
+                          const currentSlug = rawCurrentSlug.replace(/^hosting-/, '').split('-')[0];
                           const currentIndex = hierarchy.indexOf(currentSlug);
                           
+                          // Normalizar nombre actual para comparacion robusta
+                          const currentNameClean = data.plan.name.toLowerCase().replace(/^hosting\s+/i, '').trim();
+                          
                           return plans.map((p) => {
-                            const pSlug = p.slug.toLowerCase().replace(/^hosting-/, '');
-                            const pIndex = hierarchy.indexOf(pSlug);
+                            const pSlugRaw = p.slug.toLowerCase();
+                            const pSlugBase = pSlugRaw.replace(/^hosting-/, '').split('-')[0];
+                            const pIndex = hierarchy.indexOf(pSlugBase);
                             
-                            const isCurrent = pSlug === currentSlug || p.name === data.plan.name;
+                            const pNameClean = p.name.toLowerCase().replace(/^hosting\s+/i, '').trim();
                             
-                            // Si es un plan inferior, lo ocultamos por completo de esta seccion de "potencia"
-                            const isLower = pIndex !== -1 && currentIndex !== -1 && pIndex < currentIndex;
-                            if (isLower) return null;
+                            // Un plan es el actual si los slugs base coinciden O si los nombres normalizados coinciden
+                            const isCurrent = pSlugBase === currentSlug || pNameClean === currentNameClean;
+                            
+                            // Si es un plan inferior (segun el indice en la jerarquia), lo ocultamos
+                            // Si no encontramos el indice actual, comparamos por capacidad de sitios como fallback
+                            const isLower = currentIndex !== -1 && pIndex !== -1 
+                              ? pIndex < currentIndex 
+                              : p.maxSites < data.usage.websites.max;
+
+                            if (isLower && !isCurrent) return null;
 
                             return (
                               <div key={p.slug} className={cn(

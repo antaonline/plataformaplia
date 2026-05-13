@@ -850,7 +850,12 @@ export default function DashboardPage() {
     // Solo está completo si ya fue ENTREGADO (DELIVERED)
     const data = (project.onboardingData as any) || {};
     const aiGeneration = data.aiGeneration || {};
-    const hasAiError = aiGeneration.status === 'FAILED';
+    const deadlinePassed = deadlineMs <= now;
+    
+    // Un proyecto esta "atascado" si paso el tiempo y no esta listo ni publicado
+    const isStuck = project.status === 'IN_PROGRESS' && deadlinePassed && aiGeneration.status !== 'READY';
+    const hasAiError = aiGeneration.status === 'FAILED' || isStuck;
+
     const isComplete = project.status === 'DELIVERED';
     const progress = isComplete ? 1 : Math.min(rawProgress, 0.95);
     const step = isComplete ? 4 : Math.max(1, Math.min(4, Math.floor(progress * 4) + 1));
@@ -864,7 +869,7 @@ export default function DashboardPage() {
       currentStep: step,
       isComplete,
       hasAiError,
-      aiErrorMsg: aiGeneration.error,
+      aiErrorMsg: isStuck ? 'El plazo de entrega ha vencido y el sitio aun no esta listo. Esto puede deberse a un error en el servidor de IA.' : aiGeneration.error,
       timeRemaining: { days, hours },
       deadlineMs,
     };
