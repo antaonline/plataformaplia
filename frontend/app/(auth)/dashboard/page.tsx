@@ -36,6 +36,7 @@ import {
 import Image from "next/image";
 import Link from "next/link";
 import { cn } from '@/lib/utils';
+import { useToast } from '@/hooks/use-toast';
 
 const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3002';
 const apiBase = apiUrl.endsWith('/api') ? apiUrl : `${apiUrl}/api`;
@@ -595,6 +596,7 @@ const statusSteps = [
 ];
 
 export default function DashboardPage() {
+  const { toast } = useToast();
   const heroActiveClass = 'border-cta bg-cta text-cta-foreground shadow-sm';
   const [loading, setLoading] = useState(true);
   const [project, setProject] = useState<Project | null>(null);
@@ -1413,10 +1415,17 @@ export default function DashboardPage() {
       if (!res.ok) {
         throw new Error(await res.text());
       }
-      toast.success('Generación reiniciada. La IA esta trabajando de nuevo.');
+      toast({
+        title: 'Generación reiniciada',
+        description: 'La IA esta trabajando de nuevo en tu sitio web.',
+      });
       loadProjects();
     } catch (err: any) {
-      toast.error(err.message || 'Error al reiniciar la generación.');
+      toast({
+        title: 'Error al reiniciar',
+        description: err.message || 'No se pudo contactar con el servicio de IA.',
+        variant: 'destructive',
+      });
     }
   };
 
