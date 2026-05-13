@@ -677,7 +677,7 @@ export default function DashboardPage() {
     confirm: false,
   });
 
-  useEffect(() => {
+  const loadData = async () => {
     const token = localStorage.getItem('access_token');
     if (!token) {
       setError('Necesitas iniciar sesion.');
@@ -685,68 +685,68 @@ export default function DashboardPage() {
       return;
     }
 
-    const loadData = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const meRes = await fetch(`${apiBase}/auth/me`, {
-          method: 'POST',
+    setLoading(true);
+    setError(null);
+    try {
+      const meRes = await fetch(`${apiBase}/auth/me`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const meText = await meRes.text();
+      const meData = meText ? JSON.parse(meText) : null;
+      if (!meRes.ok) throw new Error(meData?.message || 'No se pudo cargar el usuario');
+      setUser(meData);
+      setProfileForm({
+        billingName: meData.billingName || '',
+        billingAddress: meData.billingAddress || '',
+        billingDepartment: meData.billingDepartment || 'Lima',
+        billingEmail: meData.billingEmail || '',
+      });
+
+      const projectRes = await fetch(`${apiBase}/projects/list`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const text = await projectRes.text();
+      const data = text ? JSON.parse(text) : [];
+      if (!projectRes.ok) throw new Error((data as any)?.message || 'No se pudo cargar el proyecto');
+      const list = Array.isArray(data) ? data : [];
+      if (list.length === 0 && meData?.role !== 'ADMIN') {
+        const hostingRes = await fetch(`${apiBase}/hosting/account`, {
           headers: { Authorization: `Bearer ${token}` },
         });
-        const meText = await meRes.text();
-        const meData = meText ? JSON.parse(meText) : null;
-        if (!meRes.ok) throw new Error(meData?.message || 'No se pudo cargar el usuario');
-        setUser(meData);
-        setProfileForm({
-          billingName: meData.billingName || '',
-          billingAddress: meData.billingAddress || '',
-          billingDepartment: meData.billingDepartment || 'Lima',
-          billingEmail: meData.billingEmail || '',
-        });
-
-        const projectRes = await fetch(`${apiBase}/projects/list`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const text = await projectRes.text();
-        const data = text ? JSON.parse(text) : [];
-        if (!projectRes.ok) throw new Error((data as any)?.message || 'No se pudo cargar el proyecto');
-        const list = Array.isArray(data) ? data : [];
-        if (list.length === 0 && meData?.role !== 'ADMIN') {
-          const hostingRes = await fetch(`${apiBase}/hosting/account`, {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          if (hostingRes.ok) {
-            window.location.href = '/dashboard/hosting';
-            return;
-          }
+        if (hostingRes.ok) {
+          window.location.href = '/dashboard/hosting';
+          return;
         }
-        setProjects(list);
-        const current = list[0] ?? null;
-        setProject(current);
-        setSelectedProjectId(current?.id ?? null);
-        if (current?.onboardingData?.subdomain) {
-          setStep(Math.max(1, Math.min(6, current.onboardingStep ?? 1)));
-        } else {
-          setStep(1);
-        }
-
-        if (meData?.role === 'ADMIN') {
-          const listRes = await fetch(`${apiBase}/admin/projects`, {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          const listText = await listRes.text();
-          const listData = listText ? JSON.parse(listText) : [];
-          if (listRes.ok) {
-            setAdminProjects(Array.isArray(listData) ? listData : []);
-          }
-        }
-      } catch (err: any) {
-        setError(err.message ?? 'Error al cargar el dashboard');
-      } finally {
-        setLoading(false);
       }
-    };
+      setProjects(list);
+      const current = list[0] ?? null;
+      setProject(current);
+      setSelectedProjectId(current?.id ?? null);
+      if (current?.onboardingData?.subdomain) {
+        setStep(Math.max(1, Math.min(6, current.onboardingStep ?? 1)));
+      } else {
+        setStep(1);
+      }
 
+      if (meData?.role === 'ADMIN') {
+        const listRes = await fetch(`${apiBase}/admin/projects`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const listText = await listRes.text();
+        const listData = listText ? JSON.parse(listText) : [];
+        if (listRes.ok) {
+          setAdminProjects(Array.isArray(listData) ? listData : []);
+        }
+      }
+    } catch (err: any) {
+      setError(err.message ?? 'Error al cargar el dashboard');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     loadData();
   }, []);
 
@@ -1419,7 +1419,7 @@ export default function DashboardPage() {
         title: 'Generación reiniciada',
         description: 'La IA esta trabajando de nuevo en tu sitio web.',
       });
-      loadProjects();
+      loadData();
     } catch (err: any) {
       toast({
         title: 'Error al reiniciar',
