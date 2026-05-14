@@ -24,6 +24,7 @@ import { PublishProjectsCron } from './cron/publish-projects.cron';
 import { MailModule } from './mail/mail.module';
 import { ContactModule } from './contact/contact.module';
 import { HostingModule } from './hosting/hosting.module';
+import { AiChatModule } from './experimental/iachat/iachat.module';
 
 import { ThrottlerModule } from '@nestjs/throttler'
 
@@ -54,6 +55,7 @@ import { ThrottlerModule } from '@nestjs/throttler'
     MailModule,
     ContactModule,
     HostingModule,
+    AiChatModule,
   ],
   controllers: [AppController, OrdersController],
   providers: [AppService, ProjectsService, RenewHostingCron, PublishProjectsCron],

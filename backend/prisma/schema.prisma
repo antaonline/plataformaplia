@@ -8,25 +8,24 @@ datasource db {
 }
 
 model Order {
-  id        Int      @id @default(autoincrement())
-  userId    Int?
-  email     String?
-  planId    Int
-  amount    Decimal
-  currency  String
-  status    OrderStatus @default(PENDING)
-  transactionId String?
+  id                 Int                  @id @default(autoincrement())
+  userId             Int?
+  email              String?
+  planId             Int
+  amount             Decimal
+  currency           String
+  status             OrderStatus          @default(PENDING)
+  transactionId      String?
   billingCycleMonths Int?
-  metadata Json?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  payment   Payment?
-  plan      plan     @relation(fields: [planId], references: [id], map: "Order_planId_fkey")
-  user      user?    @relation(fields: [userId], references: [id], map: "Order_userId_fkey")
-
-  projects Project[]
-  domainSelection DomainSelection?
-  subscriptions HostingSubscription[]
+  metadata           String?              @db.LongText
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  domainSelection    DomainSelection?
+  subscriptions      HostingSubscription?
+  plan               plan                 @relation(fields: [planId], references: [id], map: "Order_planId_fkey")
+  user               user?                @relation(fields: [userId], references: [id], map: "Order_userId_fkey")
+  payment            Payment?
+  projects           Project?
 
   @@index([planId], map: "Order_planId_fkey")
   @@index([userId], map: "Order_userId_fkey")
@@ -40,8 +39,8 @@ model DomainSelection {
   price     Decimal
   currency  String
   createdAt DateTime @default(now())
+  order     Order    @relation(fields: [orderId], references: [id])
 
-  order Order @relation(fields: [orderId], references: [id])
   @@map("domainselection")
 }
 
@@ -54,8 +53,269 @@ model plan {
   slug         String?               @unique
   serviceType  PlanServiceType       @default(WEBSITE_BUILD)
   createdAt    DateTime              @default(now())
-  order        Order[]
   subscription HostingSubscription[]
+  order        Order[]
+}
+
+model Project {
+  id                    Int                  @id @default(autoincrement())
+  name                  String
+  completed             Boolean              @default(false)
+  completedAt           DateTime?
+  userId                Int
+  orderId               Int                  @unique
+  type                  ProjectType
+  status                ProjectStatus        @default(WAITING_INFO)
+  onboardingData        String?              @db.LongText
+  onboardingStep        Int                  @default(1)
+  startedAt             DateTime?
+  deadline              DateTime?
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+  hostingSubscriptionId Int?
+  subscription          HostingSubscription? @relation(fields: [hostingSubscriptionId], references: [id])
+  order                 Order                @relation(fields: [orderId], references: [id])
+  user                  user                 @relation(fields: [userId], references: [id])
+
+  @@index([hostingSubscriptionId], map: "project_hostingSubscriptionId_fkey")
+  @@index([userId], map: "project_userId_fkey")
+  @@map("project")
+}
+
+model HostingSubscription {
+  id                       Int              @id @default(autoincrement())
+  projectId                Int?
+  userId                   Int
+  planId                   Int
+  sourceOrderId            Int?             @unique
+  serviceType              PlanServiceType  @default(WEBSITE_BUILD)
+  billingCycleMonths       Int              @default(12)
+  cycleAmount              Decimal?
+  metadata                 String?          @db.LongText
+  startDate                DateTime         @default(now())
+  endDate                  DateTime
+  status                   String
+  nextBillingAt            DateTime
+  lastChargedAt            DateTime?
+  cardToken                String?
+  renewalDueAt             DateTime?
+  renewalNoticeSentAt      DateTime?
+  renewalReminderSentAt    DateTime?
+  renewalFinalNoticeSentAt DateTime?
+  account                  HostingAccount?  @relation("ActiveSubscription")
+  renewals                 HostingRenewal[]
+  plan                     plan             @relation(fields: [planId], references: [id], map: "Subscription_planId_fkey")
+  user                     user             @relation(fields: [userId], references: [id], map: "Subscription_userId_fkey")
+  sourceOrder              Order?           @relation(fields: [sourceOrderId], references: [id])
+  projects                 Project[]
+
+  @@index([planId], map: "Subscription_planId_fkey")
+  @@index([userId], map: "Subscription_userId_fkey")
+  @@map("hostingsubscription")
+}
+
+model user {
+  id                  Int                   @id @default(autoincrement())
+  name                String
+  email               String                @unique(map: "User_email_key")
+  password            String
+  createdAt           DateTime              @default(now())
+  role                user_role             @default(USER)
+  billingAddress      String?
+  billingDepartment   String?
+  billingEmail        String?
+  billingName         String?
+  aiChats             AiChat[]
+  aiCredits           AiCredit?
+  email2faCodes       Email2FACode[]
+  hostingAccount      HostingAccount?
+  subscription        HostingSubscription[]
+  order               Order[]
+  passwordSetupTokens PasswordSetupToken[]
+  projects            Project[]
+  refreshTokens       RefreshToken[]
+}
+
+model RefreshToken {
+  id          Int      @id @default(autoincrement())
+  token       String   @unique
+  userId      Int
+  fingerprint String
+  userAgent   String?
+  ip          String?
+  revoked     Boolean  @default(false)
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+  user        user     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId], map: "refreshtoken_userId_fkey")
+  @@map("refreshtoken")
+}
+
+model Email2FACode {
+  id        String   @id @default(uuid())
+  userId    Int
+  code      String   @db.Char(6)
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      user     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("email2facode")
+}
+
+model Payment {
+  id                Int       @id @default(autoincrement())
+  orderId           Int       @unique
+  amount            Float
+  transactionId     String?   @unique
+  authorizationCode String?
+  status            String
+  provider          String
+  providerResponse  String?   @db.LongText
+  createdAt         DateTime  @default(now())
+  rawResponse       String    @db.LongText
+  paidAt            DateTime?
+  order             Order     @relation(fields: [orderId], references: [id])
+
+  @@map("payment")
+}
+
+model PasswordSetupToken {
+  id        String   @id @default(uuid())
+  userId    Int
+  token     String   @unique
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      user     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("passwordsetuptoken")
+}
+
+model HostingRenewal {
+  id               Int                 @id @default(autoincrement())
+  subscriptionId   Int
+  amount           Float
+  currency         String              @default("PEN")
+  status           RenewalStatus       @default(PENDING)
+  transactionId    String?
+  cardToken        String?
+  provider         String?
+  providerResponse String?             @db.LongText
+  rawResponse      String?             @db.LongText
+  createdAt        DateTime            @default(now())
+  paidAt           DateTime?
+  subscription     HostingSubscription @relation(fields: [subscriptionId], references: [id])
+
+  @@index([subscriptionId])
+  @@map("hostingrenewal")
+}
+
+model HostingAccount {
+  id                   Int                  @id @default(autoincrement())
+  userId               Int                  @unique
+  activeSubscriptionId Int?                 @unique
+  packageName          String
+  status               HostingAccountStatus @default(PROVISIONING)
+  maxSites             Int
+  storageMb            Int
+  bandwidthMb          Int
+  mailboxesPerSite     Int
+  cyberpanelUsername   String
+  email                String
+  panelUrl             String
+  encryptedPassword    String?
+  metadata             String?              @db.LongText
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+  sites                HostedSite[]
+  activeSubscription   HostingSubscription? @relation("ActiveSubscription", fields: [activeSubscriptionId], references: [id])
+  user                 user                 @relation(fields: [userId], references: [id])
+
+  @@map("hostingaccount")
+}
+
+model HostedSite {
+  id               Int               @id @default(autoincrement())
+  hostingAccountId Int
+  name             String
+  domain           String            @unique
+  siteType         HostedSiteType
+  appType          HostedSiteAppType @default(EMPTY)
+  status           HostedSiteStatus  @default(PROVISIONING)
+  sslStatus        HostingSslStatus  @default(PENDING)
+  rootPath         String
+  publicUrl        String
+  storageUsedMb    Int               @default(0)
+  uploadCount      Int               @default(0)
+  lastUploadedAt   DateTime?
+  lastDeployedAt   DateTime?
+  metadata         String?           @db.LongText
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  mailboxes        HostedMailbox[]
+  hostingAccount   HostingAccount    @relation(fields: [hostingAccountId], references: [id])
+
+  @@index([hostingAccountId])
+  @@map("hostedsite")
+}
+
+model HostedMailbox {
+  id           Int        @id @default(autoincrement())
+  hostedSiteId Int
+  email        String     @unique
+  status       String     @default("ACTIVE")
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  hostedSite   HostedSite @relation(fields: [hostedSiteId], references: [id])
+
+  @@index([hostedSiteId])
+  @@map("hostedmailbox")
+}
+
+model AiCredit {
+  id          Int      @id @default(autoincrement())
+  userId      Int      @unique
+  dailyUsed   Int      @default(0)
+  monthlyUsed Int      @default(0)
+  lastResetAt DateTime @default(now())
+  user        user     @relation(fields: [userId], references: [id])
+
+  @@map("aicredit")
+}
+
+model AiChat {
+  id         Int         @id @default(autoincrement())
+  userId     Int
+  title      String?
+  previewUrl String?
+  status     String      @default("ACTIVE")
+  metadata   String?     @db.LongText
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+  user       user        @relation(fields: [userId], references: [id])
+  messages   AiMessage[]
+
+  @@index([userId], map: "aichat_userId_fkey")
+  @@map("aichat")
+}
+
+model AiMessage {
+  id           Int      @id @default(autoincrement())
+  chatId       Int
+  role         String
+  content      String   @db.LongText
+  codeSnapshot String?  @db.LongText
+  createdAt    DateTime @default(now())
+  chat         AiChat   @relation(fields: [chatId], references: [id])
+
+  @@index([chatId], map: "aimessage_chatId_fkey")
+  @@map("aimessage")
 }
 
 enum PlanServiceType {
@@ -75,156 +335,6 @@ enum ProjectStatus {
   DELIVERED
 }
 
-model Project {
-  id          Int       @id @default(autoincrement())
-  name        String
-  completed   Boolean   @default(false)
-  completedAt DateTime?
-  userId      Int
-  orderId     Int       @unique
-
-  type           ProjectType
-  status         ProjectStatus @default(WAITING_INFO)
-  onboardingData Json?
-  onboardingStep Int           @default(1)
-
-  startedAt DateTime?
-  deadline  DateTime?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  subscription HostingSubscription? @relation(fields: [hostingSubscriptionId], references: [id])
-
-  user                  user  @relation(fields: [userId], references: [id])
-  order                 Order @relation(fields: [orderId], references: [id])
-  hostingSubscriptionId Int?
-  @@map("project")
-}
-
-model HostingSubscription {
-  id        Int       @id @default(autoincrement())
-  projectId Int?
-  userId    Int
-  planId    Int
-  sourceOrderId Int?    @unique
-  serviceType PlanServiceType @default(WEBSITE_BUILD)
-  billingCycleMonths Int @default(12)
-  cycleAmount Decimal?
-  metadata Json?
-  startDate DateTime  @default(now())
-  endDate   DateTime
-  status    String
-  nextBillingAt DateTime
-  lastChargedAt DateTime?
-  cardToken String?
-  renewalDueAt DateTime?
-  renewalNoticeSentAt DateTime?
-  renewalReminderSentAt DateTime?
-  renewalFinalNoticeSentAt DateTime?
-  plan      plan      @relation(fields: [planId], references: [id], map: "Subscription_planId_fkey")
-  user      user      @relation(fields: [userId], references: [id], map: "Subscription_userId_fkey")
-  sourceOrder Order?  @relation(fields: [sourceOrderId], references: [id])
-  projects  Project[]
-  renewals  HostingRenewal[]
-  account   HostingAccount? @relation("ActiveSubscription")
-
-  @@index([planId], map: "Subscription_planId_fkey")
-  @@index([userId], map: "Subscription_userId_fkey")
-  @@map("hostingsubscription")
-}
-
-enum HostingSubscriptionStatus {
-  ACTIVE
-  FAILED
-  CANCELED
-}
-
-model user {
-  id            Int                   @id @default(autoincrement())
-  name          String
-  email         String                @unique(map: "User_email_key")
-  password      String
-  createdAt     DateTime              @default(now())
-  role          user_role             @default(USER)
-
-  // Datos de facturación persistentes
-  billingName       String?
-  billingAddress    String?
-  billingDepartment String?
-  billingEmail      String?
-
-  order         Order[]
-  subscription  HostingSubscription[]
-  refreshTokens RefreshToken[]
-  email2faCodes Email2FACode[]
-  projects      Project[]
-  hostingAccount HostingAccount?
-  passwordSetupTokens PasswordSetupToken[]
-}
-
-model RefreshToken {
-  id          Int      @id @default(autoincrement())
-  token       String   @unique
-  userId      Int
-  fingerprint String
-  userAgent   String?
-  ip          String?
-  user        user     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  revoked     Boolean  @default(false)
-  expiresAt   DateTime
-  createdAt   DateTime @default(now())
-
-  @@map("refreshtoken")
-}
-
-model Email2FACode {
-  id        String   @id @default(uuid())
-  userId    Int
-  code      String   @db.Char(6)
-  expiresAt DateTime
-  used      Boolean  @default(false)
-  createdAt DateTime @default(now())
-
-  user user @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@index([expiresAt])
-  @@map("email2facode")
-}
-
-model Payment {
-  id        Int      @id @default(autoincrement())
-  orderId   Int      @unique
-  amount    Float
-  transactionId    String?  @unique
-  authorizationCode String?
-  status    String
-  provider  String
-  providerResponse Json?   
-  createdAt DateTime @default(now())
-  rawResponse      Json
-  paidAt           DateTime?
-
-  order Order @relation(fields: [orderId], references: [id])
-  @@map("payment")
-}
-
-model PasswordSetupToken {
-  id        String   @id @default(uuid())
-  userId    Int
-  token     String   @unique
-  expiresAt DateTime
-  used      Boolean  @default(false)
-  createdAt DateTime @default(now())
-
-  user user @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@index([expiresAt])
-  @@map("passwordsetuptoken")
-}
-
 enum OrderStatus {
   PENDING
   PROCESSING
@@ -239,26 +349,6 @@ enum RenewalStatus {
   PENDING
   PAID
   FAILED
-}
-
-model HostingRenewal {
-  id             Int      @id @default(autoincrement())
-  subscriptionId Int
-  amount         Float
-  currency       String   @default("PEN")
-  status         RenewalStatus @default(PENDING)
-  transactionId  String?
-  cardToken      String?
-  provider       String?
-  providerResponse Json?
-  rawResponse    Json?
-  createdAt      DateTime @default(now())
-  paidAt         DateTime?
-
-  subscription HostingSubscription @relation(fields: [subscriptionId], references: [id])
-
-  @@index([subscriptionId])
-  @@map("hostingrenewal")
 }
 
 enum HostingAccountStatus {
@@ -297,72 +387,7 @@ enum HostingSslStatus {
   NOT_CONFIGURED
 }
 
-model HostingAccount {
-  id                   Int                  @id @default(autoincrement())
-  userId               Int                  @unique
-  activeSubscriptionId Int?                 @unique
-  packageName          String
-  status               HostingAccountStatus @default(PROVISIONING)
-  maxSites             Int
-  storageMb            Int
-  bandwidthMb          Int
-  mailboxesPerSite     Int
-  cyberpanelUsername   String
-  email                String
-  panelUrl             String
-  encryptedPassword    String?
-  metadata             Json?
-  createdAt            DateTime             @default(now())
-  updatedAt            DateTime             @updatedAt
-
-  user               user                 @relation(fields: [userId], references: [id])
-  activeSubscription HostingSubscription? @relation("ActiveSubscription", fields: [activeSubscriptionId], references: [id])
-  sites              HostedSite[]
-
-  @@map("hostingaccount")
-}
-
-model HostedSite {
-  id               Int              @id @default(autoincrement())
-  hostingAccountId Int
-  name             String
-  domain           String           @unique
-  siteType         HostedSiteType
-  appType          HostedSiteAppType @default(EMPTY)
-  status           HostedSiteStatus @default(PROVISIONING)
-  sslStatus        HostingSslStatus @default(PENDING)
-  rootPath         String
-  publicUrl        String
-  storageUsedMb    Int              @default(0)
-  uploadCount      Int              @default(0)
-  lastUploadedAt   DateTime?
-  lastDeployedAt   DateTime?
-  metadata         Json?
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
-
-  hostingAccount HostingAccount  @relation(fields: [hostingAccountId], references: [id])
-  mailboxes     HostedMailbox[]
-
-  @@index([hostingAccountId])
-  @@map("hostedsite")
-}
-
-model HostedMailbox {
-  id           Int      @id @default(autoincrement())
-  hostedSiteId Int
-  email        String   @unique
-  status       String   @default("ACTIVE")
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  hostedSite HostedSite @relation(fields: [hostedSiteId], references: [id])
-
-  @@index([hostedSiteId])
-  @@map("hostedmailbox")
-}
-
 enum user_role {
   USER
   ADMIN
-}   
+}

@@ -50,20 +50,34 @@ export class ProjectsService {
       return false;
     }
 
+    // AHORA: Verificamos que exista la salida en la carpeta de previsualizacion
+    // ya que la escritura en public_html se pospone hasta la publicacion oficial.
     const previewIndex = join(process.cwd(), 'uploads', 'previews', String(projectId), 'index.html');
     const hasPreview = fs.existsSync(previewIndex);
-    const targetDir =
-      typeof aiGeneration.target === 'string' && aiGeneration.target.trim()
-        ? aiGeneration.target.trim()
-        : '';
-    const targetIndex = targetDir ? join(targetDir, 'index.html') : '';
-    const hasPublishedTarget = targetIndex ? fs.existsSync(targetIndex) : false;
+    
+    return hasPreview;
+  }
 
-    if (onboardingData?.publicDomain) {
-      return hasPublishedTarget;
+  private copyFolderRecursive(source: string, target: string) {
+    if (!fs.existsSync(source)) {
+      this.logger.error(`Source directory does not exist: ${source}`);
+      return;
+    }
+    if (!fs.existsSync(target)) {
+      fs.mkdirSync(target, { recursive: true });
     }
 
-    return hasPublishedTarget || hasPreview;
+    const files = fs.readdirSync(source);
+    for (const file of files) {
+      const curSource = join(source, file);
+      const curTarget = join(target, file);
+      if (fs.lstatSync(curSource).isDirectory()) {
+        this.copyFolderRecursive(curSource, curTarget);
+      } else {
+        fs.copyFileSync(curSource, curTarget);
+        // this.logger.log(`Copied ${file} to ${target}`);
+      }
+    }
   }
 
   private buildPreviewUrl(projectId: number) {
@@ -428,6 +442,27 @@ export class ProjectsService {
     const revisionsAllowed = project.type === 'LANDING' ? 1 : 2;
     const revisionWindowEndsAt = addHours(publishedAt, 48);
 
+    // LOGICA DE PUBLICACION FISICA: Copiar de previews a public_html
+    const aiGeneration = currentData.aiGeneration || {};
+    const previewRoot = join(process.cwd(), 'uploads', 'previews', String(id));
+    const targetDir = aiGeneration.target;
+
+    if (targetDir && fs.existsSync(previewRoot)) {
+      try {
+        this.logger.log(`Publicando archivos fisicos para proyecto ${id} en ${targetDir}...`);
+        this.copyFolderRecursive(previewRoot, targetDir);
+        this.logger.log(`Publicacion fisica exitosa para proyecto ${id}.`);
+      } catch (err: any) {
+        this.logger.error(`Error al copiar archivos a public_html para proyecto ${id}: ${err.message}`);
+        // No lanzamos error para permitir que el estado se actualice, 
+        // o podriamos lanzarlo si queremos que reintente en el proximo cron.
+        // Por ahora lanzamos para que el cron lo capture y lo registre.
+        throw new Error(`Fallo la copia fisica de archivos: ${err.message}`);
+      }
+    } else {
+      this.logger.warn(`Proyecto ${id} no tiene targetDir (${targetDir}) o previewRoot (${previewRoot}) no existe. Se omite copia fisica.`);
+    }
+
     const mergedData = {
       ...currentData,
       ...(data.publicUrl
@@ -623,29 +658,38 @@ export class ProjectsService {
     });
 
     for (const project of readyProjects) {
-      const data = (project.onboardingData as any) || {};
-      
-      // Filtrar manualmente los que tengan la IA lista (evita problemas de tipos con JSON path en Prisma)
-      if (data.aiGeneration?.status !== 'READY') {
-        continue;
-      }
+      try {
+        const data = (project.onboardingData as any) || {};
+        
+        this.logger.log(`Procesando auto-publicacion para proyecto ${project.id} (${project.name})...`);
 
-      if (!this.hasGeneratedOutput(project.id, data)) {
-        this.logger.warn(
-          `Auto publish omitido para project=${project.id}: no existe salida verificada para publicar.`,
-        );
-        continue;
-      }
+        // Filtrar manualmente los que tengan la IA lista (evita problemas de tipos con JSON path en Prisma)
+        if (data.aiGeneration?.status !== 'READY') {
+          this.logger.warn(`Proyecto ${project.id} omitido: IA status es ${data.aiGeneration?.status} (se requiere READY)`);
+          continue;
+        }
 
-      const publicUrl = data.publicUrl;
-      await this.publishProject(project.id, { publicUrl });
+        if (!this.hasGeneratedOutput(project.id, data)) {
+          this.logger.warn(
+            `Auto publish omitido para project=${project.id}: no existe salida verificada (preview) para publicar.`,
+          );
+          continue;
+        }
 
-      if (project.user?.email) {
-        const loginUrl = `${process.env.APP_URL ?? 'http://localhost:3001'}/login`;
-        await this.mailService.sendProjectReady(project.user.email, {
-          projectName: project.name,
-          loginUrl,
-        });
+        const publicUrl = data.publicUrl;
+        await this.publishProject(project.id, { publicUrl });
+
+        if (project.user?.email) {
+          const loginUrl = `${process.env.APP_URL ?? 'http://localhost:3001'}/login`;
+          await this.mailService.sendProjectReady(project.user.email, {
+            projectName: project.name,
+            loginUrl,
+          });
+        }
+        this.logger.log(`Proyecto ${project.id} publicado exitosamente por el cron.`);
+      } catch (error: any) {
+        this.logger.error(`Error procesando auto-publicacion para proyecto ${project.id}: ${error.message}`);
+        // Continuamos con el siguiente proyecto
       }
     }
   }

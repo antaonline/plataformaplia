@@ -35,6 +35,7 @@ export class AiService {
       landingImagesEconomy: Number(process.env.AI_LANDING_MAX_IMAGES_ECONOMY || 4),
       webImages: Number(process.env.AI_WEB_MAX_IMAGES || 16),
       webImagesEconomy: Number(process.env.AI_WEB_MAX_IMAGES_ECONOMY || 8),
+      geminiKey: process.env.GOOGLE_GEMINI_KEY || '',
     };
   }
 
@@ -192,7 +193,12 @@ export class AiService {
     return 'general-business';
   }
 
-  private async chatJson<T>(model: string, system: string, user: string): Promise<T> {
+  public async chatJson<T>(model: string, system: string, user: string): Promise<T> {
+    // Si tenemos Gemini Key y el modelo es compatible o no hay OpenAI, usamos Gemini
+    if (process.env.GOOGLE_GEMINI_KEY && (!process.env.OPENAI_API_KEY || model.includes('gemini'))) {
+      return this.geminiPost<T>(system, user);
+    }
+
     const url = `${this.env.baseUrl}/chat/completions`;
     const data = await this.openAiPost<any>(url, {
       model,
@@ -205,6 +211,35 @@ export class AiService {
     });
     const content = data?.choices?.[0]?.message?.content ?? '{}';
     return this.safeJsonParse<T>(content, {} as T);
+  }
+
+  private async geminiPost<T>(system: string, user: string): Promise<T> {
+    const key = this.env.geminiKey;
+    // v1beta con el nombre de modelo oficial
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`;
+    
+    try {
+      const res = await axios.post(url, {
+        contents: [
+          { 
+            role: 'user', 
+            parts: [{ text: `INSTRUCCIONES DE SISTEMA:\n${system}\n\nMENSAJE DEL USUARIO:\n${user}\n\nIMPORTANTE: Responde ÚNICAMENTE con un objeto JSON válido.` }] 
+          }
+        ]
+      });
+
+      const fullText = res.data?.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+      
+      // Extraer el JSON del texto (por si la IA añade bloques de código markdown ```json)
+      const jsonContent = fullText.includes('```') 
+        ? fullText.split('```')[1]?.replace(/^json/, '').trim() 
+        : fullText;
+
+      return this.safeJsonParse<T>(jsonContent || fullText, {} as T);
+    } catch (error: any) {
+      this.logger.error('Gemini API Error Details:', JSON.stringify(error?.response?.data || error.message));
+      throw error;
+    }
   }
 
   private async generateImages(prompts: Array<{ id: string; prompt: string; usage: string }>, plan: PlanType, mode: AiMode) {
@@ -355,41 +390,31 @@ export class AiService {
       const publicDir = process.env.CYBERPANEL_PUBLIC_DIR || 'public_html';
       siteRoot = join(root, domain, publicDir);
       
+      this.logger.log(`[DELAYED PUBLISH] Se omite escritura inmediata en ${siteRoot} para ${domain}. Se realizara al cumplirse el plazo.`);
+      
+      /* 
+      // LOGICA ANTERIOR: Se escribia inmediatamente si el dominio existia.
+      // Se comenta para cumplir con el requerimiento de "sensacion de progreso humano" y publicacion al final.
+      
       this.logger.log(`Intentando persistir sitio en CyberPanel. Dominio: ${domain}, Ruta: ${siteRoot}`);
       
-      // Lógica de sondeo inteligente: esperamos a que aparezca el archivo de CyberPanel como señal
       const maxAttempts = 30;
-      const pollIntervalMs = 2000; // Revisar cada 2 segundos (Total 60 seg)
+      const pollIntervalMs = 2000;
       let success = false;
-
-      this.logger.log(`Iniciando sondeo de carpeta para ${domain}...`);
 
       for (let attempt = 1; attempt <= maxAttempts; attempt++) {
         const indexPath = join(siteRoot, 'index.html');
-        
-        // ¿Ya existe la carpeta y el archivo index.html?
         if (fs.existsSync(siteRoot) && fs.existsSync(indexPath)) {
           const currentContent = fs.readFileSync(indexPath, 'utf-8');
-          
-          // Si el archivo contiene "CyberPanel Installed", es nuestra señal de que CyberPanel ya termino
           if (currentContent.includes('CyberPanel Installed')) {
-            this.logger.log(`[Intento ${attempt}] ¡Señal recibida! CyberPanel instalo su pagina por defecto. Sobrescribiendo ahora...`);
-            fs.writeFileSync(indexPath, html, 'utf-8');
-            success = true;
-          } else if (currentContent.includes('GENERATED_BY_PLIA_IA')) {
-            this.logger.log(`[Intento ${attempt}] El archivo ya parece ser de PLIA. Sobrescribiendo para asegurar version...`);
             fs.writeFileSync(indexPath, html, 'utf-8');
             success = true;
           } else {
-            // Es un archivo desconocido, lo sobrescribimos por si acaso
-            this.logger.log(`[Intento ${attempt}] Archivo detectado. Sobrescribiendo...`);
             fs.writeFileSync(indexPath, html, 'utf-8');
             success = true;
           }
         }
-
         if (success) {
-          // Escribir paginas secundarias si existen
           if (pages?.length) {
             for (const page of pages) {
               const fileName = page.slug === 'index' ? 'index.html' : `${page.slug}.html`;
@@ -399,19 +424,12 @@ export class AiService {
           }
           break;
         }
-
-        this.logger.warn(`[Intento ${attempt}/${maxAttempts}] Esperando señal de CyberPanel en ${domain}...`);
         await this.sleep(pollIntervalMs);
       }
-
       if (!success) {
         throw new Error(`No se pudo persistir el sitio tras varios intentos en ${domain}`);
       }
-
-      const targetIndex = join(siteRoot, 'index.html');
-      if (!fs.existsSync(targetIndex)) {
-        throw new Error(`No se encontro index.html en el destino publicado: ${targetIndex}`);
-      }
+      */
     }
 
     return {

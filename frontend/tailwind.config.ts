@@ -3,11 +3,12 @@ import type { Config } from "tailwindcss";
 const config = {
   darkMode: ["class"],
   content: [
-  "./app/(auth)/**/*.{ts,tsx}",
-  "./app/(public)/**/*.{ts,tsx}",
-  "./src/components/layout/*.{ts,tsx}",
-  "./app/**/*.{ts,tsx}",
-  "./src/**/*.{ts,tsx}"
+    "./app/(auth)/**/*.{ts,tsx}",
+    "./app/(public)/**/*.{ts,tsx}",
+    "./app/experimental/**/*.{ts,tsx}",
+    "./src/components/layout/*.{ts,tsx}",
+    "./app/**/*.{ts,tsx}",
+    "./src/**/*.{ts,tsx}"
   ],
   prefix: "",
   theme: {
@@ -20,7 +21,7 @@ const config = {
     },
     extend: {
       fontFamily: {
-        sans: ['--font-sansation', 'sans-serif'],
+        sans: ['var(--font-sansation)', 'sans-serif'],
       },
       colors: {
         border: "hsl(var(--border))",

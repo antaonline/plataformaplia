@@ -858,7 +858,7 @@ export default function DashboardPage() {
 
     const isComplete = project.status === 'DELIVERED';
     const progress = isComplete ? 1 : Math.min(rawProgress, 0.95);
-    const step = isComplete ? 4 : Math.max(1, Math.min(4, Math.floor(progress * 4) + 1));
+    const step = isComplete ? 4 : Math.max(1, Math.min(3, Math.floor(progress * 3) + 1));
     
     const diff = Math.max(deadlineMs - now, 0);
     const days = Math.floor(diff / (1000 * 60 * 60 * 24));

@@ -287,4 +287,23 @@ export class AuthService {
       },
     });
   }
+
+  async validateGoogleUser(googleUser: any) {
+    let user = await this.usersService.findByEmail(googleUser.email);
+
+    if (!user) {
+      // Crear usuario si no existe
+      user = await this.prisma.user.create({
+        data: {
+          email: googleUser.email,
+          name: `${googleUser.firstName} ${googleUser.lastName}`,
+          password: '', // Sin password para usuarios Google
+          role: 'USER',
+        },
+      });
+    }
+
+    // Emitir tokens (fingeprint genérico para OAuth)
+    return this.issueTokens(user.id, 'google-oauth-flow');
+  }
 }

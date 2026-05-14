@@ -12,6 +12,7 @@
   :root {
 
     /* Base colors - Clean whites and grays */
+    --font-sansation: 'Sansation', sans-serif;
     --background: 0 0% 100%;
     --foreground: 220 20% 10%;
 

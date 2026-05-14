@@ -9,6 +9,7 @@ import {
   UseGuards,
   UnauthorizedException,
 } from '@nestjs/common'
+import { AuthGuard } from '@nestjs/passport'
 import type { Response } from 'express'
 import { AuthService } from './auth.service'
 import { JwtAuthGuard } from './jwt-auth.guard'
@@ -204,4 +205,26 @@ export class AuthController {
     return this.authService.requestPasswordReset(body.email)
   }
 
+  @Get('google')
+  @UseGuards(AuthGuard('google'))
+  async googleAuth(@Req() req) {}
+
+  @Get('google/callback')
+  @UseGuards(AuthGuard('google'))
+  async googleAuthRedirect(@Req() req, @Res() res: Response) {
+    const result = await this.authService.validateGoogleUser(req.user);
+    
+    // Configurar cookie de refresh token
+    res.cookie('refresh_token', result.refresh_token, {
+      httpOnly: true,
+      secure: false, // true en prod
+      sameSite: 'strict',
+      path: '/auth/refresh',
+      maxAge: 1000 * 60 * 60 * 24 * 7,
+    });
+
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
+    // Redirigir al frontend con el access_token
+    return res.redirect(`${frontendUrl}/experimental/iachatweb?token=${result.access_token}`);
+  }
 }

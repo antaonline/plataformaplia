@@ -32,7 +32,14 @@ async function bootstrap() {
   )
 
   app.enableCors({
-    origin: frontendUrl,
+    origin: (origin, callback) => {
+      // Permitir localhost:3000, 3001 y 3002
+      if (!origin || origin.includes('localhost') || origin.includes('plia.pe')) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
     credentials: true,
   });
 

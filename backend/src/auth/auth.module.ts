@@ -9,6 +9,7 @@ import { RefreshTokenService } from './refresh-token.service'
 import { PrismaModule } from '../prisma/prisma.module'
 import { Email2FAModule } from '../email-2fa/email-2fa.module'
 import { resolveAccessTokenTtlSeconds } from './access-token-ttl'
+import { GoogleStrategy } from './google.strategy';
 
 import { MailModule } from '../mail/mail.module'
 
@@ -26,10 +27,9 @@ import { MailModule } from '../mail/mail.module'
       },
     }),
   ],
-  providers: [AuthService, JwtStrategy, RefreshTokenService,], // 👈 ESTO ES OBLIGATORIO
+  providers: [AuthService, JwtStrategy, RefreshTokenService, GoogleStrategy], // 👈 ESTO ES OBLIGATORIO
   controllers: [AuthController],
   exports: [JwtModule],
-
 })
 
 export class AuthModule {}
