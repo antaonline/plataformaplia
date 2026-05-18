@@ -50,7 +50,7 @@ export default function PlanPage() {
         </CardHeader>
         <CardContent className="space-y-3 text-sm">
           <div><span className="text-muted-foreground">Plan:</span> {project?.order?.plan?.name || project?.type || '-'}</div>
-          <div><span className="text-muted-foreground">Entrega estimada:</span> {project?.type === 'LANDING' ? '24 horas' : '2 dias'}</div>
+          <div><span className="text-muted-foreground">Entrega estimada:</span> {(project?.type === 'LANDING' || project?.order?.plan?.name?.toLowerCase().includes('landing')) ? '1 día' : '2 días'}</div>
           <div><span className="text-muted-foreground">Estado:</span> {project?.status || '-'}</div>
         </CardContent>
       </Card>

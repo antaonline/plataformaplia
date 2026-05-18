@@ -194,14 +194,10 @@ export class AiService {
   }
 
   public async chatJson<T>(model: string, system: string, user: string): Promise<T> {
-    // Si tenemos Gemini Key y el modelo es compatible o no hay OpenAI, usamos Gemini
-    if (process.env.GOOGLE_GEMINI_KEY && (!process.env.OPENAI_API_KEY || model.includes('gemini'))) {
-      return this.geminiPost<T>(system, user);
-    }
-
+    // Forzamos el uso de OpenAI para estabilidad, ignorando Gemini por ahora debido a errores de API
     const url = `${this.env.baseUrl}/chat/completions`;
     const data = await this.openAiPost<any>(url, {
-      model,
+      model: model.includes('gemini') ? this.env.modelPrimary : model,
       messages: [
         { role: 'system', content: system },
         { role: 'user', content: user },
@@ -213,29 +209,50 @@ export class AiService {
     return this.safeJsonParse<T>(content, {} as T);
   }
 
-  private async geminiPost<T>(system: string, user: string): Promise<T> {
+  private async geminiPost<T>(model: string, system: string, user: string): Promise<T> {
     const key = this.env.geminiKey;
-    // v1beta con el nombre de modelo oficial
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`;
+    const modelMapping: Record<string, string> = {
+      'gemini-1.5-flash-latest': 'gemini-1.5-flash',
+      'gemini-1.5-flash': 'gemini-1.5-flash',
+      'gemini-flash-latest': 'gemini-1.5-flash',
+      'gemini-2.0-flash': 'gemini-2.0-flash-exp',
+      'gemini-pro': 'gemini-1.5-pro'
+    };
+
+    const modelName = modelMapping[model] || 'gemini-1.5-flash';
+    // Revertimos a v1beta porque v1 NO soporta system_instruction ni response_mime_type en el payload directo
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${key}`;
     
+    // Intentar parsear el historial si viene en formato JSON
+    let contents: any[] = [];
+    try {
+      const history = JSON.parse(user);
+      if (Array.isArray(history)) {
+        contents = history.map(m => ({
+          role: m.role === 'assistant' ? 'model' : 'user',
+          parts: [{ text: m.content || '' }]
+        }));
+      } else {
+        contents = [{ role: 'user', parts: [{ text: user }] }];
+      }
+    } catch {
+      contents = [{ role: 'user', parts: [{ text: user }] }];
+    }
+
     try {
       const res = await axios.post(url, {
-        contents: [
-          { 
-            role: 'user', 
-            parts: [{ text: `INSTRUCCIONES DE SISTEMA:\n${system}\n\nMENSAJE DEL USUARIO:\n${user}\n\nIMPORTANTE: Responde ÚNICAMENTE con un objeto JSON válido.` }] 
-          }
-        ]
+        contents,
+        system_instruction: {
+          parts: [{ text: system }]
+        },
+        generation_config: {
+          response_mime_type: "application/json",
+          temperature: 0.7
+        }
       });
 
       const fullText = res.data?.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
-      
-      // Extraer el JSON del texto (por si la IA añade bloques de código markdown ```json)
-      const jsonContent = fullText.includes('```') 
-        ? fullText.split('```')[1]?.replace(/^json/, '').trim() 
-        : fullText;
-
-      return this.safeJsonParse<T>(jsonContent || fullText, {} as T);
+      return this.safeJsonParse<T>(fullText, {} as T);
     } catch (error: any) {
       this.logger.error('Gemini API Error Details:', JSON.stringify(error?.response?.data || error.message));
       throw error;

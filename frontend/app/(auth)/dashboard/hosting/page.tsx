@@ -112,10 +112,20 @@ const tabs = [
 ] as const;
 
 const formatStorage = (value: number) => (value >= 1024 ? `${(value / 1024).toFixed(1)} GB` : `${value} MB`);
-const formatDate = (value: string | null) =>
-  value
-    ? new Intl.DateTimeFormat('es-PE', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))
-    : 'Sin fecha';
+const formatDate = (value: string | null) => {
+  if (!value) return 'Sin fecha';
+  const d = new Date(value);
+  const day = d.getDate();
+  const monthNames = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+  const month = monthNames[d.getMonth()];
+  let hours = d.getHours();
+  const minutes = d.getMinutes().toString().padStart(2, '0');
+  const ampm = hours >= 12 ? 'pm' : 'am';
+  hours = hours % 12;
+  hours = hours ? hours : 12;
+  const strTime = hours.toString().padStart(2, '0') + ':' + minutes + ampm;
+  return `${day} ${month} ${strTime}`;
+};
 
 export default function HostingDashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);

@@ -290,16 +290,19 @@ model AiCredit {
 }
 
 model AiChat {
-  id         Int         @id @default(autoincrement())
-  userId     Int
-  title      String?
-  previewUrl String?
-  status     String      @default("ACTIVE")
-  metadata   String?     @db.LongText
-  createdAt  DateTime    @default(now())
-  updatedAt  DateTime    @updatedAt
-  user       user        @relation(fields: [userId], references: [id])
-  messages   AiMessage[]
+  id          Int         @id @default(autoincrement())
+  userId      Int
+  title       String?
+  previewUrl  String?
+  status      String      @default("ACTIVE")
+  metadata    String?     @db.LongText
+  aiRules     String?     @db.LongText   // AI_RULES.md del proyecto (estética y contexto del cliente)
+  themePrompt String?     @db.LongText   // Instrucciones visuales extraídas del primer prompt
+  chatMode    String      @default("build") // 'build' | 'ask' | 'plan'
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  user        user        @relation(fields: [userId], references: [id])
+  messages    AiMessage[]
 
   @@index([userId], map: "aichat_userId_fkey")
   @@map("aichat")
@@ -310,6 +313,7 @@ model AiMessage {
   chatId       Int
   role         String
   content      String   @db.LongText
+  images       String?  @db.LongText // Array JSON de URLs o base64
   codeSnapshot String?  @db.LongText
   createdAt    DateTime @default(now())
   chat         AiChat   @relation(fields: [chatId], references: [id])

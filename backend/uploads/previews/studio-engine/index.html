@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <title>PLIA Studio Engine</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/framer-motion/10.16.4/framer-motion.umd.min.js"></script>
+    <style>
+      body { margin: 0; background: white; color: #0f172a; font-family: sans-serif; min-height: 100vh; overflow-x: hidden; }
+      #root { min-height: 100vh; }
+      .loader { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #ccc; font-size: 14px; }
+      #console-log { position: fixed; bottom: 0; left: 0; right: 0; max-height: 150px; overflow-y: auto; background: rgba(0,0,0,0.8); color: #00ff00; font-family: monospace; font-size: 10px; padding: 10px; z-index: 9999; pointer-events: none; }
+    </style>
+  </head>
+  <body>
+    <div id="root"><div class="loader">Sincronizando motor estático...</div></div>
+    <div id="console-log"></div>
+    <script>
+      const debugParent = (m) => {
+        window.parent.postMessage({ type: 'DEBUG_LOG', msg: m }, '*');
+      };
+
+      console.log = (...args) => {
+        const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a) : a).join(' ');
+        debugParent(msg);
+      };
+
+      debugParent('MOTOR: Cargando desde HOST estático...');
+      
+      const checkLibs = () => {
+        if (window.React && window.ReactDOM && window.Babel) {
+          debugParent('MOTOR: Librerías OK. Listo.');
+          window.parent.postMessage({ type: 'IFRAME_READY' }, '*');
+        } else {
+          setTimeout(checkLibs, 100);
+        }
+      };
+
+      const instanceRegistry = {};
+      let reactRoot = null;
+
+      const runModule = (p, compiledResults) => {
+        if (instanceRegistry[p]) return instanceRegistry[p];
+        const compiled = compiledResults[p];
+        if (!compiled || compiled.error) return null;
+        const exports = {};
+        const module = { exports };
+        const require = (name) => {
+          if (name === 'react') return window.React;
+          if (name === 'react-dom') return window.ReactDOM;
+          const resolved = name.startsWith('./') ? name.replace('./', '/') : (name.startsWith('/') ? name : '/' + name);
+          return runModule(resolved, compiledResults) || runModule(resolved + '.tsx', compiledResults);
+        };
+        try {
+          const execute = new Function('React', 'ReactDOM', 'require', 'exports', 'module', compiled.js + "; return module.exports.AppMain || module.exports.default || module.exports;");
+          const result = execute(window.React, window.ReactDOM, require, exports, module);
+          instanceRegistry[p] = result;
+          return result;
+        } catch (e) { return null; }
+      };
+
+      window.addEventListener('message', async (event) => {
+        if (event.data.type === 'RENDER_CODE') {
+          const { files, path, apiBase } = event.data;
+          debugParent('MOTOR: Recibido RENDER_CODE. Compilando...');
+          
+          try {
+            const res = await fetch(apiBase + '/experimental/sandbox/compile-multiple', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ files })
+            });
+            const compiledResults = await res.json();
+            
+            for (let key in instanceRegistry) delete instanceRegistry[key];
+            const RootComponent = runModule('/AppMain.tsx', compiledResults) || runModule('AppMain.tsx', compiledResults);
+            
+            if (RootComponent) {
+              if (!reactRoot) reactRoot = ReactDOM.createRoot(document.getElementById('root'));
+              reactRoot.render(React.createElement(RootComponent));
+              debugParent('MOTOR: Renderizado completo ✅');
+            }
+          } catch (e) { debugParent('MOTOR ERROR: ' + e.message); }
+        }
+      });
+
+      checkLibs();
+    </script>
+  </body>
+</html>

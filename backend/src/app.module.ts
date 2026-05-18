@@ -25,6 +25,7 @@ import { MailModule } from './mail/mail.module';
 import { ContactModule } from './contact/contact.module';
 import { HostingModule } from './hosting/hosting.module';
 import { AiChatModule } from './experimental/iachat/iachat.module';
+import { SandboxModule } from './experimental/sandbox/sandbox.module';
 
 import { ThrottlerModule } from '@nestjs/throttler'
 
@@ -56,6 +57,7 @@ import { ThrottlerModule } from '@nestjs/throttler'
     ContactModule,
     HostingModule,
     AiChatModule,
+    SandboxModule,
   ],
   controllers: [AppController, OrdersController],
   providers: [AppService, ProjectsService, RenewHostingCron, PublishProjectsCron],

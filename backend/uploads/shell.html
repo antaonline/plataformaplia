@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/framer-motion/10.16.4/framer-motion.umd.min.js"></script>
+    <style>
+      body { margin: 0; background: white; color: #0f172a; font-family: sans-serif; min-height: 100vh; overflow-x: hidden; }
+      #root { min-height: 100vh; }
+      .loader { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #ccc; font-size: 14px; }
+      #console-log { position: fixed; bottom: 0; left: 0; right: 0; max-height: 150px; overflow-y: auto; background: rgba(0,0,0,0.8); color: #00ff00; font-family: monospace; font-size: 10px; padding: 10px; z-index: 9999; pointer-events: none; }
+    </style>
+  </head>
+  <body>
+    <div id="root"><div class="loader">Sincronizando motor...</div></div>
+    <div id="console-log"></div>
+    <script>
+      document.body.style.background = 'red';
+      console.log("IFRAME STARTING FROM STATIC FILE");
+      const logEl = document.getElementById('console-log');
+      const originalLog = console.log;
+      const debugParent = (m) => window.parent.postMessage({ type: 'DEBUG_LOG', msg: m }, '*');
+
+      console.log = (...args) => {
+        originalLog(...args);
+        const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a) : a).join(' ');
+        const div = document.createElement('div');
+        div.textContent = "> " + msg;
+        logEl.appendChild(div);
+        logEl.scrollTop = logEl.scrollHeight;
+        debugParent(msg);
+      };
+
+      const init = () => {
+        console.log("Entorno listo. Enviando IFRAME_READY...");
+        window.parent.postMessage({ type: 'IFRAME_READY' }, '*');
+      };
+
+      const checkLibs = () => {
+        if (window.React && window.ReactDOM && window.Babel) {
+          init();
+        } else {
+          setTimeout(checkLibs, 100);
+        }
+      };
+
+      window.addEventListener('message', async (event) => {
+        if (event.data.type === 'RENDER_CODE') {
+          console.log("RENDER_CODE recibido en static shell");
+          const { files, path } = event.data;
+          // Por ahora solo mostramos que llegó
+          document.body.style.background = 'white';
+          document.getElementById('root').innerHTML = "<h1>MOTOR RECIBIDO!</h1><pre>" + JSON.stringify(Object.keys(files)) + "</pre>";
+        }
+      });
+
+      checkLibs();
+    </script>
+  </body>
+</html>

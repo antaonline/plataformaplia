@@ -637,10 +637,20 @@ export default function DashboardPage() {
   const [renewError, setRenewError] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
 
-  const formatDate = (value: string | null) =>
-    value
-      ? new Intl.DateTimeFormat('es-PE', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))
-      : 'Sin fecha';
+  const formatDate = (value: string | null) => {
+    if (!value) return 'Sin fecha';
+    const d = new Date(value);
+    const day = d.getDate();
+    const monthNames = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+    const month = monthNames[d.getMonth()];
+    let hours = d.getHours();
+    const minutes = d.getMinutes().toString().padStart(2, '0');
+    const ampm = hours >= 12 ? 'pm' : 'am';
+    hours = hours % 12;
+    hours = hours ? hours : 12;
+    const strTime = hours.toString().padStart(2, '0') + ':' + minutes + ampm;
+    return `${day} ${month} ${strTime}`;
+  };
 
   const [formData, setFormData] = useState({
     domainOption: 'subdomain',
@@ -2771,7 +2781,7 @@ export default function DashboardPage() {
                       <div className="flex items-center justify-between">
                         <span className="text-sm text-muted-foreground">Entrega estimada</span>
                         <span className="text-sm font-semibold">
-                          {project?.type === 'LANDING' ? '24 horas' : '2 dias'}
+                          {(project?.type === 'LANDING' || project?.order?.plan?.name?.toLowerCase().includes('landing')) ? '1 día' : '2 días'}
                         </span>
                       </div>
                       <div className="rounded-xl border border-border p-3 text-xs text-muted-foreground">

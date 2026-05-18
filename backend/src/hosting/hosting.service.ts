@@ -366,7 +366,7 @@ export class HostingService {
           amount: total,
           currency: 'PEN',
           billingCycleMonths,
-          metadata: {
+          metadata: JSON.stringify({
             service: 'hosting-only',
             planSlug: definition.slug,
             planName: definition.name,
@@ -378,7 +378,7 @@ export class HostingService {
             storageMb: definition.storageMb,
             bandwidthMb: definition.bandwidthMb,
             mailboxesPerSite: definition.mailboxesPerSite,
-          } as Prisma.InputJsonValue,
+          }),
         },
       });
 
@@ -549,6 +549,9 @@ export class HostingService {
     const sslActiveCount = sites.filter((site) => site.sslStatus === 'ACTIVE').length;
     const decryptedPassword = this.cyberpanelService.revealStoredPassword(account.encryptedPassword ?? undefined);
 
+    const metadata = account.metadata ? JSON.parse(account.metadata) : {};
+    const subMetadata = account.activeSubscription?.metadata ? JSON.parse(account.activeSubscription.metadata) : {};
+
     return {
       account: {
         id: account.id,
@@ -557,19 +560,19 @@ export class HostingService {
         technicalAccess: {
           panelUrl: account.panelUrl,
           username:
-            (account.metadata as any)?.ownerType === 'shared-admin'
+            metadata.ownerType === 'shared-admin'
               ? null
               : account.cyberpanelUsername,
           password:
-            (account.metadata as any)?.ownerType === 'shared-admin'
+            metadata.ownerType === 'shared-admin'
               ? null
               : decryptedPassword || null,
-          managedByPlia: (account.metadata as any)?.ownerType === 'shared-admin',
+          managedByPlia: metadata.ownerType === 'shared-admin',
         },
       },
       plan: {
         name: account.activeSubscription?.plan?.name ?? 'Hosting PLIA',
-        slug: (account.activeSubscription?.metadata as any)?.planSlug ?? 
+        slug: subMetadata.planSlug ?? 
               (account.activeSubscription?.plan?.slug ? account.activeSubscription.plan.slug.replace(/^hosting-/, '') : null),
         billingCycleMonths: account.activeSubscription?.billingCycleMonths ?? 12,
         renewsAt: account.activeSubscription?.endDate ?? null,
@@ -779,14 +782,14 @@ export class HostingService {
         serviceType: PlanServiceType.HOSTING_ONLY,
         billingCycleMonths: cycleMonths,
         cycleAmount,
-        metadata: {
+        metadata: JSON.stringify({
           planSlug: definition.slug,
           packageName: definition.packageName,
           maxSites: definition.maxSites,
           storageMb: definition.storageMb,
           bandwidthMb: definition.bandwidthMb,
           mailboxesPerSite: definition.mailboxesPerSite,
-        } as Prisma.InputJsonValue,
+        }),
         startDate: new Date(),
         endDate,
         nextBillingAt: endDate,
@@ -810,11 +813,11 @@ export class HostingService {
         email: provision.account.email,
         panelUrl: provision.account.panelUrl,
         encryptedPassword: provision.account.encryptedPassword ?? undefined,
-        metadata: {
+        metadata: JSON.stringify({
           source: 'hosting-order',
           sourceOrderId: order.id,
           ownerType: provision.account.ownerType,
-        } as Prisma.InputJsonValue,
+        }),
       },
       create: {
         userId,
@@ -829,11 +832,11 @@ export class HostingService {
         email: provision.account.email,
         panelUrl: provision.account.panelUrl,
         encryptedPassword: provision.account.encryptedPassword,
-        metadata: {
+        metadata: JSON.stringify({
           source: 'hosting-order',
           sourceOrderId: order.id,
           ownerType: provision.account.ownerType,
-        } as Prisma.InputJsonValue,
+        }),
       },
     });
 
@@ -915,9 +918,9 @@ export class HostingService {
         where: { id: site.id },
         data: {
           status: 'ACTIVE',
-          metadata: {
+          metadata: JSON.stringify({
             createdVia: 'plia-hosting-dashboard',
-          } as Prisma.InputJsonValue,
+          }),
         },
       });
     } catch (error: any) {
@@ -925,9 +928,9 @@ export class HostingService {
         where: { id: site.id },
         data: {
           status: 'ERROR',
-          metadata: {
+          metadata: JSON.stringify({
             error: error?.message || 'No se pudo crear el sitio en CyberPanel.',
-          } as Prisma.InputJsonValue,
+          }),
         },
       });
       throw error;
@@ -1039,11 +1042,11 @@ export class HostingService {
           uploadCount: { increment: 1 },
           lastUploadedAt: new Date(),
           lastDeployedAt: new Date(),
-          metadata: {
-            ...(site.metadata as any || {}),
+          metadata: JSON.stringify({
+            ...JSON.parse(site.metadata || '{}'),
             lastUploadFiles: files.length,
             lastUploadAt: new Date().toISOString(),
-          } as Prisma.InputJsonValue,
+          }),
         },
       });
 
@@ -1089,11 +1092,11 @@ export class HostingService {
           appType: 'WORDPRESS',
           status: 'ACTIVE',
           lastDeployedAt: new Date(),
-          metadata: {
-            ...(site.metadata as any || {}),
+          metadata: JSON.stringify({
+            ...JSON.parse(site.metadata || '{}'),
             wordpressInstalledAt: new Date().toISOString(),
             wordpressUser: dto.wpUser,
-          } as Prisma.InputJsonValue,
+          }),
         },
       });
     } catch (error: any) {
