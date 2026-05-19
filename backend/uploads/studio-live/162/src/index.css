@@ -1,0 +1,20 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-primary: #C41E3A;
+  --color-secondary: #D4A017;
+  --color-accent: #FF3A5C;
+  --color-bg: #0A0A0F;
+  --color-surface: #12121A;
+  --color-text: #F0EDE8;
+}
+
+html, body, #root { min-height: 100vh; margin: 0; }
+body {
+  background-color: #0A0A0F;
+  color: #F0EDE8;
+  font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+}
+h1, h2, h3, h4, h5, h6 { font-family: 'Bebas Neue', ui-sans-serif, system-ui, sans-serif; }

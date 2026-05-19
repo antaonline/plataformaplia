@@ -6,6 +6,7 @@
     "dist",
     "**/*spec.ts",
     "templates",
-    "generated"
+    "generated",
+    "uploads"
   ]
 }

@@ -281,8 +281,9 @@ model HostedMailbox {
 model AiCredit {
   id          Int      @id @default(autoincrement())
   userId      Int      @unique
-  dailyUsed   Int      @default(0)
-  monthlyUsed Int      @default(0)
+  plan        String   @default("EXPLORADOR") // EXPLORADOR|PRESENCIA|EMPRENDEDOR|AGENCIA
+  dailyUsed   Int      @default(0) // creditos * 100 (punto fijo) usados hoy
+  monthlyUsed Int      @default(0) // creditos * 100 usados este mes
   lastResetAt DateTime @default(now())
   user        user     @relation(fields: [userId], references: [id])
 

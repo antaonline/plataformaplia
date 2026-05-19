@@ -5,6 +5,7 @@ import { join } from 'path';
 import { AiGenerationResult, AiMode, SiteSpec } from './ai.types';
 import { PrismaService } from '../prisma/prisma.service';
 import { NextExportService } from '../integrations/next-export/next-export.service';
+import { WebsiteGenService, WebMode } from './website-gen.service';
 import { ProjectStatus } from '@prisma/client';
 
 type PlanType = 'LANDING' | 'WEB';
@@ -16,6 +17,7 @@ export class AiService {
   constructor(
     private prisma: PrismaService,
     private nextExportService: NextExportService,
+    private websiteGen: WebsiteGenService,
   ) {}
 
   private get env() {
@@ -508,6 +510,11 @@ export class AiService {
       return null;
     }
 
+    // Motor Claude estatico (detras de feature flag; legacy intacto).
+    if ((process.env.WEBDEV_ENGINE || 'legacy').toLowerCase() === 'claude') {
+      return this.generateStaticWithClaude(project);
+    }
+
     try {
       const plan = project.type as PlanType;
       const mode = this.getMode(plan);
@@ -658,6 +665,144 @@ export class AiService {
                 previewPath,
                 previewExists,
               },
+            },
+          },
+        },
+      });
+      return null;
+    }
+  }
+
+  /**
+   * Motor Claude para sitios estaticos (LANDING/WEB). Aislado del legacy.
+   * Mantiene el MISMO contrato de persistencia/estado que generateForProject
+   * para no romper cron/publicacion/pagos.
+   */
+  private async generateStaticWithClaude(
+    project: any,
+  ): Promise<AiGenerationResult | null> {
+    const projectId = project.id as number;
+    const onboarding = (project.onboardingData as any) || {};
+    try {
+      const planType = project.type as PlanType;
+      const mode: WebMode = planType === 'LANDING' ? 'LANDING' : 'WEB';
+      const brief = this.buildUserPrompt(onboarding, planType);
+      const clientImages: string[] = Array.isArray(onboarding.images)
+        ? onboarding.images.filter((x: any) => typeof x === 'string')
+        : [];
+      const currentDomain = onboarding?.publicDomain || null;
+      this.logger.log(
+        `AI(claude-static) start project=${projectId} mode=${mode} domain=${currentDomain ?? 'preview-only'}`,
+      );
+
+      // 1. Plan (Claude ve las imagenes del cliente, multimodal).
+      const sitePlan = await this.websiteGen.plan(brief, mode, clientImages);
+
+      // 2. Imagenes con DALL-E (se mantiene) desde los prompts del plan.
+      const rawImages = await this.generateImages(
+        sitePlan.imagePrompts.map((p) => ({
+          id: p.id,
+          prompt: p.prompt,
+          usage: p.usage,
+        })),
+        planType,
+        this.getMode(planType),
+      );
+      const storedImages = this.persistImages(projectId, rawImages);
+      const imageUrls: Record<string, string> = {};
+      storedImages.forEach((img) => {
+        imageUrls[img.usage || img.id] = img.url;
+      });
+
+      // 3. Render de paginas HTML estaticas (Tailwind CDN).
+      const filesMap = await this.websiteGen.renderAll(
+        sitePlan,
+        brief,
+        mode,
+        imageUrls,
+        clientImages,
+      );
+
+      // 4. Mismo formato de salida que legacy: pages[{slug,html}] + html.
+      const pages = Object.entries(filesMap).map(([file, content]) => ({
+        slug: file === 'index.html' ? 'index' : file.replace(/\.html$/i, ''),
+        html: content,
+      }));
+      const html =
+        pages.find((p) => p.slug === 'index')?.html || pages[0]?.html || '';
+
+      const domain = currentDomain || '';
+      let deployment: { target?: string | null; previewUrl?: string } = {};
+      if (html) {
+        deployment = await this.persistGeneratedAssets(
+          projectId,
+          domain || null,
+          html,
+          pages,
+        );
+      }
+
+      const score = {
+        conversion: 90,
+        seo: 85,
+        accessibility: 80,
+        performance: 85,
+        notes: [] as string[],
+      };
+      const previewPath = join(
+        process.cwd(),
+        'uploads',
+        'previews',
+        String(projectId),
+        'index.html',
+      );
+      const previewExists = fs.existsSync(previewPath);
+
+      await this.prisma.project.update({
+        where: { id: projectId },
+        data: {
+          status: ProjectStatus.IN_PROGRESS,
+          onboardingData: {
+            ...onboarding,
+            aiGeneration: {
+              ...(onboarding.aiGeneration || {}),
+              status: 'READY',
+              mode: 'standard',
+              updatedAt: new Date().toISOString(),
+              score,
+              images: storedImages,
+              previewUrl: deployment.previewUrl || null,
+              target: deployment.target || null,
+              finishedAt: new Date().toISOString(),
+              model: 'claude-static',
+              domain: domain || null,
+              checks: { previewPath, previewExists },
+            },
+          },
+        },
+      });
+
+      return {
+        spec: {} as any,
+        images: storedImages,
+        html,
+        pages,
+        score,
+      } as AiGenerationResult;
+    } catch (error: any) {
+      this.logger.error(
+        `Fallo AI(claude-static) ${projectId}: ${error?.message || error}`,
+      );
+      await this.prisma.project.update({
+        where: { id: projectId },
+        data: {
+          onboardingData: {
+            ...onboarding,
+            aiGeneration: {
+              ...(onboarding.aiGeneration || {}),
+              status: 'FAILED',
+              error: error?.message || 'Error generando el sitio',
+              updatedAt: new Date().toISOString(),
             },
           },
         },

@@ -110,7 +110,7 @@ export default function AiWebLandingPage() {
       name: "Emprendedor",
       price: "79",
       description: "Potencia para negocios en crecimiento y expansión.",
-      credits: "20 créditos diarios (máx 300/mes)",
+      credits: "15 créditos diarios (máx 150/mes)",
       isPopular: false,
       features: [
         "3 Webs Profesionales",
@@ -126,7 +126,7 @@ export default function AiWebLandingPage() {
       name: "Agencia",
       price: "199",
       description: "La oficina virtual para creadores y agencias.",
-      credits: "20 créditos diarios (Tope 1000/mes)",
+      credits: "20 créditos diarios (máx 400/mes)",
       isPopular: false,
       features: [
         "15 Webs Profesionales",
@@ -330,15 +330,23 @@ export default function AiWebLandingPage() {
 
                   <div className="mb-6">
                     <div className="flex items-baseline gap-1">
-                       <span className={cn("text-5xl font-extrabold tracking-tight", isPremium ? "text-white" : "text-slate-900")}>
-                         S/ {plan.price}
-                       </span>
-                       <span className={cn("text-sm font-medium", isPremium ? "text-white/70" : "text-muted-foreground")}>/mes</span>
+                       {plan.price === "0" ? (
+                         <span className={cn("text-5xl font-extrabold tracking-tight", isPremium ? "text-white" : "text-slate-900")}>
+                           GRATIS
+                         </span>
+                       ) : (
+                         <>
+                           <span className={cn("text-5xl font-extrabold tracking-tight", isPremium ? "text-white" : "text-slate-900")}>
+                             S/ {plan.price}
+                           </span>
+                           <span className={cn("text-sm font-medium", isPremium ? "text-white/70" : "text-muted-foreground")}>/mes</span>
+                         </>
+                       )}
                     </div>
-                    
+
                     <div className={cn("mt-6 py-4 border-y", isPremium ? "border-white/10" : "border-slate-100")}>
-                       <p className="text-[10px] font-bold uppercase tracking-widest text-cta mb-1">IA Créditos</p>
-                       <p className="text-sm font-bold">{plan.credits}</p>
+                       <p className={cn("text-[10px] font-bold uppercase tracking-widest mb-1", isPremium ? "text-cta" : "text-indigo-600")}>IA Créditos</p>
+                       <p className={cn("text-sm font-bold", isPremium ? "text-white" : "text-slate-800")}>{plan.credits}</p>
                     </div>
                   </div>
 

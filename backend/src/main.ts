@@ -4,6 +4,7 @@ import { ValidationPipe } from '@nestjs/common'
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'
 import cookieParser from 'cookie-parser'
 import * as dotenv from 'dotenv'
+import { json, urlencoded } from 'express'
 import { join } from 'path'
 import { NestExpressApplication } from '@nestjs/platform-express'
 
@@ -19,6 +20,11 @@ async function bootstrap() {
   const port = Number(process.env.PORT || 3002);
 
   app.setGlobalPrefix('api');
+
+  // Los proyectos generados por la IA (varios TSX) superan el limite por
+  // defecto de 100KB; subimos el limite del body para el preview/iachat.
+  app.use(json({ limit: '25mb' }))
+  app.use(urlencoded({ extended: true, limit: '25mb' }))
 
   // ✅ cookies (refresh token)
   app.use(cookieParser())

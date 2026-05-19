@@ -663,17 +663,81 @@ export class ProjectsService {
         
         this.logger.log(`Procesando auto-publicacion para proyecto ${project.id} (${project.name})...`);
 
-        // Filtrar manualmente los que tengan la IA lista (evita problemas de tipos con JSON path en Prisma)
-        if (data.aiGeneration?.status !== 'READY') {
-          this.logger.warn(`Proyecto ${project.id} omitido: IA status es ${data.aiGeneration?.status} (se requiere READY)`);
-          continue;
-        }
+        // AUTO-REPARACION: si la IA no quedo lista (fallo, nunca corrio por
+        // un reinicio, o no dejo preview), en vez de saltar para siempre
+        // RE-DISPARAMOS la generacion. Con tope de intentos para no loopear.
+        const aiReady =
+          data.aiGeneration?.status === 'READY' &&
+          this.hasGeneratedOutput(project.id, data);
 
-        if (!this.hasGeneratedOutput(project.id, data)) {
+        if (!aiReady) {
+          const MAX_RETRIES = 3;
+          const retries = Number(data.aiGeneration?.autoRetries || 0);
+
+          if (retries >= MAX_RETRIES) {
+            this.logger.error(
+              `Proyecto ${project.id}: IA no se completo tras ${retries} reintentos. Marcado FAILED.`,
+            );
+            await this.prisma.project.update({
+              where: { id: project.id },
+              data: {
+                onboardingData: {
+                  ...data,
+                  aiGeneration: {
+                    ...(data.aiGeneration || {}),
+                    status: 'FAILED',
+                    error:
+                      'La generacion automatica no pudo completarse tras varios intentos. Reintenta o contacta soporte.',
+                    updatedAt: new Date().toISOString(),
+                  },
+                },
+              },
+            });
+            continue;
+          }
+
           this.logger.warn(
-            `Auto publish omitido para project=${project.id}: no existe salida verificada (preview) para publicar.`,
+            `Proyecto ${project.id}: IA status=${data.aiGeneration?.status}, sin salida lista. Reintento ${retries + 1}/${MAX_RETRIES}.`,
           );
-          continue;
+          await this.prisma.project.update({
+            where: { id: project.id },
+            data: {
+              onboardingData: {
+                ...data,
+                aiGeneration: {
+                  ...(data.aiGeneration || {}),
+                  status: 'GENERATING',
+                  autoRetries: retries + 1,
+                  updatedAt: new Date().toISOString(),
+                },
+              },
+            },
+          });
+          try {
+            // Awaited (no fire-and-forget): si el backend se reinicia, el
+            // proximo cron reintenta; si termina, publicamos abajo.
+            await this.aiService.generateForProject(project.id);
+          } catch (genErr: any) {
+            this.logger.error(
+              `Reintento de generacion fallo para proyecto ${project.id}: ${genErr?.message || genErr}`,
+            );
+            continue;
+          }
+          const fresh = await this.prisma.project.findUnique({
+            where: { id: project.id },
+          });
+          const freshData = (fresh?.onboardingData as any) || data;
+          if (
+            freshData.aiGeneration?.status !== 'READY' ||
+            !this.hasGeneratedOutput(project.id, freshData)
+          ) {
+            this.logger.warn(
+              `Proyecto ${project.id}: tras reintento sigue sin estar listo; se reintentara el proximo ciclo.`,
+            );
+            continue;
+          }
+          // Quedo listo en este reintento: continuamos a publicar con datos frescos.
+          Object.assign(data, freshData);
         }
 
         const publicUrl = data.publicUrl;
