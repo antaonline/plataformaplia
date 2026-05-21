@@ -68,5 +68,14 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 /uploads/generated
 /generated/next
 
+# Datos generados en runtime por el Studio iachat (no commitear: pesan
+# mucho y son derivados; el motor los recrea solo).
+/uploads/studio-live
+/uploads/thumbnails
+/uploads/previews
+
 # Experimental Features
-experimental/
+# (desactivado: src/experimental contiene los modulos AiChat/Sandbox/Preview
+# y WebsiteGenService los importa -> deben estar en git para que el build
+# de produccion compile. Solo se ignoran los datos runtime arriba.)
+# experimental/
