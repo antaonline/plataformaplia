@@ -263,7 +263,47 @@ export class ProjectsService {
           (mergedData as any).subdomain ?? null,
         )}`,
       );
-      const cyberpanelProvision = await this.cyberpanelService.ensureSite(projectId);
+      let cyberpanelProvision: any;
+      try {
+        cyberpanelProvision = await this.cyberpanelService.ensureSite(projectId);
+      } catch (cpErr: any) {
+        // Si ensureSite lanza (no debe tras los try/catch internos, pero por
+        // si acaso), persistimos el error visible para no dejar el proyecto
+        // mudo en "En progreso".
+        const errMsg = cpErr?.message || 'Error desconocido en CyberPanel.';
+        this.logger.error(
+          `saveOnboarding project=${projectId}: ensureSite lanzo: ${errMsg}`,
+          cpErr?.stack,
+        );
+        const current = (await this.prisma.project.findUnique({
+          where: { id: projectId },
+          select: { onboardingData: true },
+        }))?.onboardingData as any || mergedData;
+        await this.prisma.project.update({
+          where: { id: projectId },
+          data: {
+            onboardingData: {
+              ...current,
+              cyberpanel: {
+                ...(current?.cyberpanel || {}),
+                status: 'FAILED',
+                stage: 'saveOnboarding.ensureSite',
+                error: errMsg,
+                updatedAt: new Date().toISOString(),
+              },
+              aiGeneration: {
+                ...(current?.aiGeneration || {}),
+                status: 'FAILED',
+                error: `No se pudo crear el subdominio en CyberPanel: ${errMsg}`,
+                updatedAt: new Date().toISOString(),
+              },
+            },
+          },
+        });
+        throw new BadRequestException(
+          `No se pudo crear el subdominio en CyberPanel: ${errMsg}`,
+        );
+      }
       const refreshedProject = await this.prisma.project.findUnique({
         where: { id: projectId },
         select: { onboardingData: true },

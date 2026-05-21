@@ -624,7 +624,49 @@ export class CyberpanelService {
     if (existing) {
       throw new BadRequestException('El subdominio elegido ya esta en uso. Elige otro.');
     }
-    const accountProvision = await this.ensureCustomerAccount(project);
+    this.logger.log(
+      `ensureSite project=${projectId} domain=${domain}: garantizando cuenta CyberPanel...`,
+    );
+    let accountProvision;
+    try {
+      accountProvision = await this.ensureCustomerAccount(project);
+    } catch (error: any) {
+      // Antes esto se propagaba sin persistir nada -> proyecto quedaba "En
+      // progreso" mudo. Ahora lo registramos como cyberpanel:FAILED y
+      // devolvemos domain:null para que el llamador marque aiGeneration FAILED.
+      const responseData = error?.response?.data;
+      const message = this.extractErrorMessage(
+        responseData || error?.message || error,
+      );
+      this.logger.error(
+        `ensureSite project=${projectId} fallo en ensureCustomerAccount: ${message}`,
+      );
+      if (responseData) {
+        this.logger.error(
+          `CyberPanel response: ${JSON.stringify(responseData)}`,
+        );
+      }
+      await this.prisma.project.update({
+        where: { id: projectId },
+        data: {
+          onboardingData: {
+            ...data,
+            cyberpanel: {
+              status: 'FAILED',
+              stage: 'ensureCustomerAccount',
+              requestedDomain: domain,
+              error: responseData || error?.message || 'Unknown error',
+              createdAt: new Date().toISOString(),
+            },
+          },
+        },
+      });
+      return {
+        domain: null,
+        createdWebsite: false,
+        accountCreated: false,
+      };
+    }
     const account = accountProvision.account;
     const ownerPassword =
       accountProvision.plainPassword ||
