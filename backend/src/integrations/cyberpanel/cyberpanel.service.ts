@@ -124,7 +124,24 @@ export class CyberpanelService {
   }
 
   private isSuccessResponse(data: any) {
-    if (!data || typeof data !== 'object') return true;
+    // BUG ANTERIOR: si data era null/string/HTML (p.ej. pagina de login por
+    // cred caducada) devolvia true -> el sistema creia que CyberPanel habia
+    // creado el sitio aunque NO lo creara. Ahora exigimos un JSON con un
+    // marcador explicito de exito.
+    if (!data) return false;
+    if (typeof data === 'string') {
+      // CyberPanel a veces responde JSON-en-string ("{...}"); intentar parsear.
+      const trimmed = data.trim();
+      if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+        try {
+          return this.isSuccessResponse(JSON.parse(trimmed));
+        } catch {
+          /* no es JSON valido, cae a falso */
+        }
+      }
+      return false; // HTML/login/cadena = NO exito
+    }
+    if (typeof data !== 'object') return false;
     const candidates = [
       data.status,
       data.createWebSiteStatus,
@@ -181,6 +198,15 @@ export class CyberpanelService {
         httpsAgent: this.httpsAgent,
         timeout,
       });
+      // Log del cuerpo de respuesta SIEMPRE (truncado). Antes esto quedaba
+      // oculto -> respuestas como HTML de login pasaban como "exito" mudo.
+      const bodyPreview =
+        typeof res.data === 'string'
+          ? res.data.slice(0, 400)
+          : JSON.stringify(res.data || {}).slice(0, 400);
+      this.logger.log(
+        `CyberPanel response ${path} status=${res.status} body=${bodyPreview}`,
+      );
       if (!this.isSuccessResponse(res.data)) {
         throw new BadRequestException(this.extractErrorMessage(res.data));
       }
