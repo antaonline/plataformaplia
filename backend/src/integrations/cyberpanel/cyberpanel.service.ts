@@ -595,6 +595,16 @@ export class CyberpanelService {
   }
 
   private async ensureCustomerAccount(project: any): Promise<CustomerAccountProvision> {
+    // Si CYBERPANEL_OWNER está seteado, usamos esa cuenta directamente como
+    // owner de todos los sitios (evita límites de paquetes por-usuario).
+    if (process.env.CYBERPANEL_OWNER) {
+      return {
+        account: this.buildSharedAdminAccount(`project-${project.id}`),
+        accountCreated: false,
+        plainPassword: process.env.CYBERPANEL_ADMIN_PASS,
+      };
+    }
+
     return this.ensureHostingAccountForUser(
       {
         id: project.userId,
