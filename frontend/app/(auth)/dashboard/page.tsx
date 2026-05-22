@@ -1863,6 +1863,18 @@ export default function DashboardPage() {
                 </CardContent>
               </Card>
             )}
+            {!isAdmin && !project && tab === 'projects' && (
+              <div className="flex flex-col items-center justify-center py-24 text-center gap-4">
+                <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center text-3xl">🌐</div>
+                <h2 className="text-xl font-bold">Aún no tienes un proyecto</h2>
+                <p className="text-sm text-muted-foreground max-w-sm">
+                  Contrata un plan para comenzar a construir tu presencia en línea con PLIA.
+                </p>
+                <a href="/planes" className="inline-flex items-center gap-2 rounded-full bg-[#D9FF00] text-black font-semibold px-6 py-2 hover:opacity-90 transition">
+                  Ver planes
+                </a>
+              </div>
+            )}
             {!isAdmin && isWaitingInfo && (
               <div className="grid lg:grid-cols-[2fr_1fr] gap-6">
                 <Card className="rounded-lg border-border/60">
