@@ -37,7 +37,7 @@ export const StreamingLoadingAnimation: React.FC<StreamingLoadingAnimationProps>
 
   // Spring configurations from Dyad
   const springConfig = {
-    type: "spring",
+    type: "spring" as const,
     damping: 20,
     stiffness: 100,
     mass: 0.5
