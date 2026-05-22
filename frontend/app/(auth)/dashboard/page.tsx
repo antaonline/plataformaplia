@@ -82,6 +82,21 @@ type Project = {
   };
 };
 
+// El backend guarda onboardingData como string JSON (columna LongText).
+// La UI lo lee como objeto, asi que lo parseamos al recibir cada proyecto.
+const normalizeProject = (p: any): Project => {
+  if (!p) return p;
+  let onboardingData = p.onboardingData;
+  if (typeof onboardingData === 'string') {
+    try {
+      onboardingData = JSON.parse(onboardingData || '{}');
+    } catch {
+      onboardingData = {};
+    }
+  }
+  return { ...p, onboardingData: onboardingData || {} };
+};
+
 type BusinessIdentity = 'local-business' | 'professional' | 'digital-project';
 
 type OptionGroup = {
@@ -733,8 +748,9 @@ export default function DashboardPage() {
           return;
         }
       }
-      setProjects(list);
-      const current = list[0] ?? null;
+      const normalizedList = list.map(normalizeProject);
+      setProjects(normalizedList);
+      const current = normalizedList[0] ?? null;
       setProject(current);
       setSelectedProjectId(current?.id ?? null);
       if (current?.onboardingData?.subdomain) {
@@ -750,7 +766,9 @@ export default function DashboardPage() {
         const listText = await listRes.text();
         const listData = listText ? JSON.parse(listText) : [];
         if (listRes.ok) {
-          setAdminProjects(Array.isArray(listData) ? listData : []);
+          setAdminProjects(
+            (Array.isArray(listData) ? listData : []).map(normalizeProject),
+          );
         }
       }
     } catch (err: any) {
@@ -838,10 +856,11 @@ export default function DashboardPage() {
   }, [project]);
 
   const handleSelectProject = (proj: Project) => {
-    setSelectedProjectId(proj.id);
-    setProject(proj);
-    if (proj?.onboardingData?.subdomain) {
-      setStep(Math.max(1, Math.min(6, proj.onboardingStep ?? 1)));
+    const normalized = normalizeProject(proj);
+    setSelectedProjectId(normalized.id);
+    setProject(normalized);
+    if (normalized?.onboardingData?.subdomain) {
+      setStep(Math.max(1, Math.min(6, normalized.onboardingStep ?? 1)));
     } else {
       setStep(1);
     }
@@ -1319,7 +1338,7 @@ export default function DashboardPage() {
             'No se pudo guardar la informacion',
         );
       }
-      const updated = submitData;
+      const updated = normalizeProject(submitData);
       setProject(updated);
     } catch (err: any) {
       setFormError(err.message ?? 'Error al enviar la informacion');
@@ -1402,7 +1421,7 @@ export default function DashboardPage() {
       if (!res.ok) {
         throw new Error(data?.message || 'No se pudo enviar los cambios.');
       }
-      setProject(data);
+      setProject(normalizeProject(data));
       setRevisionMessage('');
       setRevisionOpen(false);
     } catch (err: any) {

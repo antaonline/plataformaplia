@@ -30,6 +30,21 @@ type Project = {
   };
 };
 
+// El backend guarda onboardingData como string JSON; la UI lo lee como
+// objeto, asi que lo parseamos al recibir el proyecto.
+const normalizeProject = (p: any): Project => {
+  if (!p) return p;
+  let onboardingData = p.onboardingData;
+  if (typeof onboardingData === 'string') {
+    try {
+      onboardingData = JSON.parse(onboardingData || '{}');
+    } catch {
+      onboardingData = {};
+    }
+  }
+  return { ...p, onboardingData: onboardingData || {} };
+};
+
 export default function AdminProjectDetailPage() {
   const params = useParams();
   const projectId = Array.isArray(params?.id) ? params.id[0] : params?.id;
@@ -72,7 +87,7 @@ export default function AdminProjectDetailPage() {
         const text = await res.text();
         const data = text ? JSON.parse(text) : null;
         if (!res.ok) throw new Error(data?.message || 'No se pudo cargar el proyecto');
-        setProject(data);
+        setProject(normalizeProject(data));
       } catch (err: any) {
         setError(err.message ?? 'Error al cargar el proyecto');
       } finally {
@@ -111,7 +126,7 @@ export default function AdminProjectDetailPage() {
       if (!res.ok) {
         throw new Error(data?.message || 'No se pudo publicar el proyecto');
       }
-      setProject(data);
+      setProject(normalizeProject(data));
     } catch (err: any) {
       setError(err.message ?? 'No se pudo publicar el proyecto');
     } finally {
