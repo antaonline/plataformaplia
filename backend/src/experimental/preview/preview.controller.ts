@@ -93,8 +93,8 @@ export class PreviewController {
 export class PreviewProxyController {
   constructor(private readonly previewService: PreviewService) {}
 
-  // Matchea /serve y /serve/cualquier/ruta con cualquier profundidad
-  @Get(':id/serve*')
+  // Matchea /serve y /serve/cualquier/ruta. *path captura el segmento opcional.
+  @Get(':id/serve*path')
   async serveProxy(
     @Param('id', ParseIntPipe) id: number,
     @Request() req: any,
