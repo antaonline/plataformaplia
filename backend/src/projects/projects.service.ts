@@ -794,4 +794,56 @@ export class ProjectsService {
       }
     }
   }
+
+  /**
+   * Elimina un proyecto por completo: el sitio en CyberPanel, los archivos de
+   * preview en disco y el registro en la base de datos. El Order asociado se
+   * conserva como historial de compra.
+   */
+  async deleteProject(projectId: number, userId: number, isAdmin = false) {
+    const project = await this.prisma.project.findUnique({
+      where: { id: projectId },
+    });
+    if (!project) {
+      throw new NotFoundException('Project no encontrado.');
+    }
+    if (!isAdmin && project.userId !== userId) {
+      throw new BadRequestException('No tienes acceso a este proyecto.');
+    }
+
+    // 1. Eliminar el sitio en CyberPanel (libera el slot del paquete). No
+    // bloqueamos el borrado de DB si CyberPanel falla; solo lo registramos.
+    try {
+      await this.cyberpanelService.deleteSiteByProject(projectId);
+    } catch (err: any) {
+      this.logger.error(
+        `deleteProject project=${projectId}: fallo al eliminar sitio en CyberPanel: ${err?.message || err}`,
+      );
+    }
+
+    // 2. Limpiar archivos de preview generados en disco.
+    try {
+      const previewDir = join(
+        process.cwd(),
+        'uploads',
+        'previews',
+        String(projectId),
+      );
+      if (fs.existsSync(previewDir)) {
+        fs.rmSync(previewDir, { recursive: true, force: true });
+      }
+    } catch (err: any) {
+      this.logger.warn(
+        `deleteProject project=${projectId}: no se pudo limpiar previews: ${err?.message || err}`,
+      );
+    }
+
+    // 3. Eliminar el proyecto de la base de datos.
+    await this.prisma.project.delete({ where: { id: projectId } });
+
+    this.logger.log(
+      `deleteProject project=${projectId} eliminado correctamente.`,
+    );
+    return { success: true, id: projectId };
+  }
 }

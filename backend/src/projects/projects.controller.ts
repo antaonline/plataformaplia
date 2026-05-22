@@ -1,6 +1,7 @@
 import {
   Controller,
   Post,
+  Delete,
   Param,
   Body,
   ParseIntPipe,
@@ -247,5 +248,18 @@ export class ProjectsController {
       throw new BadRequestException('Debes indicar los cambios.');
     }
     return this.projectsService.requestRevision(id, req.user.id, message);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Delete(':id')
+  async remove(
+    @Param('id', ParseIntPipe) id: number,
+    @Req() req: any,
+  ) {
+    return this.projectsService.deleteProject(
+      id,
+      req.user.id,
+      req.user?.role === 'ADMIN',
+    );
   }
 }

@@ -31,6 +31,7 @@ import {
   Hammer,
   CheckCircle2,
   AlertCircle,
+  Trash2,
 } from 'lucide-react';
 
 import Image from "next/image";
@@ -636,6 +637,8 @@ export default function DashboardPage() {
   const [renewLoading, setRenewLoading] = useState(false);
   const [renewError, setRenewError] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
+  const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const formatDate = (value: string | null) => {
     if (!value) return 'Sin fecha';
@@ -1444,6 +1447,42 @@ export default function DashboardPage() {
     }
   };
 
+  const handleDeleteProject = async () => {
+    if (!projectToDelete) return;
+    setDeleting(true);
+    try {
+      const token = localStorage.getItem('access_token');
+      const res = await fetch(`${apiBase}/projects/${projectToDelete.id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        let message = 'No se pudo eliminar el proyecto.';
+        try {
+          message = (text ? JSON.parse(text) : null)?.message || message;
+        } catch {
+          /* respuesta no-JSON */
+        }
+        throw new Error(message);
+      }
+      toast({
+        title: 'Proyecto eliminado',
+        description: `"${projectToDelete.name}" se eliminó de la plataforma y de CyberPanel.`,
+      });
+      setProjectToDelete(null);
+      await loadData();
+    } catch (err: any) {
+      toast({
+        title: 'Error al eliminar',
+        description: err?.message || 'No se pudo eliminar el proyecto.',
+        variant: 'destructive',
+      });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="section-container py-16">
@@ -1856,6 +1895,15 @@ export default function DashboardPage() {
                         {renderStatus(proj.status)}
                         <Button variant="outline" size="sm" asChild>
                           <Link href={`/dashboard/detalles-proyecto/${proj.id}`}>Ver proyecto</Link>
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                          title="Eliminar proyecto"
+                          onClick={() => setProjectToDelete(proj)}
+                        >
+                          <Trash2 className="h-4 w-4" />
                         </Button>
                       </div>
                     </div>
@@ -2899,6 +2947,18 @@ export default function DashboardPage() {
                                       Ver proyecto
                                     </Button>
                                   )}
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                    title="Eliminar proyecto"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setProjectToDelete(proj);
+                                    }}
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
                                 </div>
                               </div>
                             </div>
@@ -3245,6 +3305,41 @@ export default function DashboardPage() {
           </div>
         </main>
       </div>
+
+      <Dialog
+        open={!!projectToDelete}
+        onOpenChange={(open) => {
+          if (!open && !deleting) setProjectToDelete(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Eliminar proyecto</DialogTitle>
+            <DialogDescription>
+              ¿Seguro que deseas eliminar
+              {projectToDelete ? ` "${projectToDelete.name}"` : ' este proyecto'}?
+              Se borrará el proyecto de la plataforma y su sitio web en
+              CyberPanel. Esta acción no se puede deshacer.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setProjectToDelete(null)}
+              disabled={deleting}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteProject}
+              disabled={deleting}
+            >
+              {deleting ? 'Eliminando...' : 'Sí, eliminar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
