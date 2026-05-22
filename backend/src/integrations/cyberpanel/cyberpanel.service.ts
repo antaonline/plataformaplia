@@ -463,7 +463,8 @@ export class CyberpanelService {
     });
 
     for (const project of projects) {
-      const account = (project.onboardingData as any)?.cyberpanel?.account;
+      const parsed = JSON.parse((project.onboardingData as string) || '{}');
+      const account = parsed?.cyberpanel?.account;
       if (account?.username && account?.panelUrl) {
         return account as StoredCyberpanelAccount;
       }
