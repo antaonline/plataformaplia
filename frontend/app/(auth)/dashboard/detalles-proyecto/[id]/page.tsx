@@ -245,7 +245,7 @@ export default function AdminProjectDetailPage() {
                 <div><strong>Empresa:</strong> {project.onboardingData?.businessName || '-'}</div>
                 <div><strong>Rubro:</strong> {project.onboardingData?.businessSector || '-'}</div>
                 <div><strong>Ciudad:</strong> {project.onboardingData?.city || '-'}</div>
-                <div><strong>Objetivo:</strong> {project.onboardingData?.goal || '-'}</div>
+                <div><strong>Objetivo:</strong> {project.onboardingData?.professionalGoal || project.onboardingData?.goal || '-'}</div>
                 <div><strong>Publico:</strong> {(project.onboardingData?.audience || []).join(', ') || '-'}</div>
                 <div><strong>Colores:</strong> {project.onboardingData?.colors || '-'}</div>
                 <div><strong>Referencias:</strong> {project.onboardingData?.references || '-'}</div>
