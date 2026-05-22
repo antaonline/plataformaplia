@@ -497,10 +497,7 @@ export class HostingService {
 
     const existingProject = await this.prisma.project.findFirst({
       where: {
-        onboardingData: {
-          path: 'publicDomain',
-          equals: domain,
-        } as any,
+        onboardingData: { contains: `"publicDomain":"${domain}"` },
       },
       select: { id: true },
     });

@@ -645,7 +645,7 @@ export class CyberpanelService {
     }
     let domain = `${preferred}.${baseDomain}`;
     const existing = await this.prisma.project.findFirst({
-      where: { onboardingData: { path: 'publicDomain', equals: domain } as any },
+      where: { onboardingData: { contains: `"publicDomain":"${domain}"` } },
     });
     if (existing) {
       throw new BadRequestException('El subdominio elegido ya esta en uso. Elige otro.');
