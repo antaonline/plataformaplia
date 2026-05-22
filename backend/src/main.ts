@@ -61,7 +61,10 @@ async function bootstrap() {
     });
   }
 
-  app.useStaticAssets(join(__dirname, '..', 'uploads'), {
+  // Servimos /uploads desde process.cwd() (raiz del backend), que es donde
+  // la IA escribe los previews/imagenes. Usar __dirname apuntaba a dist/ y
+  // el build compila a dist/src, dejando los archivos fuera del path.
+  app.useStaticAssets(join(process.cwd(), 'uploads'), {
     prefix: '/uploads',
   });
 

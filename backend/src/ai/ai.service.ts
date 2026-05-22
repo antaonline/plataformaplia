@@ -401,7 +401,7 @@ export class AiService {
         fs.writeFileSync(join(previewRoot, fileName), page.html, 'utf-8');
       }
     }
-    const appUrl = (process.env.APP_URL || 'http://localhost:3001').replace(/\/$/, '');
+    const appUrl = (process.env.PREVIEW_PROXY_BASE || 'http://localhost:3002').replace(/\/$/, '');
 
     let siteRoot: string | null = null;
     if (domain) {
@@ -460,7 +460,7 @@ export class AiService {
   private persistImages(projectId: number, images: Array<{ id: string; url: string; usage: string }>) {
     const baseDir = join(process.cwd(), 'uploads', 'generated', String(projectId));
     fs.mkdirSync(baseDir, { recursive: true });
-    const appUrl = (process.env.APP_URL || 'http://localhost:3001').replace(/\/$/, '');
+    const appUrl = (process.env.PREVIEW_PROXY_BASE || 'http://localhost:3002').replace(/\/$/, '');
     return images.map((img, idx) => {
       const filename = `${img.id || 'asset'}-${idx}.png`;
       const filePath = join(baseDir, filename);
@@ -660,7 +660,7 @@ export class AiService {
       this.logger.error(`Fallo AI generateForProject ${projectId}: ${error?.message || error}`);
       const previewPath = join(process.cwd(), 'uploads', 'previews', String(projectId), 'index.html');
       const previewExists = fs.existsSync(previewPath);
-      const appUrl = (process.env.APP_URL || 'http://localhost:3001').replace(/\/$/, '');
+      const appUrl = (process.env.PREVIEW_PROXY_BASE || 'http://localhost:3002').replace(/\/$/, '');
       await this.prisma.project.update({
         where: { id: projectId },
         data: {

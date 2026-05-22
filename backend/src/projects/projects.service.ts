@@ -81,7 +81,8 @@ export class ProjectsService {
   }
 
   private buildPreviewUrl(projectId: number) {
-    const appUrl = (process.env.APP_URL || 'http://localhost:3001').replace(/\/$/, '');
+    // Los /uploads los sirve el backend, no el frontend (APP_URL).
+    const appUrl = (process.env.PREVIEW_PROXY_BASE || 'http://localhost:3002').replace(/\/$/, '');
     return `${appUrl}/uploads/previews/${projectId}/index.html`;
   }
 
