@@ -616,15 +616,16 @@ export class ProjectsService {
       throw new BadRequestException('No tienes acceso a este proyecto.');
     }
 
+    const currentData = JSON.parse((project.onboardingData as string) || '{}');
     const mergedData = {
-      ...(project.onboardingData as any || {}),
+      ...currentData,
       [fieldKey]: documentUrl,
     };
 
     return this.prisma.project.update({
       where: { id: projectId },
       data: {
-        onboardingData: mergedData,
+        onboardingData: JSON.stringify(mergedData),
       },
     });
   }
