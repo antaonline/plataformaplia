@@ -639,6 +639,7 @@ export default function DashboardPage() {
   const [now, setNow] = useState(() => Date.now());
   const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
 
   const formatDate = (value: string | null) => {
     if (!value) return 'Sin fecha';
@@ -1471,6 +1472,7 @@ export default function DashboardPage() {
         description: `"${projectToDelete.name}" se eliminó de la plataforma y de CyberPanel.`,
       });
       setProjectToDelete(null);
+      setDeleteConfirmText('');
       await loadData();
     } catch (err: any) {
       toast({
@@ -1901,7 +1903,10 @@ export default function DashboardPage() {
                           variant="ghost"
                           className="text-destructive hover:bg-destructive/10 hover:text-destructive"
                           title="Eliminar proyecto"
-                          onClick={() => setProjectToDelete(proj)}
+                          onClick={() => {
+                            setDeleteConfirmText('');
+                            setProjectToDelete(proj);
+                          }}
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -2954,6 +2959,7 @@ export default function DashboardPage() {
                                     title="Eliminar proyecto"
                                     onClick={(e) => {
                                       e.stopPropagation();
+                                      setDeleteConfirmText('');
                                       setProjectToDelete(proj);
                                     }}
                                   >
@@ -3309,23 +3315,60 @@ export default function DashboardPage() {
       <Dialog
         open={!!projectToDelete}
         onOpenChange={(open) => {
-          if (!open && !deleting) setProjectToDelete(null);
+          if (!open && !deleting) {
+            setProjectToDelete(null);
+            setDeleteConfirmText('');
+          }
         }}
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Eliminar proyecto</DialogTitle>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertCircle className="h-5 w-5" />
+              Eliminar proyecto permanentemente
+            </DialogTitle>
             <DialogDescription>
-              ¿Seguro que deseas eliminar
-              {projectToDelete ? ` "${projectToDelete.name}"` : ' este proyecto'}?
-              Se borrará el proyecto de la plataforma y su sitio web en
-              CyberPanel. Esta acción no se puede deshacer.
+              Estás a punto de eliminar
+              {projectToDelete ? ` «${projectToDelete.name}»` : ' este proyecto'}{' '}
+              de forma permanente.
             </DialogDescription>
           </DialogHeader>
+
+          <div className="space-y-3 text-sm">
+            <p>Se borrará por completo y sin posibilidad de recuperación:</p>
+            <ul className="list-disc space-y-1 pl-5 text-muted-foreground">
+              <li>El sitio web y todos sus archivos del servidor</li>
+              <li>El dominio/subdominio en CyberPanel</li>
+              <li>Todos los datos del proyecto en la plataforma</li>
+            </ul>
+            <p className="font-medium text-destructive">
+              Esta acción NO se puede deshacer. Úsala solo como último recurso.
+            </p>
+            <div className="space-y-2 pt-1">
+              <label className="block text-sm font-medium text-foreground">
+                Escribe{' '}
+                <span className="font-mono font-semibold">
+                  {projectToDelete?.name}
+                </span>{' '}
+                para confirmar:
+              </label>
+              <Input
+                value={deleteConfirmText}
+                onChange={(e) => setDeleteConfirmText(e.target.value)}
+                placeholder={projectToDelete?.name ?? ''}
+                autoComplete="off"
+                disabled={deleting}
+              />
+            </div>
+          </div>
+
           <DialogFooter>
             <Button
               variant="outline"
-              onClick={() => setProjectToDelete(null)}
+              onClick={() => {
+                setProjectToDelete(null);
+                setDeleteConfirmText('');
+              }}
               disabled={deleting}
             >
               Cancelar
@@ -3333,9 +3376,12 @@ export default function DashboardPage() {
             <Button
               variant="destructive"
               onClick={handleDeleteProject}
-              disabled={deleting}
+              disabled={
+                deleting ||
+                deleteConfirmText.trim() !== (projectToDelete?.name ?? '')
+              }
             >
-              {deleting ? 'Eliminando...' : 'Sí, eliminar'}
+              {deleting ? 'Eliminando...' : 'Eliminar para siempre'}
             </Button>
           </DialogFooter>
         </DialogContent>
