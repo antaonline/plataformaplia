@@ -587,14 +587,11 @@ export class ProjectsService {
       throw new BadRequestException('No tienes acceso a este proyecto.');
     }
 
-    const data = JSON.parse((project.onboardingData as string) || '{}');
-    const existing = Array.isArray(data.images) ? data.images : [];
-    const total = existing.length + urls.length;
-    if (total > 5) {
+    if (urls.length > 5) {
       throw new BadRequestException('Solo puedes subir hasta 5 imagenes en total.');
     }
-    const combined = [...existing, ...urls];
-    const mergedData = { ...data, images: combined };
+    const data = JSON.parse((project.onboardingData as string) || '{}');
+    const mergedData = { ...data, images: urls };
 
     return this.prisma.project.update({
       where: { id: projectId },
