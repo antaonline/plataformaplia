@@ -37,10 +37,18 @@ async function bootstrap() {
     }),
   )
 
-  // En producción, OpenLiteSpeed agrega Access-Control-Allow-Origin automáticamente
-  // via su CORS proxy integrado. Si NestJS también lo agrega, el header queda duplicado
-  // y Chrome rechaza la respuesta. Solo habilitamos CORS en NestJS para desarrollo local.
-  if (process.env.NODE_ENV !== 'production') {
+  // En producción, LiteSpeed maneja Access-Control-Allow-Origin via extraHeaders.
+  // Solo respondemos 204 a OPTIONS para el preflight; los headers CORS los agrega LiteSpeed.
+  // En local (no producción), usamos el middleware cors completo.
+  if (process.env.NODE_ENV === 'production') {
+    app.use((req: any, res: any, next: any) => {
+      if (req.method === 'OPTIONS') {
+        res.status(204).end();
+      } else {
+        next();
+      }
+    });
+  } else {
     app.enableCors({
       origin: (origin, callback) => {
         if (!origin || origin.includes('localhost') || origin.includes('plia.pe')) {
