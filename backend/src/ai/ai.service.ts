@@ -588,6 +588,15 @@ export class AiService {
       html = pages.find((p) => p.slug === 'index')?.html || pages[0]?.html || '';
     }
 
+    // Si la IA no produjo HTML (p.ej. spec sin pages/sections), no tiene
+    // sentido marcar READY: lanzamos para que el catch lo registre como
+    // FAILED y el cron lo reintente en vez de publicar un sitio vacio.
+    if (!html || !html.trim()) {
+      throw new Error(
+        'La IA no genero contenido HTML para el sitio (spec sin paginas ni secciones).',
+      );
+    }
+
     const domain = currentDomain || '';
     let deployment: { target?: string | null; previewUrl?: string } = {};
     if (domain && html) {
@@ -732,6 +741,13 @@ export class AiService {
       }));
       const html =
         pages.find((p) => p.slug === 'index')?.html || pages[0]?.html || '';
+
+      // Si no se genero HTML, fallamos para no marcar READY un sitio vacio.
+      if (!html || !html.trim()) {
+        throw new Error(
+          'La IA no genero contenido HTML para el sitio (sin paginas renderizadas).',
+        );
+      }
 
       const domain = currentDomain || '';
       let deployment: { target?: string | null; previewUrl?: string } = {};

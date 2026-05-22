@@ -373,9 +373,20 @@ export class ProjectsService {
       throw new BadRequestException('Order sin usuario');
     }
 
+    // Si el order llego como objeto sin la relacion plan (p.ej. desde
+    // payments.service), la cargamos por planId para poder detectar
+    // correctamente si el plan es LANDING. Sin esto el proyecto quedaba
+    // como WEB por defecto y la generacion de IA fallaba.
+    let plan = order.plan;
+    if (!plan && order.planId) {
+      plan = await this.prisma.plan.findUnique({
+        where: { id: order.planId },
+      });
+    }
+
     // Determinar tipo por slug o nombre if available
-    const planSlug = order.plan?.slug?.toLowerCase() || '';
-    const planName = order.plan?.name?.toLowerCase() || '';
+    const planSlug = plan?.slug?.toLowerCase() || '';
+    const planName = plan?.name?.toLowerCase() || '';
     const isLanding =
       planSlug.includes('landing') || planName.includes('landing') || order.planId === 1;
 
