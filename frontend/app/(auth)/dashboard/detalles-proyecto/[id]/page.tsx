@@ -214,7 +214,12 @@ export default function AdminProjectDetailPage() {
           <div className="px-6 py-8 space-y-6">
             <Card className="rounded-lg border-border/60">
               <CardHeader>
-                <CardTitle>Resumen del cliente</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                  Resumen del cliente
+                  <span className="text-base font-semibold text-cta">
+                    {project.name}
+                  </span>
+                </CardTitle>
               </CardHeader>
               <CardContent className="grid gap-4 md:grid-cols-2">
                 <div>
