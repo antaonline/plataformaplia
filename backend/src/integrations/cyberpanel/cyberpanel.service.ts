@@ -620,7 +620,7 @@ export class CyberpanelService {
         accountCreated: false,
       };
     }
-    const data = (project.onboardingData as any) || {};
+    const data = JSON.parse((project.onboardingData as string) || '{}');
     const currentAccount = data.cyberpanel?.account as StoredCyberpanelAccount | undefined;
     if (data.publicDomain) {
       return {
@@ -675,7 +675,7 @@ export class CyberpanelService {
       await this.prisma.project.update({
         where: { id: projectId },
         data: {
-          onboardingData: {
+          onboardingData: JSON.stringify({
             ...data,
             cyberpanel: {
               status: 'FAILED',
@@ -684,7 +684,7 @@ export class CyberpanelService {
               error: responseData || error?.message || 'Unknown error',
               createdAt: new Date().toISOString(),
             },
-          },
+          }),
         },
       });
       return {
@@ -704,7 +704,7 @@ export class CyberpanelService {
       await this.prisma.project.update({
         where: { id: projectId },
         data: {
-          onboardingData: {
+          onboardingData: JSON.stringify({
             ...data,
             publicDomain: domain,
             publicUrl: `https://${domain}`,
@@ -717,7 +717,7 @@ export class CyberpanelService {
               account,
               createdAt: new Date().toISOString(),
             },
-          },
+          }),
         },
       });
       return {
@@ -739,7 +739,7 @@ export class CyberpanelService {
       await this.prisma.project.update({
         where: { id: projectId },
         data: {
-          onboardingData: {
+          onboardingData: JSON.stringify({
             ...data,
             cyberpanel: {
               status: 'FAILED',
@@ -751,7 +751,7 @@ export class CyberpanelService {
               error: responseData || error?.message || 'Unknown error',
               createdAt: new Date().toISOString(),
             },
-          },
+          }),
         },
       });
       return {
@@ -772,7 +772,7 @@ export class CyberpanelService {
       this.logger.warn(`CyberPanel delete skipped: project ${projectId} not found`);
       return true;
     }
-    const data = (project.onboardingData as any) || {};
+    const data = JSON.parse((project.onboardingData as string) || '{}');
     const domain = data.publicDomain;
     if (!domain) {
       this.logger.log(`CyberPanel delete skipped: project ${projectId} has no publicDomain`);
@@ -787,13 +787,13 @@ export class CyberpanelService {
       await this.prisma.project.update({
         where: { id: projectId },
         data: {
-          onboardingData: {
+          onboardingData: JSON.stringify({
             ...data,
             cyberpanel: {
               ...(data.cyberpanel || {}),
               deletedAt: new Date().toISOString(),
             },
-          },
+          }),
         },
       });
       return true;

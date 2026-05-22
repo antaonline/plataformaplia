@@ -477,17 +477,19 @@ export class AiService {
     });
     if (!project) return null;
 
+    const existingData = JSON.parse((project.onboardingData as string) || '{}');
+
     await this.prisma.project.update({
       where: { id: projectId },
       data: {
-        onboardingData: {
-          ...(project.onboardingData as any || {}),
+        onboardingData: JSON.stringify({
+          ...existingData,
           aiGeneration: {
-            ...((project.onboardingData as any)?.aiGeneration || {}),
+            ...(existingData.aiGeneration || {}),
             status: 'GENERATING',
             startedAt: new Date().toISOString(),
           },
-        },
+        }),
       },
     });
 
@@ -496,15 +498,15 @@ export class AiService {
       await this.prisma.project.update({
         where: { id: projectId },
         data: {
-          onboardingData: {
-            ...(project.onboardingData as any || {}),
+          onboardingData: JSON.stringify({
+            ...existingData,
             aiGeneration: {
-              ...((project.onboardingData as any)?.aiGeneration || {}),
+              ...(existingData.aiGeneration || {}),
               status: 'FAILED',
               error: 'OPENAI_API_KEY no configurada.',
               updatedAt: new Date().toISOString(),
             },
-          },
+          }),
         },
       });
       return null;
@@ -519,16 +521,16 @@ export class AiService {
       const plan = project.type as PlanType;
       const mode = this.getMode(plan);
       const systemPrompt = this.buildSystemPrompt(plan);
-      const userPrompt = this.buildUserPrompt(project.onboardingData || {}, plan);
+      const userPrompt = this.buildUserPrompt(existingData, plan);
       const model = this.getModel(plan, mode);
-      const currentDomain = (project.onboardingData as any)?.publicDomain || null;
+      const currentDomain = existingData.publicDomain || null;
       this.logger.log(
         `AI start project=${projectId} plan=${plan} mode=${mode} model=${model} domain=${currentDomain ?? 'preview-only'}`,
       );
       const spec = await this.chatJson<SiteSpec>(model, systemPrompt, userPrompt);
     if (!spec.brand) {
       spec.brand = {
-        name: (project.onboardingData as any)?.businessName || project.name,
+        name: existingData.businessName || project.name,
         tagline: 'Soluciones que convierten',
         tone: 'profesional',
       };
@@ -622,8 +624,8 @@ export class AiService {
       where: { id: projectId },
       data: {
         status: ProjectStatus.IN_PROGRESS, // Mantener en progreso hasta el deadline
-        onboardingData: {
-          ...(project.onboardingData as any || {}),
+        onboardingData: JSON.stringify({
+          ...existingData,
           aiGeneration: {
             status: 'READY', // La IA ya terminó su parte
             mode,
@@ -640,7 +642,7 @@ export class AiService {
               previewExists,
             },
           },
-        },
+        }),
       },
     });
 
@@ -653,10 +655,10 @@ export class AiService {
       await this.prisma.project.update({
         where: { id: projectId },
         data: {
-          onboardingData: {
-            ...(project.onboardingData as any || {}),
+          onboardingData: JSON.stringify({
+            ...existingData,
             aiGeneration: {
-              ...((project.onboardingData as any)?.aiGeneration || {}),
+              ...(existingData.aiGeneration || {}),
               status: 'FAILED',
               error: error?.message || 'Error generando el sitio',
               updatedAt: new Date().toISOString(),
@@ -666,7 +668,7 @@ export class AiService {
                 previewExists,
               },
             },
-          },
+          }),
         },
       });
       return null;
@@ -682,7 +684,7 @@ export class AiService {
     project: any,
   ): Promise<AiGenerationResult | null> {
     const projectId = project.id as number;
-    const onboarding = (project.onboardingData as any) || {};
+    const onboarding = JSON.parse((project.onboardingData as string) || '{}');
     try {
       const planType = project.type as PlanType;
       const mode: WebMode = planType === 'LANDING' ? 'LANDING' : 'WEB';
@@ -762,7 +764,7 @@ export class AiService {
         where: { id: projectId },
         data: {
           status: ProjectStatus.IN_PROGRESS,
-          onboardingData: {
+          onboardingData: JSON.stringify({
             ...onboarding,
             aiGeneration: {
               ...(onboarding.aiGeneration || {}),
@@ -778,7 +780,7 @@ export class AiService {
               domain: domain || null,
               checks: { previewPath, previewExists },
             },
-          },
+          }),
         },
       });
 
@@ -796,7 +798,7 @@ export class AiService {
       await this.prisma.project.update({
         where: { id: projectId },
         data: {
-          onboardingData: {
+          onboardingData: JSON.stringify({
             ...onboarding,
             aiGeneration: {
               ...(onboarding.aiGeneration || {}),
@@ -804,7 +806,7 @@ export class AiService {
               error: error?.message || 'Error generando el sitio',
               updatedAt: new Date().toISOString(),
             },
-          },
+          }),
         },
       });
       return null;
