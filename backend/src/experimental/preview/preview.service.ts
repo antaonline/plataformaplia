@@ -106,13 +106,19 @@ async function writeDepsStamp(projectPath: string): Promise<void> {
 
 // Forzamos modo desarrollo para que npm instale TODAS las dependencias,
 // sin importar el NODE_ENV con el que corra el backend.
-function devEnv(): NodeJS.ProcessEnv {
+function devEnv(chatId?: number): NodeJS.ProcessEnv {
+  const proxyBase = (process.env.PREVIEW_PROXY_BASE || '').replace(/\/$/, '');
+  const viteProxyBase = chatId && proxyBase
+    ? `${proxyBase}/api/experimental/preview/${chatId}/serve/`
+    : '/';
   return {
     ...process.env,
     NODE_ENV: 'development',
     npm_config_production: 'false',
     npm_config_include: 'dev',
     npm_config_omit: '',
+    // Vite usa esto como `base` para que todos los assets tengan el path del proxy
+    VITE_PROXY_BASE: viteProxyBase,
   };
 }
 
@@ -236,7 +242,12 @@ export class PreviewService implements OnModuleDestroy {
     await writeGeneratedFiles(projectPath, files);
 
     const port = await findAvailablePort(PORT_START, PORT_END);
-    const url = `http://127.0.0.1:${port}`;
+    // La URL publica pasa por el proxy NestJS (GET /experimental/preview/:id/serve/*).
+    // PREVIEW_PROXY_BASE debe ser la URL base del API publica, ej: https://api.plia.pe
+    const proxyBase = (process.env.PREVIEW_PROXY_BASE || '').replace(/\/$/, '');
+    const url = proxyBase
+      ? `${proxyBase}/api/experimental/preview/${chatId}/serve/`
+      : `http://127.0.0.1:${port}`; // fallback local (dev)
 
     const pp: PreviewProcess = {
       process: null,
@@ -264,7 +275,7 @@ export class PreviewService implements OnModuleDestroy {
       ['run', 'dev', '--', '--port', String(port), '--host', '127.0.0.1', '--strictPort'],
       {
         cwd: projectPath,
-        env: devEnv(),
+        env: devEnv(chatId),
         shell: process.platform === 'win32',
         stdio: ['ignore', 'pipe', 'pipe'],
       },
@@ -318,6 +329,13 @@ export class PreviewService implements OnModuleDestroy {
     const pp = this.processes.get(String(chatId));
     if (!pp) return { port: null, url: null, status: 'stopped', logs: [] };
     return this.toInfo(pp);
+  }
+
+  /** URL interna de Vite para el proxy (siempre localhost, sin importar PREVIEW_PROXY_BASE). */
+  getLocalUrl(chatId: number): string | null {
+    const pp = this.processes.get(String(chatId));
+    if (!pp || pp.status === 'stopped' || pp.status === 'error') return null;
+    return `http://127.0.0.1:${pp.port}`;
   }
 
   private toInfo(pp: PreviewProcess): PreviewInfo {
