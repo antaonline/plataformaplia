@@ -124,7 +124,7 @@ export class ProjectsService {
 
   async getGenerationDiagnostics(projectId: number, userId?: number, isAdmin = false) {
     const project = await this.getProjectOrThrow(projectId, userId, isAdmin);
-    const onboardingData = (project.onboardingData as any) || {};
+    const onboardingData = JSON.parse((project.onboardingData as string) || '{}');
     const aiGeneration = onboardingData.aiGeneration || {};
     const cyberpanel = onboardingData.cyberpanel || {};
     const previewPath = join(process.cwd(), 'uploads', 'previews', String(projectId), 'index.html');
@@ -170,26 +170,26 @@ export class ProjectsService {
   async runManualGeneration(projectId: number, userId?: number, isAdmin = false, reprovision = false) {
     let project = await this.getProjectOrThrow(projectId, userId, isAdmin);
 
-    if (reprovision || !(project.onboardingData as any)?.publicDomain) {
+    if (reprovision || !JSON.parse((project.onboardingData as string) || '{}')?.publicDomain) {
       const provision = await this.cyberpanelService.ensureSite(projectId);
       project = await this.getProjectOrThrow(projectId, userId, isAdmin);
-      if (!provision.domain && !(project.onboardingData as any)?.publicDomain) {
-        const data = (project.onboardingData as any) || {};
+      const projectData = JSON.parse((project.onboardingData as string) || '{}');
+      if (!provision.domain && !projectData?.publicDomain) {
         const cyberpanelError =
-          data?.cyberpanel?.error ||
+          projectData?.cyberpanel?.error ||
           'No se pudo crear el subdominio en CyberPanel. La generación no puede publicarse.';
         await this.prisma.project.update({
           where: { id: projectId },
           data: {
-            onboardingData: {
-              ...data,
+            onboardingData: JSON.stringify({
+              ...projectData,
               aiGeneration: {
-                ...(data.aiGeneration || {}),
+                ...(projectData.aiGeneration || {}),
                 status: 'FAILED',
                 error: cyberpanelError,
                 updatedAt: new Date().toISOString(),
               },
-            },
+            }),
           },
         });
         throw new BadRequestException(cyberpanelError);
@@ -214,12 +214,14 @@ export class ProjectsService {
       throw new NotFoundException('Project no encontrado.');
     }
 
+    const existingData = JSON.parse((project.onboardingData as string) || '{}');
+
     const normalizedSubdomain = this.normalizeSubdomain(
-      dto?.data?.subdomain ?? (project.onboardingData as any)?.subdomain,
+      dto?.data?.subdomain ?? existingData?.subdomain,
     );
 
     const mergedData = {
-      ...(project.onboardingData as any || {}),
+      ...existingData,
       ...dto.data,
       ...(normalizedSubdomain ? { subdomain: normalizedSubdomain } : {}),
     };
@@ -244,7 +246,7 @@ export class ProjectsService {
     const updated = await this.prisma.project.update({
       where: { id: projectId },
       data: {
-        onboardingData: mergedData,
+        onboardingData: JSON.stringify(mergedData),
         onboardingStep: dto.step,
         status: dto.completed
           ? ProjectStatus.IN_PROGRESS
@@ -275,14 +277,15 @@ export class ProjectsService {
           `saveOnboarding project=${projectId}: ensureSite lanzo: ${errMsg}`,
           cpErr?.stack,
         );
-        const current = (await this.prisma.project.findUnique({
+        const currentRaw = (await this.prisma.project.findUnique({
           where: { id: projectId },
           select: { onboardingData: true },
-        }))?.onboardingData as any || mergedData;
+        }))?.onboardingData;
+        const current = JSON.parse((currentRaw as string) || JSON.stringify(mergedData));
         await this.prisma.project.update({
           where: { id: projectId },
           data: {
-            onboardingData: {
+            onboardingData: JSON.stringify({
               ...current,
               cyberpanel: {
                 ...(current?.cyberpanel || {}),
@@ -297,7 +300,7 @@ export class ProjectsService {
                 error: `No se pudo crear el subdominio en CyberPanel: ${errMsg}`,
                 updatedAt: new Date().toISOString(),
               },
-            },
+            }),
           },
         });
         throw new BadRequestException(
@@ -308,7 +311,7 @@ export class ProjectsService {
         where: { id: projectId },
         select: { onboardingData: true },
       });
-      const refreshedData = (refreshedProject?.onboardingData as any) || mergedData;
+      const refreshedData = JSON.parse((refreshedProject?.onboardingData as string) || JSON.stringify(mergedData));
       const resolvedDomain = cyberpanelProvision.domain || refreshedData.publicDomain || null;
       if (!resolvedDomain) {
         const cyberpanelError =
@@ -317,7 +320,7 @@ export class ProjectsService {
         await this.prisma.project.update({
           where: { id: projectId },
           data: {
-            onboardingData: {
+            onboardingData: JSON.stringify({
               ...refreshedData,
               aiGeneration: {
                 ...(refreshedData.aiGeneration || {}),
@@ -325,7 +328,7 @@ export class ProjectsService {
                 error: cyberpanelError,
                 updatedAt: new Date().toISOString(),
               },
-            },
+            }),
           },
         });
         throw new BadRequestException(cyberpanelError);
@@ -471,7 +474,7 @@ export class ProjectsService {
       return project;
     }
 
-    const currentData = (project.onboardingData as any) || {};
+    const currentData = JSON.parse((project.onboardingData as string) || '{}');
     if (!this.hasGeneratedOutput(project.id, currentData)) {
       throw new BadRequestException(
         'El sitio aun no fue generado y verificado correctamente. No se puede publicar.',
@@ -518,7 +521,7 @@ export class ProjectsService {
     return this.prisma.project.update({
       where: { id },
       data: {
-        onboardingData: mergedData,
+        onboardingData: JSON.stringify(mergedData),
         status: ProjectStatus.DELIVERED,
         completed: true,
         completedAt: publishedAt,
@@ -534,8 +537,9 @@ export class ProjectsService {
       throw new NotFoundException('Project no encontrado.');
     }
 
+    const existingData = JSON.parse((project.onboardingData as string) || '{}');
     const mergedData = {
-      ...(project.onboardingData as any || {}),
+      ...existingData,
       dbConfigured: true,
       dbName: data.dbName ?? null,
       dbUser: data.dbUser ?? null,
@@ -545,7 +549,7 @@ export class ProjectsService {
     return this.prisma.project.update({
       where: { id },
       data: {
-        onboardingData: mergedData,
+        onboardingData: JSON.stringify(mergedData),
       },
     });
   }
@@ -637,7 +641,7 @@ export class ProjectsService {
       throw new BadRequestException('No tienes acceso a este proyecto.');
     }
 
-    const data = (project.onboardingData as any) || {};
+    const data = JSON.parse((project.onboardingData as string) || '{}');
     const publishedAtRaw = data.publishedAt;
     if (!publishedAtRaw) {
       throw new BadRequestException('El proyecto aun no esta publicado.');
@@ -673,7 +677,7 @@ export class ProjectsService {
     const updated = await this.prisma.project.update({
       where: { id: projectId },
       data: {
-        onboardingData: mergedData,
+        onboardingData: JSON.stringify(mergedData),
       },
     });
 
@@ -695,8 +699,8 @@ export class ProjectsService {
 
     for (const project of readyProjects) {
       try {
-        const data = (project.onboardingData as any) || {};
-        
+        const data = JSON.parse((project.onboardingData as string) || '{}');
+
         this.logger.log(`Procesando auto-publicacion para proyecto ${project.id} (${project.name})...`);
 
         // AUTO-REPARACION: si la IA no quedo lista (fallo, nunca corrio por
@@ -717,7 +721,7 @@ export class ProjectsService {
             await this.prisma.project.update({
               where: { id: project.id },
               data: {
-                onboardingData: {
+                onboardingData: JSON.stringify({
                   ...data,
                   aiGeneration: {
                     ...(data.aiGeneration || {}),
@@ -726,7 +730,7 @@ export class ProjectsService {
                       'La generacion automatica no pudo completarse tras varios intentos. Reintenta o contacta soporte.',
                     updatedAt: new Date().toISOString(),
                   },
-                },
+                }),
               },
             });
             continue;
@@ -738,7 +742,7 @@ export class ProjectsService {
           await this.prisma.project.update({
             where: { id: project.id },
             data: {
-              onboardingData: {
+              onboardingData: JSON.stringify({
                 ...data,
                 aiGeneration: {
                   ...(data.aiGeneration || {}),
@@ -746,7 +750,7 @@ export class ProjectsService {
                   autoRetries: retries + 1,
                   updatedAt: new Date().toISOString(),
                 },
-              },
+              }),
             },
           });
           try {
@@ -762,7 +766,7 @@ export class ProjectsService {
           const fresh = await this.prisma.project.findUnique({
             where: { id: project.id },
           });
-          const freshData = (fresh?.onboardingData as any) || data;
+          const freshData = JSON.parse((fresh?.onboardingData as string) || JSON.stringify(data));
           if (
             freshData.aiGeneration?.status !== 'READY' ||
             !this.hasGeneratedOutput(project.id, freshData)
