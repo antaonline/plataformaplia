@@ -37,17 +37,21 @@ async function bootstrap() {
     }),
   )
 
-  app.enableCors({
-    origin: (origin, callback) => {
-      // Permitir localhost:3000, 3001 y 3002
-      if (!origin || origin.includes('localhost') || origin.includes('plia.pe')) {
-        callback(null, true);
-      } else {
-        callback(new Error('Not allowed by CORS'));
-      }
-    },
-    credentials: true,
-  });
+  // En producción, OpenLiteSpeed agrega Access-Control-Allow-Origin automáticamente
+  // via su CORS proxy integrado. Si NestJS también lo agrega, el header queda duplicado
+  // y Chrome rechaza la respuesta. Solo habilitamos CORS en NestJS para desarrollo local.
+  if (process.env.NODE_ENV !== 'production') {
+    app.enableCors({
+      origin: (origin, callback) => {
+        if (!origin || origin.includes('localhost') || origin.includes('plia.pe')) {
+          callback(null, true);
+        } else {
+          callback(new Error('Not allowed by CORS'));
+        }
+      },
+      credentials: true,
+    });
+  }
 
   app.useStaticAssets(join(__dirname, '..', 'uploads'), {
     prefix: '/uploads',
