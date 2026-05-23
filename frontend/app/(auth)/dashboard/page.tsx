@@ -912,19 +912,21 @@ export default function DashboardPage() {
     if (!project) return '';
     const data = project.onboardingData || {};
     const aiGeneration = data.aiGeneration || {};
-    
-    // Si ya está entregado, mostrar URL final
+
+    // Si ya está entregado, mostrar URL final del subdominio
     if (project.status === 'DELIVERED') {
       if (data.publicUrl) return data.publicUrl as string;
       if (data.publicDomain) return `https://${data.publicDomain}`;
     }
-    
-    // Si la IA ya terminó (READY internamente), mostrar previsualización
+
+    // Durante la espera de 24h: mostrar la landing temporal con countdown
+    if (data.tempLandingUrl) return data.tempLandingUrl as string;
+
+    // Compatibilidad: proyectos viejos sin tempLandingUrl
     if (aiGeneration.status === 'READY' && aiGeneration.previewUrl) {
       return aiGeneration.previewUrl as string;
     }
-    
-    // Fallback: mostrar el subdominio que el usuario eligió mientras espera
+
     if (data.subdomain) {
       return `https://${data.subdomain}.${domainBase}`;
     }
@@ -2957,7 +2959,27 @@ export default function DashboardPage() {
                                 </div>
                                 <div className="flex items-center gap-2">
                                   {renderStatus(proj.status)}
-                                  {canView ? (
+                                  {proj.status === 'DELIVERED' ? (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      asChild
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      <a
+                                        href={
+                                          proj.onboardingData?.publicUrl ||
+                                          (proj.onboardingData?.publicDomain
+                                            ? `https://${proj.onboardingData.publicDomain}`
+                                            : '#')
+                                        }
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                      >
+                                        Ver sitio web
+                                      </a>
+                                    </Button>
+                                  ) : canView ? (
                                     <Button
                                       size="sm"
                                       variant="outline"

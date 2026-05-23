@@ -86,6 +86,148 @@ export class ProjectsService {
     return `${appUrl}/uploads/previews/${projectId}/index.html`;
   }
 
+  /**
+   * HTML de la landing temporal "en desarrollo" que ve el cliente durante
+   * las 24h de espera. Incluye cuenta regresiva en vivo hasta el deadline
+   * y botones de contacto (WhatsApp/Instagram/Facebook) si el cliente los
+   * proporciono en el onboarding.
+   */
+  private buildTempLandingHtml(
+    data: any,
+    deadline: Date | null,
+    fallbackName: string,
+  ): string {
+    const esc = (s: any) =>
+      String(s ?? '').replace(/[&<>"']/g, (c) =>
+        (({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' } as Record<string, string>)[c]),
+      );
+
+    const businessName = esc(data?.businessName || fallbackName || 'Tu sitio web');
+    const deadlineMs =
+      (deadline instanceof Date && !isNaN(deadline.getTime()))
+        ? deadline.getTime()
+        : Date.now() + 24 * 60 * 60 * 1000;
+    const deadlineIso = new Date(deadlineMs).toISOString();
+
+    const contactButtons: string[] = [];
+
+    if (data?.whatsapp) {
+      const num = String(data.whatsapp).replace(/[^0-9]/g, '');
+      if (num.length >= 8) {
+        contactButtons.push(
+          `<a href="https://wa.me/${num}" target="_blank" rel="noopener" class="inline-flex items-center gap-2 px-5 py-2.5 bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-400/30 rounded-full text-sm font-medium transition"><svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M20.5 3.5C18.3 1.3 15.2 0 12 0 5.4 0 0 5.4 0 12c0 2.1.6 4.2 1.6 6L0 24l6.2-1.6c1.7.9 3.7 1.4 5.8 1.4 6.6 0 12-5.4 12-12 0-3.2-1.3-6.3-3.5-8.4zM12 21.8c-1.8 0-3.6-.5-5.2-1.4l-.4-.2-3.7 1 1-3.6-.2-.4c-1-1.6-1.5-3.5-1.5-5.4 0-5.5 4.5-10 10-10 2.7 0 5.2 1 7.1 2.9 1.9 1.9 2.9 4.4 2.9 7.1 0 5.5-4.5 10-10 10z"/></svg>WhatsApp</a>`,
+        );
+      }
+    }
+
+    if (data?.instagram) {
+      const user = String(data.instagram)
+        .replace(/^@/, '')
+        .replace(/^https?:\/\/(www\.)?instagram\.com\//, '')
+        .replace(/\/+$/, '')
+        .trim();
+      if (user) {
+        contactButtons.push(
+          `<a href="https://instagram.com/${esc(user)}" target="_blank" rel="noopener" class="inline-flex items-center gap-2 px-5 py-2.5 bg-pink-500/15 hover:bg-pink-500/25 border border-pink-400/30 rounded-full text-sm font-medium transition"><svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.16c3.2 0 3.58.01 4.85.07 1.17.05 1.8.25 2.23.42.56.22.96.48 1.38.9.42.42.68.82.9 1.38.16.42.37 1.06.42 2.23.06 1.27.07 1.65.07 4.85s-.01 3.58-.07 4.85c-.05 1.17-.25 1.8-.42 2.23-.22.56-.48.96-.9 1.38-.42.42-.82.68-1.38.9-.42.16-1.06.37-2.23.42-1.27.06-1.65.07-4.85.07s-3.58-.01-4.85-.07c-1.17-.05-1.8-.25-2.23-.42-.56-.22-.96-.48-1.38-.9-.42-.42-.68-.82-.9-1.38-.16-.42-.37-1.06-.42-2.23-.06-1.27-.07-1.65-.07-4.85s.01-3.58.07-4.85c.05-1.17.25-1.8.42-2.23.22-.56.48-.96.9-1.38.42-.42.82-.68 1.38-.9.42-.16 1.06-.37 2.23-.42 1.27-.06 1.65-.07 4.85-.07M12 0C8.74 0 8.33.01 7.05.07 5.78.13 4.9.33 4.14.63c-.79.31-1.46.72-2.13 1.39C1.34 2.69.93 3.36.62 4.14.32 4.9.13 5.78.07 7.05.01 8.33 0 8.74 0 12s.01 3.67.07 4.95c.06 1.27.26 2.15.56 2.91.31.79.72 1.46 1.39 2.13.67.67 1.35 1.08 2.13 1.39.76.3 1.64.5 2.91.56C8.33 23.99 8.74 24 12 24s3.67-.01 4.95-.07c1.27-.06 2.15-.26 2.91-.56.79-.31 1.46-.72 2.13-1.39.67-.67 1.08-1.35 1.39-2.13.3-.76.5-1.64.56-2.91.06-1.28.07-1.69.07-4.95s-.01-3.67-.07-4.95c-.06-1.27-.26-2.15-.56-2.91-.31-.79-.72-1.46-1.39-2.13C21.31 1.34 20.64.93 19.86.62c-.76-.3-1.64-.5-2.91-.56C15.67.01 15.26 0 12 0zm0 5.84c-3.4 0-6.16 2.76-6.16 6.16s2.76 6.16 6.16 6.16 6.16-2.76 6.16-6.16S15.4 5.84 12 5.84zM12 16c-2.21 0-4-1.79-4-4s1.79-4 4-4 4 1.79 4 4-1.79 4-4 4zm6.4-11.85a1.44 1.44 0 100 2.88 1.44 1.44 0 000-2.88z"/></svg>Instagram</a>`,
+        );
+      }
+    }
+
+    if (data?.facebook) {
+      let fb = String(data.facebook).trim();
+      if (!/^https?:\/\//i.test(fb)) {
+        fb = /^facebook\.com\//i.test(fb)
+          ? `https://${fb}`
+          : `https://facebook.com/${fb.replace(/^@/, '')}`;
+      }
+      contactButtons.push(
+        `<a href="${esc(fb)}" target="_blank" rel="noopener" class="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-500/15 hover:bg-blue-500/25 border border-blue-400/30 rounded-full text-sm font-medium transition"><svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.07C24 5.4 18.63 0 12 0S0 5.4 0 12.07c0 6.02 4.39 11.02 10.13 11.93v-8.44H7.08v-3.49h3.04V9.41c0-3.02 1.79-4.69 4.53-4.69 1.31 0 2.69.24 2.69.24v2.97h-1.52c-1.49 0-1.95.93-1.95 1.88v2.26h3.32l-.53 3.49h-2.79V24C19.61 23.09 24 18.09 24 12.07z"/></svg>Facebook</a>`,
+      );
+    }
+
+    const contactsBlock = contactButtons.length
+      ? `<div class="mt-10 pt-8 border-t border-white/10"><p class="text-sm text-slate-400 mb-4">Mientras tanto, contactanos:</p><div class="flex flex-wrap gap-3 justify-center">${contactButtons.join('')}</div></div>`
+      : '';
+
+    return `<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${businessName} | En desarrollo</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>body{font-family:'Inter',sans-serif;}</style>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-950 text-white">
+<main class="min-h-screen flex flex-col items-center justify-center px-6 py-12">
+<div class="max-w-2xl w-full text-center">
+<div class="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-lime-400/15 ring-2 ring-lime-400/40 mb-8 animate-pulse">
+<svg viewBox="0 0 32 32" class="w-10 h-10 text-lime-400" fill="currentColor"><path d="M8 4h10a8 8 0 010 16h-4v8H8V4zm6 12h4a4 4 0 000-8h-4v8z"/></svg>
+</div>
+<h1 class="text-4xl md:text-6xl font-extrabold tracking-tight">${businessName}</h1>
+<p class="mt-4 text-xl md:text-2xl text-slate-300 font-semibold">Estamos trabajando en tu sitio web</p>
+<p class="mt-2 text-sm text-slate-400">Nuestro equipo esta construyendo tu web profesional</p>
+<div class="mt-12">
+<p class="text-sm uppercase tracking-wider text-slate-400">Estara disponible en</p>
+<div class="mt-4 inline-flex justify-center gap-3 md:gap-5">
+<div class="flex flex-col items-center min-w-[78px] px-3 py-3 rounded-2xl bg-white/5 border border-white/10"><span id="cd-hours" class="text-4xl md:text-5xl font-bold tabular-nums leading-none">--</span><span class="text-[10px] uppercase tracking-wider text-slate-400 mt-2">horas</span></div>
+<div class="flex flex-col items-center min-w-[78px] px-3 py-3 rounded-2xl bg-white/5 border border-white/10"><span id="cd-mins" class="text-4xl md:text-5xl font-bold tabular-nums leading-none">--</span><span class="text-[10px] uppercase tracking-wider text-slate-400 mt-2">minutos</span></div>
+<div class="flex flex-col items-center min-w-[78px] px-3 py-3 rounded-2xl bg-white/5 border border-white/10"><span id="cd-secs" class="text-4xl md:text-5xl font-bold tabular-nums leading-none">--</span><span class="text-[10px] uppercase tracking-wider text-slate-400 mt-2">segundos</span></div>
+</div>
+</div>
+${contactsBlock}
+<footer class="mt-16 text-xs text-slate-500">Sitio en construccion por <span class="text-lime-400 font-semibold">PLIA</span> &middot; Tu Web Facil</footer>
+</div>
+</main>
+<script>
+(function(){
+var deadline = new Date(${JSON.stringify(deadlineIso)}).getTime();
+var hEl = document.getElementById('cd-hours');
+var mEl = document.getElementById('cd-mins');
+var sEl = document.getElementById('cd-secs');
+function pad(n){return String(n).padStart(2,'0');}
+function tick(){
+var diff = Math.max(0, deadline - Date.now());
+var totalSecs = Math.floor(diff/1000);
+var h = Math.floor(totalSecs/3600);
+var m = Math.floor((totalSecs%3600)/60);
+var s = totalSecs%60;
+hEl.textContent = pad(h);
+mEl.textContent = pad(m);
+sEl.textContent = pad(s);
+if(diff===0){clearInterval(timer);setTimeout(function(){location.reload();},2000);}
+}
+tick();
+var timer = setInterval(tick,1000);
+})();
+</script>
+</body>
+</html>`;
+  }
+
+  /**
+   * Escribe la landing temporal a uploads/preview-temp/<id>/index.html y
+   * retorna la URL publica servida por el backend. Esta landing se ve
+   * durante las 24h de espera. No se mezcla con uploads/previews/ (donde
+   * la IA escribe el sitio real) para evitar colisiones.
+   */
+  private writeTempLanding(
+    projectId: number,
+    data: any,
+    deadline: Date | null,
+    fallbackName: string,
+  ): string {
+    const html = this.buildTempLandingHtml(data, deadline, fallbackName);
+    const dir = join(process.cwd(), 'uploads', 'preview-temp', String(projectId));
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(join(dir, 'index.html'), html, 'utf-8');
+    const baseUrl = (process.env.PREVIEW_PROXY_BASE || 'http://localhost:3002').replace(/\/$/, '');
+    return `${baseUrl}/uploads/preview-temp/${projectId}/index.html`;
+  }
+
   private getTargetDirectory(projectId: number, onboardingData: any) {
     const aiGeneration = onboardingData?.aiGeneration || {};
     if (typeof aiGeneration.target === 'string' && aiGeneration.target.trim()) {
@@ -352,6 +494,32 @@ export class ProjectsService {
           },
         });
       }
+
+      // Landing temporal con cuenta regresiva: el cliente la ve en "Tu web"
+      // durante las 24h de espera, hasta que el cron publica el sitio real
+      // al cumplirse el deadline. Si esto falla, no bloqueamos el resto.
+      try {
+        const tempLandingUrl = this.writeTempLanding(
+          projectId,
+          refreshedData,
+          deadline,
+          project.name,
+        );
+        await this.prisma.project.update({
+          where: { id: projectId },
+          data: {
+            onboardingData: JSON.stringify({
+              ...refreshedData,
+              tempLandingUrl,
+            }),
+          },
+        });
+      } catch (tempErr: any) {
+        this.logger.warn(
+          `saveOnboarding project=${projectId}: no se pudo escribir la landing temporal: ${tempErr?.message || tempErr}`,
+        );
+      }
+
       void this.aiService.generateForProject(projectId).catch((err) => {
         this.logger.error(`Error en la generación automática de IA para el proyecto ${projectId}: ${err.message}`, err.stack);
       });

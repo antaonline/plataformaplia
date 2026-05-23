@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -177,12 +178,17 @@ export default function AdminProjectDetailPage() {
       <div className="grid lg:grid-cols-[260px_1fr]">
         <aside className="hidden lg:flex flex-col border-r border-border bg-white/80 backdrop-blur-sm min-h-screen px-4 py-6">
           <div className="flex items-center gap-2 mb-2">
-            <div className="w-9 h-9 bg-cta rounded-xl flex items-center justify-center">
-              <span className="font-black text-cta-foreground text-lg">P</span>
+            <div className="w-9 h-9 flex items-center justify-center">
+              <Image
+                src="/iconplia.svg"
+                alt="Icono PLIA"
+                width={44}
+                height={44}
+                className="w-10 h-10 sm:w-11 sm:h-11"
+              />
             </div>
             <div>
-              <div className="text-sm text-muted-foreground">PLIA</div>
-              <div className="font-semibold">Tu Web Facil</div>
+              <div className="font-semibold">Tu Web Fácil</div>
             </div>
           </div>
 
