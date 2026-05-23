@@ -16,6 +16,10 @@ export class MailService {
       `SMTP config host=${host} port=${port} user=${user || 'missing'}`,
     )
 
+    // MAIL_TLS_INSECURE=true permite servidores SMTP con certificado
+     // self-signed (p.ej. el servidor de correo del propio CyberPanel).
+    const tlsInsecure = process.env.MAIL_TLS_INSECURE === 'true'
+
     this.transporter = nodemailer.createTransport({
       host,
       port,
@@ -24,6 +28,7 @@ export class MailService {
         user,
         pass,
       },
+      ...(tlsInsecure ? { tls: { rejectUnauthorized: false } } : {}),
     })
 
     this.transporter
