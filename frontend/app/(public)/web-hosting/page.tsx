@@ -385,12 +385,9 @@ export default function WebHostingPage() {
                     )}
                   </div>
 
-                  <Button 
-                    variant={isPremium ? "cta" : "outline"} 
-                    className={cn(
-                      "w-full h-12 rounded-xl font-bold text-base mb-8",
-                      !isPremium && "border-border hover:bg-secondary"
-                    )}
+                  <Button
+                    variant={isPremium ? "cta" : "ctaOutline"}
+                    className="w-full h-12 rounded-xl text-base mb-8"
                     asChild
                   >
                     <Link href={`/checkout/hosting?plan=${plan.slug}&term=${selectedTerm}`}>

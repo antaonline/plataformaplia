@@ -366,12 +366,9 @@ export default function AiWebLandingPage() {
                     </ul>
                   </div>
 
-                  <Button 
-                    variant={isPremium ? "cta" : "outline"} 
-                    className={cn(
-                      "w-full h-12 rounded-xl font-bold text-base",
-                      !isPremium && "border-slate-200 hover:bg-secondary"
-                    )}
+                  <Button
+                    variant={isPremium ? "cta" : "ctaOutline"}
+                    className="w-full h-12 rounded-xl text-base"
                     asChild
                   >
                     <Link href="/experimental/iachatweb">
