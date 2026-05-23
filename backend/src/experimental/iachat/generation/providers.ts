@@ -317,6 +317,20 @@ const openai = new OpenAiProvider();
 export const PROVIDERS = { claude, gemini, openai };
 
 /**
+ * Dado un nombre de modelo, retorna el provider que sabe llamarlo. Permite
+ * cadenas de fallback que mezclen Google + Anthropic + OpenAI sin tener que
+ * configurar el provider explicitamente para cada eslabon.
+ */
+export function resolveProviderForModel(model: string): CodegenProvider {
+  const m = (model || '').toLowerCase();
+  if (m.includes('claude')) return claude;
+  if (m.startsWith('gemini') || m.startsWith('gemma')) return gemini;
+  if (m.startsWith('gpt') || m.includes('openai')) return openai;
+  // Default: gemini (el catch-all mas barato del freemium).
+  return gemini;
+}
+
+/**
  * Provider con fallback automatico: intenta el preferido y si lanza error
  * o no esta disponible, cae al siguiente disponible.
  */

@@ -1,14 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
 import {
   ChatMsg,
-  CodegenProvider,
+  CompleteOptions,
   GeneratedProject,
   GenerationPlan,
   PlannedFile,
 } from './codegen.types';
-import { PROVIDERS, FallbackProvider } from './providers';
+import { resolveProviderForModel } from './providers';
 import { CreditService } from './credit.service';
-import { ProviderKind } from './plan-config';
 import { resolveImages } from './image-resolver';
 import {
   BASE_UTILS_FILE,
@@ -34,17 +33,53 @@ export class CodegenService {
 
   constructor(private readonly credits: CreditService) {}
 
-  private pickProvider(provider: ProviderKind): CodegenProvider {
-    // Pago (claude) -> Claude con fallback OpenAI y Gemini.
-    // Free (gemini) -> Gemini con fallback OpenAI.
-    if (provider === 'claude') {
-      return new FallbackProvider([
-        PROVIDERS.claude,
-        PROVIDERS.openai,
-        PROVIDERS.gemini,
-      ]);
+  /**
+   * Recorre una cadena de modelos: intenta el primero, si lanza error
+   * retriable (429/503/529) o devuelve respuesta vacia, pasa al siguiente.
+   * Logea claramente cual respondio. Permite mezclar Gemini + Claude +
+   * OpenAI en el mismo array (el provider se resuelve por nombre).
+   */
+  private async completeWithChain(
+    models: string[],
+    system: string,
+    messages: ChatMsg[],
+    opts: CompleteOptions,
+    phase: string,
+  ): Promise<string> {
+    if (!Array.isArray(models) || models.length === 0) {
+      throw new Error(`Sin modelos configurados para fase ${phase}`);
     }
-    return new FallbackProvider([PROVIDERS.gemini, PROVIDERS.openai]);
+    let lastErr: any = null;
+    for (let i = 0; i < models.length; i++) {
+      const model = models[i];
+      const provider = resolveProviderForModel(model);
+      if (!provider.isAvailable()) {
+        this.logger.warn(
+          `[chain ${phase}] skip ${model}: provider ${provider.id} no disponible (sin API key)`,
+        );
+        continue;
+      }
+      try {
+        const out = await provider.complete(system, messages, { ...opts, model });
+        if (out && out.trim().length > 0) {
+          if (i > 0) {
+            this.logger.log(
+              `[chain ${phase}] ok con ${model} (provider=${provider.id}) tras ${i} fallback(s)`,
+            );
+          }
+          return out;
+        }
+        lastErr = new Error(`${model} devolvio respuesta vacia`);
+        this.logger.warn(`[chain ${phase}] ${model} devolvio vacio -> siguiente`);
+      } catch (e: any) {
+        lastErr = e;
+        const status = e?.response?.status || e?.code || 'err';
+        this.logger.warn(
+          `[chain ${phase}] ${model} (provider=${provider.id}) fallo ${status} -> siguiente`,
+        );
+      }
+    }
+    throw lastErr || new Error(`Cadena ${phase} agotada sin respuesta`);
   }
 
   private stripCodeFences(s: string): string {
@@ -126,12 +161,14 @@ export class CodegenService {
 
   async generate(params: GenerateParams): Promise<GeneratedProject> {
     const userPlan = await this.credits.getPlanFor(params.userId);
-    const provider = this.pickProvider(userPlan.provider as ProviderKind);
     const hasExisting =
       !!params.existingFiles &&
       Object.keys(params.existingFiles).length > 0;
-    // Modelo segun plan: plan-phase barato; archivos = build o edit model.
-    const fileModel = hasExisting ? userPlan.editModel : userPlan.buildModel;
+    // Cadenas de modelos por fase. La cadena se recorre en orden y cae al
+    // siguiente eslabon si el modelo responde 429/503/529 o vacio.
+    const planModels = userPlan.planModels;
+    const fileModels = hasExisting ? userPlan.editModels : userPlan.buildModels;
+    const phase = hasExisting ? 'edit' : 'build';
 
     // Acumula el costo real USD de TODAS las llamadas de esta generacion.
     let genCostUsd = 0;
@@ -144,9 +181,7 @@ export class CodegenService {
       Math.max(CREDIT_FLOOR, Math.round((usd / CREDIT_UNIT_USD) * 10) / 10);
 
     this.logger.log(
-      `Codegen plan=${userPlan.code} provider=${provider.id} model=${
-        hasExisting ? userPlan.editModel : userPlan.buildModel
-      } existing=${hasExisting}`,
+      `Codegen plan=${userPlan.code} fase=${phase} planChain=[${planModels.join('>')}] fileChain=[${fileModels.join('>')}]`,
     );
 
     // --- FASE 1: PLAN ---
@@ -161,13 +196,18 @@ export class CodegenService {
     }
     planMessages.push({ role: 'user', content: planUser });
 
-    const planRaw = await provider.complete(planSystem, planMessages, {
-      json: true,
-      maxTokens: 4096,
-      temperature: 0.6,
-      model: userPlan.planModel,
-      onUsage,
-    });
+    const planRaw = await this.completeWithChain(
+      planModels,
+      planSystem,
+      planMessages,
+      {
+        json: true,
+        maxTokens: 4096,
+        temperature: 0.6,
+        onUsage,
+      },
+      'plan',
+    );
     const parsed = this.parsePlan(planRaw);
     if (!parsed) {
       throw new Error('El plan de la IA no devolvio JSON valido');
@@ -222,10 +262,12 @@ export class CodegenService {
           {},
           params.existingFiles?.[f.path],
         );
-        const code = await provider.complete(
+        const code = await this.completeWithChain(
+          fileModels,
           fileSystem,
           [{ role: 'user', content: user }],
-          { maxTokens: 16000, temperature: 0.7, model: fileModel, onUsage },
+          { maxTokens: 16000, temperature: 0.7, onUsage },
+          phase,
         );
         files[f.path] = this.stripCodeFences(code);
       }
@@ -244,10 +286,12 @@ export class CodegenService {
         files,
         params.existingFiles?.[appMainFile.path],
       );
-      const code = await provider.complete(
+      const code = await this.completeWithChain(
+        fileModels,
         fileSystem,
         [{ role: 'user', content: user }],
-        { maxTokens: 16000, temperature: 0.7, model: fileModel, onUsage },
+        { maxTokens: 16000, temperature: 0.7, onUsage },
+        phase,
       );
       files[appMainFile.path] = this.stripCodeFences(code);
     }

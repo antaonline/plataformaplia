@@ -1,9 +1,15 @@
 /**
  * Configuracion de planes del Studio iachat (freemium + pago).
  *
+ * Cada plan define CADENAS de modelos por fase (plan / build / edit). El
+ * codegen recorre la cadena en orden: intenta el primer modelo, si responde
+ * 429 / 503 / 529 o cae, pasa al siguiente. Esto multiplica el throughput
+ * (cada modelo en Google AI Studio tiene su propia cuota RPM/RPD) y aisla
+ * caidas de un solo modelo.
+ *
  * Calibrado con costo REAL medido (Claude Sonnet: build ~$0.55, edit ~$0.16;
- * Haiku ~1/12; Gemini ~$0). 1 credito ≡ $0.10 de costo real (ver codegen).
- * Topes conservadores -> margen sano garantizado.
+ * Haiku ~1/12; Gemini Flash ~$0). 1 credito ≡ $0.10 de costo real (ver
+ * codegen). Topes conservadores -> margen sano garantizado.
  */
 
 export type PlanCode = 'EXPLORADOR' | 'PRESENCIA' | 'EMPRENDEDOR' | 'AGENCIA';
@@ -13,14 +19,14 @@ export type ProviderKind = 'gemini' | 'claude';
 export interface PlanConfig {
   code: PlanCode;
   label: string;
-  /** Proveedor base (free=gemini, pago=claude con fallback). */
+  /** Proveedor base informativo (free=gemini, pago=claude). */
   provider: ProviderKind;
-  /** Modelo para la fase de PLAN (barato). */
-  planModel: string;
-  /** Modelo para generar archivos en una WEB NUEVA. */
-  buildModel: string;
-  /** Modelo para generar archivos en una EDICION. */
-  editModel: string;
+  /** Cadena de modelos para la fase PLAN (analisis/arquitectura). */
+  planModels: string[];
+  /** Cadena de modelos para BUILD (primer prompt, web nueva). */
+  buildModels: string[];
+  /** Cadena de modelos para EDIT (iteraciones sobre web existente). */
+  editModels: string[];
   /** Tope de creditos por dia. */
   dailyCredits: number;
   /** Tope de creditos por mes. */
@@ -28,7 +34,7 @@ export interface PlanConfig {
 }
 
 const M = {
-  gemini: process.env.GEMINI_MODEL || 'gemini-2.0-flash',
+  geminiLegacy: process.env.GEMINI_MODEL || 'gemini-2.0-flash',
   haiku: process.env.ANTHROPIC_MODEL_HAIKU || 'claude-haiku-4-5-20251001',
   sonnet:
     process.env.ANTHROPIC_MODEL_SONNET ||
@@ -36,14 +42,45 @@ const M = {
     'claude-sonnet-4-6',
 };
 
+// ===== Cadenas reusables =====
+
+// Freemium: BUILD con calidad alta como pidio el usuario, con Flash 3.5 de
+// respaldo cuando 2.5 Pro se agota (1K RPD).
+const FREE_BUILD_CHAIN = ['gemini-2.5-pro', 'gemini-3.5-flash'];
+
+// Freemium: EDIT con cadena larga de Flash variantes. Suma cuotas
+// (lite ilimitado en RPD) -> throughput practicamente sin limite.
+const FREE_FLASH_CHAIN = [
+  'gemini-3-flash',
+  'gemini-3.5-flash',
+  'gemini-2.5-flash',
+  'gemini-3.1-flash-lite',
+  'gemini-2.5-flash-lite',
+  'gemini-2.0-flash',
+];
+
+// Plan ligero (architecting JSON) usa la misma cadena Flash.
+const FREE_PLAN_CHAIN = FREE_FLASH_CHAIN;
+
+// Plan pagado basico: Gemini Flash con Claude Haiku de respaldo cuando
+// Google cae o limita.
+const PAID_BASIC_CHAIN = ['gemini-3.5-flash', 'gemini-3-flash', M.haiku];
+
+// Build de alta calidad para planes pagos: Gemini 3.1 Pro (mejor calidad
+// Google) -> Sonnet (calidad equivalente Anthropic) -> Gemini 2.5 Pro.
+const PAID_HIGH_BUILD = ['gemini-3.1-pro', M.sonnet, 'gemini-2.5-pro'];
+
+// Plan / Edit de planes pagos medianos/altos: Flash rapido + Haiku.
+const PAID_FAST_CHAIN = ['gemini-3.5-flash', M.haiku];
+
 export const PLANS: Record<PlanCode, PlanConfig> = {
   EXPLORADOR: {
     code: 'EXPLORADOR',
     label: 'Explorador',
     provider: 'gemini',
-    planModel: M.gemini,
-    buildModel: M.gemini,
-    editModel: M.gemini,
+    planModels: FREE_PLAN_CHAIN,
+    buildModels: FREE_BUILD_CHAIN,
+    editModels: FREE_FLASH_CHAIN,
     dailyCredits: 5,
     monthlyCredits: 30,
   },
@@ -51,9 +88,9 @@ export const PLANS: Record<PlanCode, PlanConfig> = {
     code: 'PRESENCIA',
     label: 'Presencia',
     provider: 'claude',
-    planModel: M.haiku,
-    buildModel: M.haiku,
-    editModel: M.haiku,
+    planModels: PAID_BASIC_CHAIN,
+    buildModels: PAID_BASIC_CHAIN,
+    editModels: PAID_BASIC_CHAIN,
     dailyCredits: 10,
     monthlyCredits: 100,
   },
@@ -61,9 +98,9 @@ export const PLANS: Record<PlanCode, PlanConfig> = {
     code: 'EMPRENDEDOR',
     label: 'Emprendedor',
     provider: 'claude',
-    planModel: M.haiku, // plan = barato
-    buildModel: M.sonnet, // web nueva = calidad alta
-    editModel: M.haiku, // ediciones = baratas
+    planModels: PAID_FAST_CHAIN, // plan = barato
+    buildModels: PAID_HIGH_BUILD, // web nueva = calidad alta
+    editModels: PAID_FAST_CHAIN, // ediciones = baratas
     dailyCredits: 15,
     monthlyCredits: 150,
   },
@@ -71,9 +108,9 @@ export const PLANS: Record<PlanCode, PlanConfig> = {
     code: 'AGENCIA',
     label: 'Agencia',
     provider: 'claude',
-    planModel: M.haiku,
-    buildModel: M.sonnet,
-    editModel: M.haiku,
+    planModels: PAID_FAST_CHAIN,
+    buildModels: PAID_HIGH_BUILD,
+    editModels: PAID_FAST_CHAIN,
     dailyCredits: 20,
     monthlyCredits: 400,
   },
