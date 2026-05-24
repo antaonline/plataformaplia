@@ -70,7 +70,7 @@ export class WebsiteGenService {
  "imagePrompts":[{"id":"hero","prompt":"prompt en ingles para DALL-E, fotorealista, alta calidad","usage":"hero"}]
 }
 ${pageRule}
-imagePrompts: 3-6 imagenes necesarias para el sitio (hero, secciones, etc.). Las imagenes que suba el cliente (si las hay) las VES en este mensaje: usalas como guia de estilo/marca y NO las dupliques en imagePrompts.`;
+imagePrompts: 3-6 imagenes necesarias para el sitio (hero, secciones, etc.). Las imagenes que suba el cliente (si las hay) las VES en este mensaje: son contenido REAL del negocio (logo, fotos del local, productos, equipo, etc). PRIORIDAD: estas imagenes del cliente DEBEN usarse en el sitio final donde correspondan (logo en el header, fotos del local en hero/ubicacion, fotos de productos en galeria, fotos del equipo en seccion equipo, etc). SOLO genera prompts en imagePrompts para cubrir SLOTS que las imagenes del cliente NO cubren. Si el cliente sube 3 fotos de productos, no generes prompts adicionales para productos — usa las del cliente.`;
     const raw = await this.provider.complete(
       system,
       [{ role: 'user', content: brief }],
@@ -138,18 +138,38 @@ DESIGN SYSTEM (respetar al pie de la letra):
 ARQUITECTURA (${mode}):
 ${plan.pages.map((p) => `- ${p.file}: ${p.purpose}`).join('\n')}
 ${mode === 'WEB' ? 'Enlaza las paginas entre si con <a href="archivo.html"> (mismo directorio).' : 'Una sola pagina, sin navegacion a otras paginas.'}
-IMAGENES DISPONIBLES (usa estas URLs reales, NO inventes):
-${imgList || '(sin imagenes generadas; usa gradientes/patrones CSS ricos)'}
-${clientImgList ? `IMAGENES DEL CLIENTE (logo/marca/galeria, incorporalas donde corresponda):\n${clientImgList}` : ''}
+IMAGENES GENERADAS POR IA (usa estas URLs reales, NO inventes):
+${imgList || '(sin imagenes IA generadas)'}
+${clientImgList ? `IMAGENES DEL CLIENTE (CONTENIDO REAL DEL NEGOCIO — son OBLIGATORIAS):
+${clientImgList}
+INSTRUCCIONES DURAS PARA LAS IMAGENES DEL CLIENTE:
+1. Las puedes VER en este mensaje (son multimodales). Analiza qué muestra cada una: ¿es un logo? ¿el interior del local? ¿productos? ¿el equipo? ¿una foto promocional?
+2. USALAS en la web final con las URLs imagen_cliente_N exactas. NO inventes URLs.
+3. Si imagen_cliente_1 es un logo -> ponlo en el header/nav y/o como brand mark.
+4. Si son fotos de productos/figuras/objetos -> usalas en la galeria o seccion de productos.
+5. Si son fotos del local/espacio -> hero o seccion de ubicacion/ambiente.
+6. Si son fotos del equipo/personas -> seccion equipo o testimonios.
+7. Las imagenes del cliente TIENEN PRIORIDAD sobre las generadas por IA en su categoria.
+8. Si NO hay imagen IA para un slot Y hay imagen cliente apropiada -> usa la del cliente.
+` : ''}
 SALIDA: devuelve SOLO el HTML completo de la pagina pedida. Sin explicaciones, sin cercas \`\`\`. Empieza por <!DOCTYPE html>.`;
 
     const files: Record<string, string> = {};
+    // Pasamos las imagenes del cliente como multimodales tambien en el
+    // render para que Claude/Gemini VEA su contenido (no solo el URL) y
+    // pueda decidir donde encajan visualmente.
+    const validClientImages = clientImages.filter((s) => /^https?:\/\//.test(s));
     for (const page of plan.pages) {
       const user = `Brief del negocio:\n${brief}\n\nGenera AHORA la pagina: ${page.file}\nProposito: ${page.purpose}\nDevuelve solo el HTML completo.`;
       const raw = await this.provider.complete(
         system,
         [{ role: 'user', content: user }],
-        { model: MODEL_SONNET, maxTokens: 16000, temperature: 0.7 },
+        {
+          model: MODEL_SONNET,
+          maxTokens: 16000,
+          temperature: 0.7,
+          images: validClientImages,
+        },
       );
       files[page.file] = this.stripFences(raw);
     }
