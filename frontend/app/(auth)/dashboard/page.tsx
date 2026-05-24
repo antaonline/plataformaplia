@@ -2964,6 +2964,13 @@ export default function DashboardPage() {
                         {projects.slice(0, visibleProjectsCount).map((proj) => {
                           const isSelected = proj.id === selectedProjectId;
                           const canView = proj.status === 'READY' || proj.status === 'DELIVERED';
+                          const businessName = (proj.onboardingData?.businessName || '').trim();
+                          const shortDesc = (proj.onboardingData?.shortDescription || '').trim();
+                          const descTrunc =
+                            shortDesc.length > 50
+                              ? shortDesc.slice(0, 47) + '…'
+                              : shortDesc;
+                          const planLabel = proj.order?.plan?.name ?? proj.type;
                           return (
                             <div
                               key={proj.id}
@@ -2980,12 +2987,28 @@ export default function DashboardPage() {
                                 }
                               }}
                             >
-                              <div className="flex items-center justify-between gap-3">
-                                <div>
-                                  <p className="text-sm font-semibold">{proj.name}</p>
-                                  <p className="text-xs text-muted-foreground">{proj.order?.plan?.name ?? proj.type}</p>
+                              <div className="flex items-center justify-between gap-4">
+                                {/* Col 1: ID interno + tipo */}
+                                <div className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground whitespace-nowrap shrink-0">
+                                  {proj.name} · {planLabel}
                                 </div>
-                                <div className="flex items-center gap-2">
+
+                                {/* Col 2: negocio + descripcion truncada (oculta en mobile) */}
+                                <div className="min-w-0 flex-1 hidden md:block">
+                                  {businessName ? (
+                                    <>
+                                      <p className="text-sm font-semibold truncate text-foreground">{businessName}</p>
+                                      {descTrunc && (
+                                        <p className="text-xs text-muted-foreground truncate">{descTrunc}</p>
+                                      )}
+                                    </>
+                                  ) : (
+                                    <p className="text-xs text-muted-foreground italic">Brief pendiente</p>
+                                  )}
+                                </div>
+
+                                {/* Col 3: estado + acciones */}
+                                <div className="flex items-center gap-2 shrink-0">
                                   {renderStatus(proj.status)}
                                   {proj.status === 'DELIVERED' ? (
                                     <Button
