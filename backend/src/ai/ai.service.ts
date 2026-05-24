@@ -483,17 +483,102 @@ export class AiService {
     };
   }
 
-  private persistImages(projectId: number, images: Array<{ id: string; url: string; usage: string }>) {
+  /**
+   * Dimensiones objetivo en pixeles segun el "usage" semantico de la
+   * imagen. La calidad creativa de gpt-image-1 se mantiene (la imagen se
+   * genera siempre a 1024x1024 y luego se redimensiona aca). Mantener la
+   * proporcion correcta evita estirones feos en hero/banner.
+   */
+  private getImageDimensions(usage: string): { width: number; height: number } {
+    const u = (usage || '').toLowerCase();
+    if (u === 'hero' || u.includes('hero')) return { width: 1920, height: 1080 };
+    if (u.includes('banner')) return { width: 1920, height: 720 };
+    if (
+      u.includes('galer') ||
+      u.includes('gallery') ||
+      u.includes('product') ||
+      u.includes('card') ||
+      u.includes('coleccion') ||
+      u.includes('tcg')
+    ) {
+      return { width: 1200, height: 1200 };
+    }
+    if (
+      u.includes('team') ||
+      u.includes('testimon') ||
+      u.includes('figure') ||
+      u.includes('person')
+    ) {
+      return { width: 800, height: 800 };
+    }
+    if (u.includes('icon') || u.includes('logo')) return { width: 512, height: 512 };
+    return { width: 1280, height: 1280 };
+  }
+
+  /**
+   * Optimiza una imagen base64 (PNG de gpt-image-1) a WebP redimensionado
+   * segun el usage. Reduce 70-85% del peso conservando calidad visual.
+   * Si sharp no esta disponible o falla, retorna null y el caller guarda
+   * el PNG original para no romper la generacion.
+   */
+  private async optimizeImage(
+    b64: string,
+    usage: string,
+  ): Promise<Buffer | null> {
+    try {
+      // Import dinamico para que el codigo siga funcionando si sharp no
+      // esta instalado (raro pero defensivo).
+      const sharp = (await import('sharp')).default;
+      const { width, height } = this.getImageDimensions(usage);
+      const input = Buffer.from(b64, 'base64');
+      return await sharp(input)
+        .resize(width, height, { fit: 'cover', position: 'center' })
+        .webp({ quality: 85 })
+        .toBuffer();
+    } catch (err: any) {
+      this.logger.warn(
+        `optimizeImage no disponible o fallo (${err?.message || err}). Guardando PNG sin optimizar.`,
+      );
+      return null;
+    }
+  }
+
+  private async persistImages(
+    projectId: number,
+    images: Array<{ id: string; url: string; usage: string }>,
+  ) {
     const baseDir = join(process.cwd(), 'uploads', 'generated', String(projectId));
     fs.mkdirSync(baseDir, { recursive: true });
     const appUrl = (process.env.PREVIEW_PROXY_BASE || 'http://localhost:3002').replace(/\/$/, '');
-    return images.map((img, idx) => {
-      const filename = `${img.id || 'asset'}-${idx}.png`;
-      const filePath = join(baseDir, filename);
-      fs.writeFileSync(filePath, Buffer.from(img.url, 'base64'));
-      const publicUrl = `${appUrl}/uploads/generated/${projectId}/${filename}`;
-      return { ...img, url: publicUrl };
-    });
+    const results: Array<{ id: string; url: string; usage: string }> = [];
+    for (let idx = 0; idx < images.length; idx++) {
+      const img = images[idx];
+      const optimized = await this.optimizeImage(img.url, img.usage);
+      if (optimized) {
+        const filename = `${img.id || 'asset'}-${idx}.webp`;
+        const filePath = join(baseDir, filename);
+        fs.writeFileSync(filePath, optimized);
+        const { width, height } = this.getImageDimensions(img.usage);
+        const sizeKb = Math.round(optimized.byteLength / 1024);
+        this.logger.log(
+          `Imagen optimizada id=${img.id} usage=${img.usage} -> ${filename} ${width}x${height} ${sizeKb} KB`,
+        );
+        results.push({
+          ...img,
+          url: `${appUrl}/uploads/generated/${projectId}/${filename}`,
+        });
+      } else {
+        // Fallback: guardar PNG original sin optimizar.
+        const filename = `${img.id || 'asset'}-${idx}.png`;
+        const filePath = join(baseDir, filename);
+        fs.writeFileSync(filePath, Buffer.from(img.url, 'base64'));
+        results.push({
+          ...img,
+          url: `${appUrl}/uploads/generated/${projectId}/${filename}`,
+        });
+      }
+    }
+    return results;
   }
 
   async generateForProject(projectId: number, revisionNote?: string): Promise<AiGenerationResult | null> {
@@ -599,7 +684,7 @@ export class AiService {
     }
 
     const rawImages = await this.generateImages(spec.images || [], plan, mode);
-    const storedImages = this.persistImages(projectId, rawImages);
+    const storedImages = await this.persistImages(projectId, rawImages);
     const score = this.scoreSpec(spec);
 
     let html = '';
@@ -745,7 +830,7 @@ export class AiService {
         planType,
         this.getMode(planType),
       );
-      const storedImages = this.persistImages(projectId, rawImages);
+      const storedImages = await this.persistImages(projectId, rawImages);
       const imageUrls: Record<string, string> = {};
       storedImages.forEach((img) => {
         imageUrls[img.usage || img.id] = img.url;
