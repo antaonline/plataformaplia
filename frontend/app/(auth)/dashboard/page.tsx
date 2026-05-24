@@ -655,6 +655,10 @@ export default function DashboardPage() {
   const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  // Paginacion "Cargar mas": mostramos los 5 mas recientes por defecto.
+  const PROJECTS_PAGE_SIZE = 5;
+  const [visibleProjectsCount, setVisibleProjectsCount] =
+    useState<number>(PROJECTS_PAGE_SIZE);
 
   const formatDate = (value: string | null) => {
     if (!value) return 'Sin fecha';
@@ -2556,9 +2560,13 @@ export default function DashboardPage() {
                         {formData.hasLogo === 'si' && (
                           <div>
                             <label className="text-sm font-medium">Sube tu logo</label>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              Formato recomendado: <span className="font-semibold">.png sin fondo</span> (transparente). Así la IA lo coloca limpio sobre cualquier color de fondo.
+                            </p>
                             <Input
                               type="file"
                               accept="image/*"
+                              className="mt-2"
                               onChange={(e) => {
                                 const file = e.target.files?.[0] ?? null;
                                 setLogoFile(file);
@@ -2953,7 +2961,7 @@ export default function DashboardPage() {
                         <CardTitle>Mis proyectos</CardTitle>
                       </CardHeader>
                       <CardContent className="space-y-3">
-                        {projects.map((proj) => {
+                        {projects.slice(0, visibleProjectsCount).map((proj) => {
                           const isSelected = proj.id === selectedProjectId;
                           const canView = proj.status === 'READY' || proj.status === 'DELIVERED';
                           return (
@@ -3031,6 +3039,36 @@ export default function DashboardPage() {
                             </div>
                           );
                         })}
+                        {projects.length > visibleProjectsCount && (
+                          <div className="flex flex-col items-center gap-2 pt-3">
+                            <Button
+                              variant="ctaOutline"
+                              size="sm"
+                              className="rounded-full px-6"
+                              onClick={() =>
+                                setVisibleProjectsCount((c) =>
+                                  Math.min(c + PROJECTS_PAGE_SIZE, projects.length),
+                                )
+                              }
+                            >
+                              Cargar {Math.min(PROJECTS_PAGE_SIZE, projects.length - visibleProjectsCount)} más
+                            </Button>
+                            <p className="text-[11px] text-muted-foreground">
+                              Mostrando {visibleProjectsCount} de {projects.length} proyectos
+                            </p>
+                          </div>
+                        )}
+                        {projects.length > PROJECTS_PAGE_SIZE && visibleProjectsCount >= projects.length && (
+                          <div className="flex flex-col items-center gap-2 pt-3">
+                            <button
+                              type="button"
+                              className="text-xs text-muted-foreground underline hover:text-foreground"
+                              onClick={() => setVisibleProjectsCount(PROJECTS_PAGE_SIZE)}
+                            >
+                              Mostrar solo los {PROJECTS_PAGE_SIZE} más recientes
+                            </button>
+                          </div>
+                        )}
                       </CardContent>
                     </Card>
                   )}

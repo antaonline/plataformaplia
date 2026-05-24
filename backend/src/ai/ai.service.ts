@@ -812,13 +812,19 @@ export class AiService {
       const clientImages: string[] = Array.isArray(onboarding.images)
         ? onboarding.images.filter((x: any) => typeof x === 'string')
         : [];
+      // El logo del cliente se pasa como recurso aparte para que la IA
+      // lo identifique explicitamente y lo coloque en header/footer.
+      const clientLogo: string | undefined =
+        typeof onboarding.logoUrl === 'string' && onboarding.logoUrl
+          ? onboarding.logoUrl
+          : undefined;
       const currentDomain = onboarding?.publicDomain || null;
       this.logger.log(
         `AI(claude-static) start project=${projectId} mode=${mode} domain=${currentDomain ?? 'preview-only'}`,
       );
 
       // 1. Plan (Claude ve las imagenes del cliente, multimodal).
-      const sitePlan = await this.websiteGen.plan(brief, mode, clientImages);
+      const sitePlan = await this.websiteGen.plan(brief, mode, clientImages, clientLogo);
 
       // 2. Imagenes con DALL-E (se mantiene) desde los prompts del plan.
       const rawImages = await this.generateImages(
@@ -843,6 +849,7 @@ export class AiService {
         mode,
         imageUrls,
         clientImages,
+        clientLogo,
       );
 
       // 4. Mismo formato de salida que legacy: pages[{slug,html}] + html.

@@ -57,6 +57,7 @@ export class WebsiteGenService {
     brief: string,
     mode: WebMode,
     clientImages: string[] = [],
+    clientLogo?: string,
   ): Promise<SitePlan> {
     const pageRule =
       mode === 'LANDING'
@@ -71,10 +72,20 @@ export class WebsiteGenService {
 }
 ${pageRule}
 imagePrompts: 3-6 imagenes necesarias para el sitio (hero, secciones, etc.). Las imagenes que suba el cliente (si las hay) las VES en este mensaje: son contenido REAL del negocio (logo, fotos del local, productos, equipo, etc). PRIORIDAD: estas imagenes del cliente DEBEN usarse en el sitio final donde correspondan (logo en el header, fotos del local en hero/ubicacion, fotos de productos en galeria, fotos del equipo en seccion equipo, etc). SOLO genera prompts en imagePrompts para cubrir SLOTS que las imagenes del cliente NO cubren. Si el cliente sube 3 fotos de productos, no generes prompts adicionales para productos — usa las del cliente.`;
+    // El logo va primero en el array de imagenes multimodales para que la
+    // IA lo VEA y pueda identificarlo (por su forma/transparencia/copy).
+    const multimodalImages = clientLogo ? [clientLogo, ...clientImages] : clientImages;
     const raw = await this.provider.complete(
       system,
-      [{ role: 'user', content: brief }],
-      { model: MODEL_SONNET, json: true, maxTokens: 3000, images: clientImages },
+      [
+        {
+          role: 'user',
+          content: clientLogo
+            ? `${brief}\n\nNota: la PRIMERA imagen adjunta en este mensaje es el LOGO oficial del cliente.`
+            : brief,
+        },
+      ],
+      { model: MODEL_SONNET, json: true, maxTokens: 3000, images: multimodalImages },
     );
     const parsed = this.parseJson<SitePlan>(raw);
     const safe: SitePlan = {
@@ -120,6 +131,7 @@ imagePrompts: 3-6 imagenes necesarias para el sitio (hero, secciones, etc.). Las
     mode: WebMode,
     imageUrls: Record<string, string>,
     clientImages: string[] = [],
+    clientLogo?: string,
   ): Promise<Record<string, string>> {
     const ds = plan.design;
     const imgList = Object.entries(imageUrls)
@@ -129,6 +141,7 @@ imagePrompts: 3-6 imagenes necesarias para el sitio (hero, secciones, etc.). Las
       .filter((s) => /^https?:\/\//.test(s))
       .map((u, i) => `- imagen_cliente_${i + 1}: ${u}`)
       .join('\n');
+    const hasLogo = !!clientLogo && /^https?:\/\//.test(clientLogo);
     const system = `${STATIC_RULES}
 
 DESIGN SYSTEM (respetar al pie de la letra):
@@ -138,6 +151,15 @@ DESIGN SYSTEM (respetar al pie de la letra):
 ARQUITECTURA (${mode}):
 ${plan.pages.map((p) => `- ${p.file}: ${p.purpose}`).join('\n')}
 ${mode === 'WEB' ? 'Enlaza las paginas entre si con <a href="archivo.html"> (mismo directorio).' : 'Una sola pagina, sin navegacion a otras paginas.'}
+${hasLogo ? `LOGO OFICIAL DEL CLIENTE (es EL logo de la marca, OBLIGATORIO usarlo):
+- imagen_cliente_logo: ${clientLogo}
+INSTRUCCIONES DURAS PARA EL LOGO:
+1. Colocalo en el HEADER/NAV de la pagina (esquina superior izquierda, tamano apropiado tipo h-8 o h-10 Tailwind).
+2. Tambien puede ir en el FOOTER como brand mark.
+3. El logo se ve en este mensaje (multimodal): respeta su forma original.
+4. Si el logo tiene fondo transparente (PNG sin fondo), lucira limpio sobre cualquier color del header.
+5. NO lo reemplaces por iconos genericos, texto, ni imagenes IA aunque el plan sugiera otra cosa para el header.
+` : ''}
 IMAGENES GENERADAS POR IA (usa estas URLs reales, NO inventes):
 ${imgList || '(sin imagenes IA generadas)'}
 ${clientImgList ? `IMAGENES DEL CLIENTE (CONTENIDO REAL DEL NEGOCIO — son OBLIGATORIAS):
@@ -157,10 +179,13 @@ SALIDA: devuelve SOLO el HTML completo de la pagina pedida. Sin explicaciones, s
     const files: Record<string, string> = {};
     // Pasamos las imagenes del cliente como multimodales tambien en el
     // render para que Claude/Gemini VEA su contenido (no solo el URL) y
-    // pueda decidir donde encajan visualmente.
+    // pueda decidir donde encajan visualmente. El logo va primero.
     const validClientImages = clientImages.filter((s) => /^https?:\/\//.test(s));
+    const multimodalImages = hasLogo
+      ? [clientLogo as string, ...validClientImages]
+      : validClientImages;
     for (const page of plan.pages) {
-      const user = `Brief del negocio:\n${brief}\n\nGenera AHORA la pagina: ${page.file}\nProposito: ${page.purpose}\nDevuelve solo el HTML completo.`;
+      const user = `Brief del negocio:\n${brief}\n\nGenera AHORA la pagina: ${page.file}\nProposito: ${page.purpose}${hasLogo ? '\nNota: la PRIMERA imagen adjunta es el LOGO del cliente.' : ''}\nDevuelve solo el HTML completo.`;
       const raw = await this.provider.complete(
         system,
         [{ role: 'user', content: user }],
@@ -168,7 +193,7 @@ SALIDA: devuelve SOLO el HTML completo de la pagina pedida. Sin explicaciones, s
           model: MODEL_SONNET,
           maxTokens: 16000,
           temperature: 0.7,
-          images: validClientImages,
+          images: multimodalImages,
         },
       );
       files[page.file] = this.stripFences(raw);
