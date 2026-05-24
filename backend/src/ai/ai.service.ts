@@ -28,8 +28,11 @@ export class AiService {
       modelPrimaryEconomy: process.env.OPENAI_MODEL_PRIMARY_ECONOMY || 'gpt-4o-mini',
       modelCopy: process.env.OPENAI_MODEL_COPY || 'gpt-4o',
       modelCopyEconomy: process.env.OPENAI_MODEL_COPY_ECONOMY || 'gpt-4o-mini',
-      imageModel: process.env.OPENAI_IMAGE_MODEL || 'dall-e-3',
-      imageQuality: process.env.OPENAI_IMAGE_QUALITY || 'standard',
+      // OpenAI deprecio dall-e-3 (no aparece en /v1/models en cuentas nuevas).
+      // gpt-image-1 es el modelo unificado actual; devuelve b64 por defecto
+      // sin necesidad de response_format y usa quality low|medium|high|auto.
+      imageModel: process.env.OPENAI_IMAGE_MODEL || 'gpt-image-1',
+      imageQuality: process.env.OPENAI_IMAGE_QUALITY || 'high',
       imageSize: process.env.OPENAI_IMAGE_SIZE || '1024x1024',
       landingMode: (process.env.AI_MODE_LANDING || 'standard') as AiMode,
       webMode: (process.env.AI_MODE_WEB || 'standard') as AiMode,
@@ -266,16 +269,27 @@ export class AiService {
     const selected = prompts.slice(0, limit);
     const images: Array<{ id: string; url: string; usage: string }> = [];
 
+    const isGptImage = /^gpt-image/i.test(this.env.imageModel);
     for (const prompt of selected) {
       try {
         const url = `${this.env.baseUrl}/images/generations`;
-        const data = await this.openAiPost<any>(url, {
+        // Payload condicional: gpt-image-1 (actual) NO acepta response_format
+        // y usa quality low|medium|high|auto. DALL-E viejos (dall-e-2/3) si
+        // aceptan response_format y quality standard|hd.
+        const payload: Record<string, any> = {
           model: this.env.imageModel,
           prompt: prompt.prompt,
           size: this.env.imageSize,
-          quality: this.env.imageQuality,
-          response_format: 'b64_json',
-        });
+        };
+        if (isGptImage) {
+          if (['low', 'medium', 'high', 'auto'].includes(this.env.imageQuality)) {
+            payload.quality = this.env.imageQuality;
+          }
+        } else {
+          payload.quality = this.env.imageQuality;
+          payload.response_format = 'b64_json';
+        }
+        const data = await this.openAiPost<any>(url, payload);
 
         const b64 = data?.data?.[0]?.b64_json;
         if (!b64) {
