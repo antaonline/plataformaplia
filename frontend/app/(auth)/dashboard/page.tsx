@@ -2988,9 +2988,14 @@ export default function DashboardPage() {
                               }}
                             >
                               <div className="flex items-center justify-between gap-4">
-                                {/* Col 1: ID interno + tipo */}
-                                <div className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground whitespace-nowrap shrink-0">
-                                  {proj.name} · {planLabel}
+                                {/* Col 1: ID interno (bold) + tipo (normal) apilados */}
+                                <div className="whitespace-nowrap shrink-0 leading-tight">
+                                  <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                                    {proj.name}
+                                  </p>
+                                  <p className="text-[11px] font-normal uppercase tracking-wider text-muted-foreground">
+                                    {planLabel}
+                                  </p>
                                 </div>
 
                                 {/* Col 2: negocio + descripcion truncada (oculta en mobile) */}
