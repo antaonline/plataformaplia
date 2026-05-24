@@ -279,12 +279,24 @@ export class AiService {
 
         const b64 = data?.data?.[0]?.b64_json;
         if (!b64) {
+          this.logger.warn(
+            `DALL-E sin b64 para prompt id=${prompt.id} usage=${prompt.usage}. Respuesta: ${JSON.stringify(data)?.slice(0, 500)}`,
+          );
           continue;
         }
         const buffer = Buffer.from(b64, 'base64');
         images.push({ id: prompt.id, url: buffer.toString('base64'), usage: prompt.usage });
       } catch (error: any) {
-        this.logger.error('Error generando imagen IA', error?.message || error);
+        // Detalle completo del error para diagnosticar (HTTP status, body de
+        // OpenAI con la causa real: key invalida, sin creditos, content
+        // policy, modelo no disponible, etc).
+        const status = error?.response?.status;
+        const body = error?.response?.data
+          ? JSON.stringify(error.response.data).slice(0, 800)
+          : null;
+        this.logger.error(
+          `DALL-E fallo id=${prompt.id} usage=${prompt.usage} status=${status || 'n/a'} msg=${error?.message || error} body=${body || 'n/a'}`,
+        );
       }
     }
 
