@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Plia — Modelo Financiero Completo</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Arial,sans-serif;background:#f0f4f8;color:#1a1a2e;font-size:13px}
+h1{background:#1e3a5f;color:#fff;padding:16px 26px;font-size:17px;display:flex;align-items:center;gap:12px}
+h1 small{font-size:11px;font-weight:normal;opacity:.7}
+.tabs{display:flex;background:#16304f;padding:0 18px;gap:2px;flex-wrap:wrap}
+.tab{padding:9px 16px;cursor:pointer;color:#aac4e0;font-size:11px;font-weight:700;border-radius:5px 5px 0 0;transition:all .15s;user-select:none;letter-spacing:.02em}
+.tab:hover{background:#2c5f8a44;color:#fff}
+.tab.active{background:#f0f4f8;color:#1e3a5f}
+.sheet{display:none;padding:20px 24px}
+.sheet.active{display:block}
+
+/* layout */
+.two{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
+.three{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:14px}
+.four{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}
+
+/* kpi cards */
+.kpi{background:#fff;border-radius:8px;padding:13px 15px;border-left:4px solid #2c5f8a}
+.kpi-val{font-size:20px;font-weight:800;color:#1e3a5f}
+.kpi-label{font-size:10px;color:#777;margin-top:3px;text-transform:uppercase;letter-spacing:.04em}
+.kpi.green{border-left-color:#16a34a}.kpi.red{border-left-color:#dc2626}.kpi.amber{border-left-color:#d97706}
+
+/* section titles */
+.st{background:#d6e4f7;color:#1e3a5f;font-weight:700;padding:6px 10px;margin:16px 0 6px;border-radius:4px;font-size:11px;text-transform:uppercase;letter-spacing:.05em}
+.st.ia{background:#dbeafe;color:#1e40af}
+.st.host{background:#d1fae5;color:#065f46}
+.st.ads{background:#fef3c7;color:#92400e}
+.st.combo{background:#ede9fe;color:#4c1d95}
+.st.danger{background:#fee2e2;color:#7f1d1d}
+
+/* tables */
+table{border-collapse:collapse;width:100%;margin-bottom:4px}
+th{background:#2c5f8a;color:#fff;padding:6px 9px;text-align:left;font-size:10px;font-weight:700;letter-spacing:.03em}
+th.host-h{background:#059669}
+th.ads-h{background:#d97706}
+th.combo-h{background:#7c3aed}
+th.r{text-align:right}
+td{padding:5px 9px;border-bottom:1px solid #dde8f5;vertical-align:middle;font-size:12px}
+tr:nth-child(even) td{background:#f5f8ff}
+tr.total td{background:#1e3a5f!important;color:#fff!important;font-weight:700}
+tr.sub td{background:#2c5f8a!important;color:#fff!important;font-weight:700}
+tr.sub.green td{background:#059669!important}
+tr.sub.purple td{background:#7c3aed!important}
+tr.sec td{background:#e8f0fe;color:#1e3a5f;font-weight:700;font-size:11px}
+tr.warn td{background:#fffbeb!important}
+tr.danger td{background:#fef2f2!important}
+tr.ok td{background:#f0fdf4!important}
+
+/* inputs */
+input[type=number]{border:1.5px solid #93c5fd;border-radius:3px;padding:3px 6px;color:#1d4ed8;font-weight:700;font-size:12px;width:100px;background:#eff6ff;text-align:right}
+input[type=number]:focus{outline:none;border-color:#1e3a5f;background:#fff}
+input[type=range]{width:100%;accent-color:#1e3a5f}
+
+.r{text-align:right}
+.c{text-align:center}
+.calc{font-weight:600}
+.green{color:#15803d;font-weight:700}
+.red{color:#dc2626;font-weight:700}
+.amber{color:#b45309;font-weight:700}
+.muted{color:#6b7280;font-size:11px}
+
+/* alerts */
+.al{padding:10px 13px;border-radius:4px;margin:10px 0;font-size:12px;line-height:1.6}
+.al.ok{background:#f0fdf4;border-left:3px solid #22c55e;color:#14532d}
+.al.warn{background:#fffbeb;border-left:3px solid #f59e0b;color:#78350f}
+.al.danger{background:#fef2f2;border-left:3px solid #ef4444;color:#7f1d1d}
+.al.info{background:#eff6ff;border-left:3px solid #3b82f6;color:#1e3a8a}
+.al.purple{background:#faf5ff;border-left:3px solid #8b5cf6;color:#4c1d95}
+
+.badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;margin-left:6px}
+.badge-g{background:#dcfce7;color:#15803d}
+.badge-r{background:#fee2e2;color:#b91c1c}
+.badge-a{background:#fef9c3;color:#92400e}
+
+.funnel{display:flex;align-items:center;gap:6px;margin:10px 0;flex-wrap:wrap}
+.funnel-box{background:#fff;border:1px solid #cbd5e1;border-radius:6px;padding:8px 12px;text-align:center;min-width:100px}
+.funnel-box .fv{font-size:18px;font-weight:800;color:#1e3a5f}
+.funnel-box .fl{font-size:10px;color:#64748b;margin-top:2px}
+.funnel-arrow{color:#94a3b8;font-size:18px;font-weight:700}
+
+.legend{font-size:11px;color:#64748b;margin:0 0 12px}
+.legend span{margin-right:14px;display:inline-flex;align-items:center;gap:4px}
+.dot{width:9px;height:9px;border-radius:2px;display:inline-block}
+
+/* scenario table highlight */
+.rec-row{background:#f0fdf4!important}
+.rec-row td{color:#15803d!important;font-weight:700!important}
+</style>
+</head>
+<body>
+
+<h1>
+  PLIA — Modelo Financiero Completo
+  <small>Soles Peruanos (S/) · IGV 18% · Mercado Perú · TC ref: S/ 3.75 / USD</small>
+</h1>
+
+<div class="tabs">
+  <div class="tab active" onclick="showTab('resumen',this)">📊 Consolidado</div>
+  <div class="tab" onclick="showTab('ia',this)">🤖 IA Builder</div>
+  <div class="tab" onclick="showTab('hosting',this)">🖥️ Hosting</div>
+  <div class="tab" onclick="showTab('ads',this)">📣 Facebook Ads</div>
+  <div class="tab" onclick="showTab('ajuste',this)">💡 Análisis de Precios</div>
+  <div class="tab" onclick="showTab('config',this)">⚙️ Supuestos</div>
+</div>
+
+<!-- ══════════════════════════════ CONSOLIDADO -->
+<div id="tab-resumen" class="sheet active">
+  <div class="four" id="kpis-top"></div>
+  <div class="four" id="kpis-bot"></div>
+
+  <div class="two">
+    <div>
+      <div class="st ia">🤖 IA Builder — Resumen Mensual</div>
+      <table><thead><tr><th>Métrica</th><th class="r">M3</th><th class="r">M6</th><th class="r">M12</th><th class="r">Año 1</th></tr></thead>
+      <tbody id="tb-res-ia"></tbody></table>
+    </div>
+    <div>
+      <div class="st host">🖥️ Hosting — Resumen Mensual</div>
+      <table><thead><tr><th class="host-h">Métrica</th><th class="host-h r">M3</th><th class="host-h r">M6</th><th class="host-h r">M12</th><th class="host-h r">Año 1</th></tr></thead>
+      <tbody id="tb-res-host"></tbody></table>
+    </div>
+  </div>
+
+  <div class="st combo">📦 Consolidado — Utilidad Neta Total (IA + Hosting + Ads)</div>
+  <table><thead><tr>
+    <th class="combo-h">Métrica</th>
+    <th class="combo-h r">M1</th><th class="combo-h r">M2</th><th class="combo-h r">M3</th>
+    <th class="combo-h r">M6</th><th class="combo-h r">M9</th><th class="combo-h r">M12</th>
+    <th class="combo-h r">AÑO 1</th>
+  </tr></thead><tbody id="tb-consolidado"></tbody></table>
+  <div id="alert-consolidado"></div>
+</div>
+
+<!-- ══════════════════════════════ IA BUILDER -->
+<div id="tab-ia" class="sheet">
+  <div class="four" id="kpis-ia"></div>
+
+  <div class="st ia">🤖 Unit Economics — IA Builder por plan</div>
+  <table><thead><tr>
+    <th>Métrica</th><th class="r">Explorador</th><th class="r">Presencia</th><th class="r">Emprendedor</th><th class="r">Agencia IA</th>
+  </tr></thead><tbody id="tb-ue-ia"></tbody></table>
+
+  <div class="st ia" style="margin-top:18px">📈 Proyección MRR 12 meses — IA Builder</div>
+  <div style="overflow-x:auto">
+    <table><thead id="thead-ia"></thead><tbody id="tbody-ia"></tbody></table>
+  </div>
+</div>
+
+<!-- ══════════════════════════════ HOSTING -->
+<div id="tab-hosting" class="sheet">
+  <div class="four" id="kpis-host"></div>
+
+  <div class="st host">🖥️ Unit Economics — Hosting por plan</div>
+  <table><thead><tr>
+    <th class="host-h">Métrica</th><th class="host-h r">Profesional</th><th class="host-h r">Premium</th><th class="host-h r">Agencia</th>
+  </tr></thead><tbody id="tb-ue-host"></tbody></table>
+
+  <div class="st host" style="margin-top:18px">📈 Proyección MRR 12 meses — Hosting</div>
+  <div style="overflow-x:auto">
+    <table><thead id="thead-host"></thead><tbody id="tbody-host"></tbody></table>
+  </div>
+</div>
+
+<!-- ══════════════════════════════ FACEBOOK ADS -->
+<div id="tab-ads" class="sheet">
+  <div class="st ads">📣 Simulador de Facebook Ads — Mercado Perú</div>
+
+  <div class="two" style="margin-bottom:14px">
+    <div>
+      <table><thead><tr><th class="ads-h">Parámetro del anuncio</th><th class="ads-h r">Valor</th><th class="ads-h">Notas</th></tr></thead><tbody>
+        <tr><td>Presupuesto mensual ads (S/)</td><td><input type="number" id="ads_budget" value="1500" step="100" onchange="recalc()"></td><td>Ajusta según lo que puedas invertir</td></tr>
+        <tr><td>CPC promedio Perú (S/)</td><td><input type="number" id="ads_cpc" value="1.20" step="0.05" onchange="recalc()"></td><td>~$0.32 USD. Tech/SaaS en Lima</td></tr>
+        <tr><td>Conversión clic → registro free (%)</td><td><input type="number" id="ads_ctr" value="7" step="1" onchange="recalc()"> %</td><td>Landing page bien optimizada</td></tr>
+        <tr><td>Conversión registro → pago (%)</td><td><input type="number" id="ads_conv" value="10" step="1" onchange="recalc()"> %</td><td>Free-to-paid. Meta: 10-15%</td></tr>
+        <tr><td>% nuevos pagos que son Presencia</td><td><input type="number" id="ads_mix_p" value="70" step="5" onchange="recalc()"> %</td><td>El plan más accesible es el más vendido via ads</td></tr>
+        <tr><td>% que compra bundle IA+Hosting</td><td><input type="number" id="ads_mix_bundle" value="30" step="5" onchange="recalc()"> %</td><td>Objetivo: vender bundl es para subir ARPU</td></tr>
+      </tbody></table>
+    </div>
+    <div>
+      <div class="st ads">🔽 Embudo de conversión</div>
+      <div class="funnel" id="funnel-ads"></div>
+      <div class="four" id="kpis-ads" style="margin-top:12px"></div>
+    </div>
+  </div>
+
+  <div class="st ads">📅 Impacto mensual de los Ads en el negocio</div>
+  <table><thead><tr>
+    <th class="ads-h">Métrica</th>
+    <th class="ads-h r">S/ 500</th><th class="ads-h r">S/ 1,000</th><th class="ads-h r">S/ 1,500</th>
+    <th class="ads-h r">S/ 2,000</th><th class="ads-h r">S/ 3,000</th><th class="ads-h r">S/ 5,000</th>
+  </tr></thead><tbody id="tb-ads-escenarios"></tbody></table>
+
+  <div id="alerts-ads" style="margin-top:12px"></div>
+
+  <div class="st ads" style="margin-top:18px">🗓️ Plan de Lanzamiento con Ads — 3 fases</div>
+  <table><thead><tr>
+    <th class="ads-h">Fase</th><th class="ads-h">Período</th><th class="ads-h r">Budget S//mes</th>
+    <th class="ads-h">Objetivo</th><th class="ads-h r">Clientes nuevos/mes</th><th class="ads-h">Estado</th>
+  </tr></thead>
+  <tbody id="tb-fases"></tbody></table>
+</div>
+
+<!-- ══════════════════════════════ ANÁLISIS PRECIOS -->
+<div id="tab-ajuste" class="sheet">
+  <div class="st combo">💡 ¿Hay que ajustar precios considerando los Ads?</div>
+  <div id="analisis-precios"></div>
+
+  <div class="st combo" style="margin-top:18px">📊 Comparador: Precios actuales vs Precios sugeridos</div>
+  <table><thead><tr>
+    <th class="combo-h">Plan</th>
+    <th class="combo-h r">Precio actual</th>
+    <th class="combo-h r">Margen s/ Ads</th>
+    <th class="combo-h r">Precio sugerido</th>
+    <th class="combo-h r">Margen c/ Ads</th>
+    <th class="combo-h">Decisión</th>
+  </tr></thead><tbody id="tb-comparador"></tbody></table>
+
+  <div class="st combo" style="margin-top:18px">📦 Bundle Recomendado — La apuesta más inteligente para el lanzamiento</div>
+  <table><thead><tr>
+    <th class="combo-h">Bundle</th><th class="combo-h r">Precio suelto</th><th class="combo-h r">Bundle S//mes</th>
+    <th class="combo-h r">LTV estimado</th><th class="combo-h r">LTV:CAC</th><th class="combo-h">Estado</th>
+  </tr></thead><tbody id="tb-bundles"></tbody></table>
+
+  <div id="alert-final" style="margin-top:14px"></div>
+</div>
+
+<!-- ══════════════════════════════ CONFIG -->
+<div id="tab-config" class="sheet">
+  <div class="legend">
+    <span><span class="dot" style="background:#1d4ed8"></span>Editable</span>
+    <span><span class="dot" style="background:#000"></span>Calculado</span>
+  </div>
+
+  <div class="two">
+    <div>
+      <div class="st ia">🤖 Precios y costos — IA Builder</div>
+      <table><thead><tr><th>Plan</th><th class="r">Precio S//mes</th><th class="r">Créditos/mes</th><th>Modelo IA</th></tr></thead><tbody>
+        <tr><td>Explorador (free)</td><td><input type="number" id="ia_pr_0" value="0" step="1" onchange="recalc()"></td><td><input type="number" id="ia_cr_0" value="30" step="5" onchange="recalc()"></td><td>Gemini Flash</td></tr>
+        <tr><td>Presencia</td><td><input type="number" id="ia_pr_1" value="39" step="1" onchange="recalc()"></td><td><input type="number" id="ia_cr_1" value="100" step="10" onchange="recalc()"></td><td>Claude Haiku</td></tr>
+        <tr class="warn"><td>Emprendedor ⚠️</td><td><input type="number" id="ia_pr_2" value="79" step="1" onchange="recalc()"></td><td><input type="number" id="ia_cr_2" value="150" step="10" onchange="recalc()"></td><td>Sonnet 3.5</td></tr>
+        <tr class="danger"><td>Agencia 🚨</td><td><input type="number" id="ia_pr_3" value="199" step="1" onchange="recalc()"></td><td><input type="number" id="ia_cr_3" value="400" step="10" onchange="recalc()"></td><td>Máxima calidad</td></tr>
+      </tbody></table>
+      <table style="margin-top:8px"><thead><tr><th>Plan IA</th><th class="r">Costo S//crédito</th><th class="r">Utilización %</th></tr></thead><tbody>
+        <tr><td>Explorador</td><td><input type="number" id="ia_ic_0" value="0.011" step="0.001" onchange="recalc()"></td><td><input type="number" id="ia_ut_0" value="100" onchange="recalc()"> %</td></tr>
+        <tr><td>Presencia</td><td><input type="number" id="ia_ic_1" value="0.041" step="0.001" onchange="recalc()"></td><td><input type="number" id="ia_ut_1" value="50" onchange="recalc()"> %</td></tr>
+        <tr class="warn"><td>Emprendedor</td><td><input type="number" id="ia_ic_2" value="0.506" step="0.01" onchange="recalc()"></td><td><input type="number" id="ia_ut_2" value="60" onchange="recalc()"> %</td></tr>
+        <tr class="danger"><td>Agencia IA</td><td><input type="number" id="ia_ic_3" value="0.506" step="0.01" onchange="recalc()"></td><td><input type="number" id="ia_ut_3" value="60" onchange="recalc()"> %</td></tr>
+      </tbody></table>
+    </div>
+    <div>
+      <div class="st host">🖥️ Precios y costos — Hosting</div>
+      <table><thead><tr><th>Plan</th><th class="r">Precio S//mes</th><th class="r">Tu costo S//mes</th><th>Incluye</th></tr></thead><tbody>
+        <tr><td>Profesional</td><td><input type="number" id="h_pr_0" value="28" step="1" onchange="recalc()"></td><td><input type="number" id="h_co_0" value="10" step="1" onchange="recalc()"></td><td>2 sitios, 5GB</td></tr>
+        <tr><td>Premium</td><td><input type="number" id="h_pr_1" value="56" step="1" onchange="recalc()"></td><td><input type="number" id="h_co_1" value="20" step="1" onchange="recalc()"></td><td>5 sitios, 15GB</td></tr>
+        <tr><td>Agencia hosting</td><td><input type="number" id="h_pr_2" value="112" step="1" onchange="recalc()"></td><td><input type="number" id="h_co_2" value="50" step="1" onchange="recalc()"></td><td>50 sitios, 100GB</td></tr>
+      </tbody></table>
+    </div>
+  </div>
+
+  <div class="two" style="margin-top:4px">
+    <div>
+      <div class="st">Mix de usuarios IA Builder y crecimiento</div>
+      <table><thead><tr><th>Parámetro</th><th class="r">Valor</th></tr></thead><tbody>
+        <tr><td>Nuevos usuarios pagos IA mes 1</td><td><input type="number" id="ia_m1" value="5" step="1" onchange="recalc()"></td></tr>
+        <tr><td>Crecimiento mensual nuevos IA (%)</td><td><input type="number" id="ia_crec" value="30" step="5" onchange="recalc()"> %</td></tr>
+        <tr><td>Churn mensual IA (%)</td><td><input type="number" id="ia_churn" value="5" step="1" onchange="recalc()"> %</td></tr>
+        <tr><td>Mix Presencia (%)</td><td><input type="number" id="ia_mx1" value="65" step="5" onchange="recalc()"> %</td></tr>
+        <tr><td>Mix Emprendedor (%)</td><td><input type="number" id="ia_mx2" value="28" step="5" onchange="recalc()"> %</td></tr>
+        <tr><td>Mix Agencia (%)</td><td><input type="number" id="ia_mx3" value="7" step="1" onchange="recalc()"> %</td></tr>
+      </tbody></table>
+    </div>
+    <div>
+      <div class="st">Mix de usuarios Hosting y crecimiento</div>
+      <table><thead><tr><th>Parámetro</th><th class="r">Valor</th></tr></thead><tbody>
+        <tr><td>Nuevos clientes hosting mes 1</td><td><input type="number" id="h_m1" value="3" step="1" onchange="recalc()"></td></tr>
+        <tr><td>Crecimiento mensual nuevos hosting (%)</td><td><input type="number" id="h_crec" value="25" step="5" onchange="recalc()"> %</td></tr>
+        <tr><td>Churn mensual hosting (%)</td><td><input type="number" id="h_churn" value="3" step="1" onchange="recalc()"> %</td></tr>
+        <tr><td>Mix Profesional (%)</td><td><input type="number" id="h_mx0" value="60" step="5" onchange="recalc()"> %</td></tr>
+        <tr><td>Mix Premium (%)</td><td><input type="number" id="h_mx1" value="30" step="5" onchange="recalc()"> %</td></tr>
+        <tr><td>Mix Agencia (%)</td><td><input type="number" id="h_mx2" value="10" step="1" onchange="recalc()"> %</td></tr>
+      </tbody></table>
+    </div>
+  </div>
+
+  <div class="two" style="margin-top:4px">
+    <div>
+      <div class="st">🧾 Impuestos Perú</div>
+      <table><thead><tr><th>Impuesto</th><th class="r">Tasa</th></tr></thead><tbody>
+        <tr><td>IGV</td><td><input type="number" id="igv" value="18" step="1" onchange="recalc()"> %</td></tr>
+        <tr><td>Impuesto a la Renta (MYPe)</td><td><input type="number" id="ir" value="10" step="1" onchange="recalc()"> %</td></tr>
+      </tbody></table>
+    </div>
+    <div>
+      <div class="st">💰 Costos Fijos Mensuales (S/)</div>
+      <table><thead><tr><th>Concepto</th><th class="r">S//mes</th></tr></thead><tbody>
+        <tr><td>Hosting CloudCone ($10 USD)</td><td><input type="number" id="cf1" value="37.5" step="0.5" onchange="recalc()"></td></tr>
+        <tr><td>Dominio / SSL</td><td><input type="number" id="cf2" value="7.5" step="0.5" onchange="recalc()"></td></tr>
+        <tr><td>Herramientas SaaS</td><td><input type="number" id="cf3" value="19" step="1" onchange="recalc()"></td></tr>
+        <tr><td>Contabilidad / SUNAT</td><td><input type="number" id="cf4" value="75" step="5" onchange="recalc()"></td></tr>
+        <tr><td>Misc</td><td><input type="number" id="cf5" value="19" step="1" onchange="recalc()"></td></tr>
+        <tr class="total"><td>TOTAL fijos / mes</td><td class="r calc" id="tot-cf">—</td></tr>
+      </tbody></table>
+    </div>
+  </div>
+</div>
+
+<script>
+function showTab(name,el){
+  document.querySelectorAll('.sheet').forEach(s=>s.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('tab-'+name).classList.add('active');
+  el.classList.add('active');
+}
+const $=id=>document.getElementById(id);
+const num=id=>parseFloat($(id).value)||0;
+const pct=id=>num(id)/100;
+const S=v=>'S/ '+Math.round(v).toLocaleString('es-PE');
+const Sd=v=>'S/ '+v.toFixed(2);
+const N=v=>Math.round(v).toLocaleString('es-PE');
+const P=v=>(v*100).toFixed(1)+'%';
+const fmtR=(v,p=0)=>v.toFixed(p);
+
+function mkKpi(val,label,color=''){
+  return `<div class="kpi ${color}"><div class="kpi-val">${val}</div><div class="kpi-label">${label}</div></div>`;
+}
+function mkAl(cls,html){return `<div class="al ${cls}">${html}</div>`;}
+
+function recalc(){
+  const igv_r=pct('igv'), ir_r=pct('ir');
+  const cf=num('cf1')+num('cf2')+num('cf3')+num('cf4')+num('cf5');
+  $('tot-cf').textContent=Sd(cf);
+
+  // ── IA PLANS ─────────────────────────────────────────────────────
+  const iaP=[
+    {name:'Explorador',price:num('ia_pr_0'),cr:num('ia_cr_0'),ic:num('ia_ic_0'),ut:pct('ia_ut_0'),mix:0},
+    {name:'Presencia', price:num('ia_pr_1'),cr:num('ia_cr_1'),ic:num('ia_ic_1'),ut:pct('ia_ut_1'),mix:pct('ia_mx1')},
+    {name:'Emprend.',  price:num('ia_pr_2'),cr:num('ia_cr_2'),ic:num('ia_ic_2'),ut:pct('ia_ut_2'),mix:pct('ia_mx2')},
+    {name:'Agencia IA',price:num('ia_pr_3'),cr:num('ia_cr_3'),ic:num('ia_ic_3'),ut:pct('ia_ut_3'),mix:pct('ia_mx3')},
+  ];
+  iaP.forEach(p=>{
+    p.ia_cost=Math.round(p.cr*p.ut)*p.ic;
+    p.cv=3.75; // other variable costs
+    p.gm=p.price-p.ia_cost-p.cv;
+    p.gm_pct=p.price>0?p.gm/p.price:0;
+    p.igv_out=p.price*igv_r;
+    p.net_igv=p.gm-p.igv_out;
+  });
+
+  // ── HOSTING PLANS ────────────────────────────────────────────────
+  const hP=[
+    {name:'Profesional',price:num('h_pr_0'),cost:num('h_co_0'),mix:pct('h_mx0')},
+    {name:'Premium',    price:num('h_pr_1'),cost:num('h_co_1'),mix:pct('h_mx1')},
+    {name:'Agencia',    price:num('h_pr_2'),cost:num('h_co_2'),mix:pct('h_mx2')},
+  ];
+  hP.forEach(p=>{
+    p.gm=p.price-p.cost;
+    p.gm_pct=p.price>0?p.gm/p.price:0;
+    p.igv_out=p.price*igv_r;
+    p.net_igv=p.gm-p.igv_out;
+  });
+
+  // ── IA PROJECTIONS ───────────────────────────────────────────────
+  const ia_m1=Math.max(1,Math.round(num('ia_m1')));
+  const ia_crec=pct('ia_crec'), ia_churn=pct('ia_churn');
+  let ia_prev=0,ia_nv=ia_m1;
+  const ia_months=[];
+  for(let m=1;m<=12;m++){
+    const lost=m===1?0:Math.round(ia_prev*ia_churn);
+    const total=m===1?ia_nv:ia_prev+ia_nv-lost;
+    const u=[0,Math.round(total*iaP[1].mix),Math.round(total*iaP[2].mix),Math.round(total*iaP[3].mix)];
+    const mrr=u[1]*iaP[1].price+u[2]*iaP[2].price+u[3]*iaP[3].price;
+    const ia_tot=u[1]*iaP[1].ia_cost+u[2]*iaP[2].ia_cost+u[3]*iaP[3].ia_cost;
+    const cv_tot=total*3.75+ia_tot;
+    const gp=mrr-cv_tot-cf;
+    const igv_pay=mrr*igv_r;
+    const ebt=gp-igv_pay;
+    const tax=ebt>0?ebt*ir_r:0;
+    const net=ebt-tax;
+    ia_months.push({m,nv:Math.round(ia_nv),lost,total,u,mrr,ia_tot,cv_tot,gp,igv_pay,ebt,tax,net});
+    ia_prev=total;
+    if(m<12)ia_nv=Math.round(ia_nv*(1+ia_crec));
+  }
+
+  // ── HOSTING PROJECTIONS ──────────────────────────────────────────
+  const h_m1=Math.max(1,Math.round(num('h_m1')));
+  const h_crec=pct('h_crec'), h_churn=pct('h_churn');
+  let h_prev=0,h_nv=h_m1;
+  const h_months=[];
+  for(let m=1;m<=12;m++){
+    const lost=m===1?0:Math.round(h_prev*h_churn);
+    const total=m===1?h_nv:h_prev+h_nv-lost;
+    const u=hP.map(p=>Math.round(total*p.mix));
+    const mrr=u.reduce((s,ui,i)=>s+ui*hP[i].price,0);
+    const cost_tot=u.reduce((s,ui,i)=>s+ui*hP[i].cost,0);
+    const gp=mrr-cost_tot-cf*0.3; // hosting shares 30% of fixed costs
+    const igv_pay=mrr*igv_r;
+    const ebt=gp-igv_pay;
+    const tax=ebt>0?ebt*ir_r:0;
+    const net=ebt-tax;
+    h_months.push({m,nv:Math.round(h_nv),lost,total,u,mrr,cost_tot,gp,igv_pay,ebt,tax,net});
+    h_prev=total;
+    if(m<12)h_nv=Math.round(h_nv*(1+h_crec));
+  }
+
+  // ── ADS ──────────────────────────────────────────────────────────
+  const ads_bud=num('ads_budget');
+  const ads_cpc=num('ads_cpc');
+  const ads_ctr=pct('ads_ctr');
+  const ads_conv=pct('ads_conv');
+  const ads_clicks=Math.floor(ads_bud/ads_cpc);
+  const ads_leads=Math.floor(ads_clicks*ads_ctr);
+  const ads_paid=Math.floor(ads_leads*ads_conv);
+  const ads_cac=ads_paid>0?ads_bud/ads_paid:9999;
+  const ads_mix_p=pct('ads_mix_p');
+  const ads_mix_b=pct('ads_mix_bundle');
+  // avg revenue per ads-acquired customer
+  const bundle_rev=iaP[1].price+num('h_pr_0');
+  const avg_arpu=ads_mix_b*bundle_rev+(1-ads_mix_b)*iaP[1].price;
+  const ia_margin_p=iaP[1].gm; // presencia margin
+  const h_margin_prof=hP[0].gm;
+  const avg_margin_ads=ads_mix_b*(ia_margin_p+h_margin_prof)+(1-ads_mix_b)*ia_margin_p;
+  const churn_avg=(ia_churn+pct('h_churn'))/2;
+  const ltv_ads=churn_avg>0?avg_margin_ads/churn_avg:999;
+  const ltv_cac_ratio=ads_cac>0?ltv_ads/ads_cac:0;
+
+  // ── RENDER: CONFIG ────────────────────────────────────────────────
+  // already handled by inputs
+
+  // ── RENDER: IA UNIT ECONOMICS ────────────────────────────────────
+  const ue_ia_rows=[
+    ['Precio base (S//mes)',    p=>Sd(p.price)],
+    ['Créditos usados (real)',  p=>N(Math.round(p.cr*p.ut))],
+    ['Costo IA (S/)',          p=>Sd(p.ia_cost), true],
+    ['Otros costos variables', p=>Sd(p.cv)],
+    ['Margen bruto (S/)',      p=>Sd(p.gm), true, true],
+    ['Margen bruto (%)',       p=>p.price>0?P(p.gm_pct):'—', true],
+    ['IGV que pagas a SUNAT',  p=>Sd(p.igv_out)],
+    ['Margen neto de IGV',     p=>Sd(p.net_igv), true, true],
+  ];
+  const tb_ue_ia=$('tb-ue-ia'); tb_ue_ia.innerHTML='';
+  ue_ia_rows.forEach(([lab,fn,bold,color])=>{
+    const tr=document.createElement('tr');
+    if(bold)tr.style.fontWeight='700';
+    const tdl=document.createElement('td');tdl.textContent=lab;tr.appendChild(tdl);
+    iaP.forEach(p=>{
+      const td=document.createElement('td');td.className='r';
+      const v=fn(p);td.textContent=v;
+      if(color&&p.price>0){
+        const raw=p.price-p.ia_cost-p.cv;
+        td.className='r '+(raw>=p.price*0.3?'green':raw>0?'amber':'red');
+      }
+      tr.appendChild(td);
+    });
+    tb_ue_ia.appendChild(tr);
+  });
+
+  // ── RENDER: HOSTING UNIT ECONOMICS ───────────────────────────────
+  const ue_host_rows=[
+    ['Precio cliente (S//mes)', p=>Sd(p.price)],
+    ['Tu costo real (S//mes)',  p=>Sd(p.cost)],
+    ['Margen bruto (S/)',       p=>Sd(p.gm), true, true],
+    ['Margen bruto (%)',        p=>P(p.gm_pct), true],
+    ['IGV a SUNAT',             p=>Sd(p.igv_out)],
+    ['Margen neto de IGV',      p=>Sd(p.net_igv), true, true],
+  ];
+  const tb_ue_host=$('tb-ue-host'); tb_ue_host.innerHTML='';
+  ue_host_rows.forEach(([lab,fn,bold,color])=>{
+    const tr=document.createElement('tr');if(bold)tr.style.fontWeight='700';
+    const tdl=document.createElement('td');tdl.textContent=lab;tr.appendChild(tdl);
+    hP.forEach(p=>{
+      const td=document.createElement('td');td.className='r';td.textContent=fn(p);
+      if(color)td.className='r '+(p.gm_pct>=0.5?'green':p.gm_pct>=0.3?'amber':'red');
+      tr.appendChild(td);
+    });
+    tb_ue_host.appendChild(tr);
+  });
+
+  // ── KPIs IA ──────────────────────────────────────────────────────
+  const ia12=ia_months[11];
+  const iaTotMrr=ia_months.reduce((s,d)=>s+d.mrr,0);
+  const iaTotNet=ia_months.reduce((s,d)=>s+d.net,0);
+  const iaTotIgv=ia_months.reduce((s,d)=>s+d.igv_pay,0);
+  $('kpis-ia').innerHTML=
+    mkKpi(S(ia12.mrr),'MRR IA Mes 12')+
+    mkKpi(N(ia12.total),'Usuarios IA Mes 12')+
+    mkKpi(S(iaTotMrr),'Ingresos IA Año 1')+
+    mkKpi(S(iaTotNet),'Utilidad Neta IA Año 1',iaTotNet>0?'green':'red');
+
+  // ── PROJECTIONS TABLE helper ──────────────────────────────────────
+  function buildProjTable(theadId,tbodyId,months_data,rows_def,sum_keys_set){
+    const thead=$(theadId); thead.innerHTML='';
+    const hr=document.createElement('tr');
+    ['Métrica',...Array.from({length:12},(_,i)=>'M'+(i+1)),'AÑO 1'].forEach(h=>{
+      const th=document.createElement('th');th.textContent=h;hr.appendChild(th);
+    });
+    thead.appendChild(hr);
+    const tbody=$(tbodyId); tbody.innerHTML='';
+    rows_def.forEach(row=>{
+      const tr=document.createElement('tr');
+      if(row.cls)tr.className=row.cls;
+      const tdl=document.createElement('td');tdl.style.fontWeight=row.bold?'700':'normal';
+      tdl.style.fontSize='11px';tdl.style.minWidth='140px';tdl.textContent=row.lab;tr.appendChild(tdl);
+      months_data.forEach(md=>{
+        const td=document.createElement('td');td.className='r';td.style.fontSize='11px';
+        td.textContent=row.fmt(row.key?md[row.key]:md);tr.appendChild(td);
+      });
+      const tdt=document.createElement('td');tdt.className='r';tdt.style.fontSize='11px';
+      if(sum_keys_set.has(row.key)){
+        tdt.textContent=row.fmt(months_data.reduce((s,md)=>s+(row.key?md[row.key]:0),0));
+      } else {
+        tdt.textContent=row.fmt(row.key?months_data[11][row.key]:months_data[11]);
+      }
+      tr.appendChild(tdt);
+      tbody.appendChild(tr);
+    });
+  }
+
+  const ia_rows_def=[
+    {lab:'Nuevos usuarios pagos',key:'nv',     fmt:N,   bold:false,cls:''},
+    {lab:'Usuarios perdidos',   key:'lost',    fmt:N,   bold:false,cls:''},
+    {lab:'TOTAL usuarios pagos',key:'total',   fmt:N,   bold:true, cls:'sub'},
+    {lab:'MRR IA Total',        key:'mrr',     fmt:S,   bold:true, cls:'sub'},
+    {lab:'Costo IA tokens',     key:'ia_tot',  fmt:S,   bold:false,cls:''},
+    {lab:'Costos variables',    key:'cv_tot',  fmt:S,   bold:false,cls:''},
+    {lab:'Costos fijos',        key:'cf',      fmt:()=>S(cf),bold:false,cls:''},
+    {lab:'Ganancia bruta',      key:'gp',      fmt:S,   bold:true, cls:'sub'},
+    {lab:'IGV a SUNAT',         key:'igv_pay', fmt:S,   bold:false,cls:''},
+    {lab:'Utilidad antes IR',   key:'ebt',     fmt:S,   bold:false,cls:''},
+    {lab:'Impuesto a la Renta', key:'tax',     fmt:S,   bold:false,cls:''},
+    {lab:'UTILIDAD NETA',       key:'net',     fmt:S,   bold:true, cls:'total'},
+  ];
+  const ia_sum_keys=new Set(['nv','lost','mrr','ia_tot','cv_tot','gp','igv_pay','ebt','tax','net']);
+  buildProjTable('thead-ia','tbody-ia',ia_months,ia_rows_def,ia_sum_keys);
+
+  const h_rows_def=[
+    {lab:'Nuevos clientes',      key:'nv',      fmt:N,   bold:false,cls:''},
+    {lab:'Clientes perdidos',    key:'lost',    fmt:N,   bold:false,cls:''},
+    {lab:'TOTAL clientes',       key:'total',   fmt:N,   bold:true, cls:'sub green'},
+    {lab:'MRR Hosting Total',    key:'mrr',     fmt:S,   bold:true, cls:'sub green'},
+    {lab:'Costo infraestructura',key:'cost_tot',fmt:S,   bold:false,cls:''},
+    {lab:'Costos fijos (30%)',   key:'cf_',     fmt:()=>S(cf*0.3),bold:false,cls:''},
+    {lab:'Ganancia bruta',       key:'gp',      fmt:S,   bold:true, cls:'sub green'},
+    {lab:'IGV a SUNAT',          key:'igv_pay', fmt:S,   bold:false,cls:''},
+    {lab:'Utilidad antes IR',    key:'ebt',     fmt:S,   bold:false,cls:''},
+    {lab:'UTILIDAD NETA',        key:'net',     fmt:S,   bold:true, cls:'total'},
+  ];
+  const h_sum_keys=new Set(['nv','lost','mrr','cost_tot','gp','igv_pay','ebt','net']);
+  buildProjTable('thead-host','tbody-host',h_months,h_rows_def,h_sum_keys);
+
+  // ── KPIs HOSTING ─────────────────────────────────────────────────
+  const h12=h_months[11];
+  const hTotMrr=h_months.reduce((s,d)=>s+d.mrr,0);
+  const hTotNet=h_months.reduce((s,d)=>s+d.net,0);
+  $('kpis-host').innerHTML=
+    mkKpi(S(h12.mrr),'MRR Hosting Mes 12','green')+
+    mkKpi(N(h12.total),'Clientes Hosting Mes 12','green')+
+    mkKpi(S(hTotMrr),'Ingresos Hosting Año 1','green')+
+    mkKpi(S(hTotNet),'Utilidad Neta Hosting Año 1',hTotNet>0?'green':'red');
+
+  // ── ADS FUNNEL ───────────────────────────────────────────────────
+  $('funnel-ads').innerHTML=`
+    <div class="funnel-box"><div class="fv">S/ ${N(ads_bud)}</div><div class="fl">Presupuesto</div></div>
+    <div class="funnel-arrow">→</div>
+    <div class="funnel-box"><div class="fv">${N(ads_clicks)}</div><div class="fl">Clics</div></div>
+    <div class="funnel-arrow">→</div>
+    <div class="funnel-box"><div class="fv">${N(ads_leads)}</div><div class="fl">Registros free</div></div>
+    <div class="funnel-arrow">→</div>
+    <div class="funnel-box" style="border:2px solid #1e3a5f"><div class="fv" style="color:#1e3a5f">${N(ads_paid)}</div><div class="fl">Clientes PAGOS</div></div>`;
+
+  $('kpis-ads').innerHTML=
+    mkKpi(Sd(ads_cac),'CAC desde Ads (S/)','amber')+
+    mkKpi(Sd(ltv_ads),'LTV promedio (S/)')+
+    mkKpi(fmtR(ltv_cac_ratio,1)+'×','Ratio LTV:CAC',ltv_cac_ratio>=3?'green':ltv_cac_ratio>=1.5?'amber':'red')+
+    mkKpi(S(ads_paid*avg_arpu),'MRR nuevo/mes generado');
+
+  // ── ADS SCENARIOS TABLE ───────────────────────────────────────────
+  const ad_budgets=[500,1000,1500,2000,3000,5000];
+  const tb_ae=$('tb-ads-escenarios'); tb_ae.innerHTML='';
+  const metrics_ads=[
+    {lab:'Clics estimados',     fn:b=>N(Math.floor(b/ads_cpc))},
+    {lab:'Registros (leads)',   fn:b=>N(Math.floor(Math.floor(b/ads_cpc)*ads_ctr))},
+    {lab:'Clientes pagos nuevos',fn:b=>N(Math.floor(Math.floor(Math.floor(b/ads_cpc)*ads_ctr)*ads_conv))},
+    {lab:'CAC efectivo (S/)',   fn:b=>{const p=Math.floor(Math.floor(Math.floor(b/ads_cpc)*ads_ctr)*ads_conv);return p>0?Sd(b/p):'—'}},
+    {lab:'MRR nuevo generado',  fn:b=>{const p=Math.floor(Math.floor(Math.floor(b/ads_cpc)*ads_ctr)*ads_conv);return S(p*avg_arpu)}},
+    {lab:'LTV:CAC ratio',       fn:b=>{const p=Math.floor(Math.floor(Math.floor(b/ads_cpc)*ads_ctr)*ads_conv);const cac=p>0?b/p:9999;return fmtR(ltv_ads/cac,1)+'×'}},
+    {lab:'Rentabilidad',        fn:b=>{const p=Math.floor(Math.floor(Math.floor(b/ads_cpc)*ads_ctr)*ads_conv);const cac=p>0?b/p:9999;const r=ltv_ads/cac;return r>=3?'✅ Sana':r>=1.5?'⚠️ Ajustada':'🚨 Negativa'}},
+  ];
+  metrics_ads.forEach(row=>{
+    const tr=document.createElement('tr');
+    const tdl=document.createElement('td');tdl.textContent=row.lab;tdl.style.fontWeight='600';tr.appendChild(tdl);
+    ad_budgets.forEach(b=>{
+      const td=document.createElement('td');td.className='r';td.textContent=row.fn(b);
+      if(row.lab==='Rentabilidad'){
+        const v=row.fn(b);
+        if(v.startsWith('✅'))td.className='r green';
+        else if(v.startsWith('⚠️'))td.className='r amber';
+        else td.className='r red';
+      }
+      tr.appendChild(td);
+    });
+    tb_ae.appendChild(tr);
+  });
+
+  // ── ADS ALERTS ───────────────────────────────────────────────────
+  let ads_alert_html='';
+  if(ltv_cac_ratio>=3){
+    ads_alert_html+=mkAl('ok',`✅ <strong>Con un presupuesto de S/ ${N(ads_bud)}/mes, tu relación LTV:CAC es ${fmtR(ltv_cac_ratio,1)}× — SALUDABLE.</strong> Puedes escalar este presupuesto con confianza.`);
+  } else if(ltv_cac_ratio>=1.5){
+    ads_alert_html+=mkAl('warn',`⚠️ <strong>LTV:CAC de ${fmtR(ltv_cac_ratio,1)}× es ajustado.</strong> Funciona si vendes el bundle (S/ 59/mes) en vez del plan suelto. El bundle sube el LTV un 64% y hace que los Ads sean rentables.`);
+  } else {
+    ads_alert_html+=mkAl('danger',`🚨 <strong>LTV:CAC de ${fmtR(ltv_cac_ratio,1)}× — los Ads no son rentables con este presupuesto y estas tasas de conversión.</strong> Reduce el presupuesto o mejora la conversión de la landing page.`);
+  }
+  $('alerts-ads').innerHTML=ads_alert_html;
+
+  // Fases table
+  const tb_f=$('tb-fases'); tb_f.innerHTML='';
+  const fases=[
+    ['Validación','Meses 1-2','S/ 800','Probar mensajes, audiencias, medir CTR real','3-5 nuevos/mes','🧪 Testing'],
+    ['Crecimiento','Meses 3-5','S/ 1,500','Escalar lo que funcionó, optimizar CPC','8-12 nuevos/mes','🚀 Escalar'],
+    ['Aceleración','Mes 6+','S/ 2,500+','Lookalike audiences, retargeting, referidos','20+ nuevos/mes','📈 Escala plena'],
+  ];
+  fases.forEach(([fase,per,bud,obj,cust,estado])=>{
+    const tr=document.createElement('tr');
+    [fase,per,bud,obj,cust,estado].forEach((v,i)=>{
+      const td=document.createElement('td');td.textContent=v;if(i===2)td.className='r green';tr.appendChild(td);
+    });
+    tb_f.appendChild(tr);
+  });
+
+  // ── RESUMEN TABS ─────────────────────────────────────────────────
+  const ia_be=ia_months.findIndex(d=>d.net>0);
+  const h_be=h_months.findIndex(d=>d.net>0);
+  const combo_net=ia_months.map((d,i)=>d.net+h_months[i].net-ads_bud);
+  const combo_be=combo_net.findIndex(v=>v>0);
+
+  $('kpis-top').innerHTML=
+    mkKpi(S(ia12.mrr+h12.mrr),'MRR Total Mes 12')+
+    mkKpi(N(ia12.total+h12.total),'Clientes totales Mes 12')+
+    mkKpi(S(iaTotMrr+hTotMrr),'Ingresos Año 1 (IA+Host)')+
+    mkKpi(S(combo_net.reduce((s,v)=>s+v,0)),'Utilidad Neta c/Ads Año 1',combo_net.reduce((s,v)=>s+v,0)>0?'green':'red');
+  $('kpis-bot').innerHTML=
+    mkKpi(ia_be>=0?'Mes '+(ia_be+1):'>M12','Break-even IA',(ia_be>=0&&ia_be<6)?'green':'amber')+
+    mkKpi(h_be>=0?'Mes '+(h_be+1):'>M12','Break-even Hosting','green')+
+    mkKpi(combo_be>=0?'Mes '+(combo_be+1):'>M12','Break-even c/Ads',(combo_be>=0&&combo_be<9)?'green':'amber')+
+    mkKpi(S(ads_bud),'Inversión Ads/mes (actual)','amber');
+
+  // Resumen sub-tables
+  function buildRes(tbId,months_data,color_cls){
+    const tb=$(tbId); tb.innerHTML='';
+    const rows=[
+      ['Usuarios',d=>N(d.total)],['MRR',d=>S(d.mrr)],['Ganancia bruta',d=>S(d.gp)],
+      ['IGV a SUNAT',d=>S(d.igv_pay)],['Utilidad neta',d=>S(d.net)],
+    ];
+    rows.forEach(([lab,fn],ri)=>{
+      const tr=document.createElement('tr');
+      if(ri===2)tr.className='sub '+(color_cls||'');
+      if(ri===4)tr.className='total';
+      const tdl=document.createElement('td');tdl.textContent=lab;tr.appendChild(tdl);
+      [months_data[2],months_data[5],months_data[11],
+       {total:months_data[11].total,
+        mrr:months_data.reduce((s,d)=>s+d.mrr,0),
+        gp:months_data.reduce((s,d)=>s+d.gp,0),
+        igv_pay:months_data.reduce((s,d)=>s+d.igv_pay,0),
+        net:months_data.reduce((s,d)=>s+d.net,0)}
+      ].forEach(d=>{
+        const td=document.createElement('td');td.className='r calc';td.textContent=fn(d);tr.appendChild(td);
+      });
+      tb.appendChild(tr);
+    });
+  }
+  buildRes('tb-res-ia',ia_months,'');
+  buildRes('tb-res-host',h_months,'green');
+
+  // Consolidado table
+  const tb_c=$('tb-consolidado'); tb_c.innerHTML='';
+  const cons_rows=[
+    {lab:'MRR IA Builder',     fn:(ia,h,m)=>S(ia.mrr)},
+    {lab:'MRR Hosting',        fn:(ia,h,m)=>S(h.mrr)},
+    {lab:'MRR TOTAL',          fn:(ia,h,m)=>S(ia.mrr+h.mrr), bold:true, cls:'sub purple'},
+    {lab:'Costo IA tokens',    fn:(ia,h,m)=>S(ia.ia_tot)},
+    {lab:'Costo infraestructura hosting',fn:(ia,h,m)=>S(h.cost_tot)},
+    {lab:'Costos fijos',       fn:(ia,h,m)=>S(cf)},
+    {lab:'Inversión Ads',      fn:(ia,h,m)=>S(ads_bud), bold:false},
+    {lab:'Ganancia bruta c/Ads',fn:(ia,h,m)=>S(ia.gp+h.gp-ads_bud), bold:true, cls:'sub purple'},
+    {lab:'IGV a SUNAT (ambos)',fn:(ia,h,m)=>S(ia.igv_pay+h.igv_pay)},
+    {lab:'UTILIDAD NETA TOTAL',fn:(ia,h,m)=>S(ia.net+h.net-ads_bud), bold:true, cls:'total'},
+  ];
+  const show_months=[0,1,2,5,8,11];
+  const sum_cons=new Set(['mrr','mrr_ia','mrr_h','ia_tot','cost_tot','gp','igv_pay','net']);
+  cons_rows.forEach(row=>{
+    const tr=document.createElement('tr');
+    if(row.cls)tr.className=row.cls;
+    if(row.bold)tr.style.fontWeight='700';
+    const tdl=document.createElement('td');tdl.textContent=row.lab;tr.appendChild(tdl);
+    show_months.forEach(mi=>{
+      const td=document.createElement('td');td.className='r calc';
+      td.textContent=row.fn(ia_months[mi],h_months[mi],mi+1);
+      if(row.cls==='total'){
+        const v=ia_months[mi].net+h_months[mi].net-ads_bud;
+        td.style.color=v<0?'#fca5a5':'#bbf7d0';
+      }
+      tr.appendChild(td);
+    });
+    const tdt=document.createElement('td');tdt.className='r calc';
+    const yr_ia={net:ia_months.reduce((s,d)=>s+d.net,0),gp:ia_months.reduce((s,d)=>s+d.gp,0),mrr:ia_months[11].mrr,ia_tot:ia_months.reduce((s,d)=>s+d.ia_tot,0),igv_pay:ia_months.reduce((s,d)=>s+d.igv_pay,0)};
+    const yr_h={net:h_months.reduce((s,d)=>s+d.net,0),gp:h_months.reduce((s,d)=>s+d.gp,0),mrr:h_months[11].mrr,cost_tot:h_months.reduce((s,d)=>s+d.cost_tot,0),igv_pay:h_months.reduce((s,d)=>s+d.igv_pay,0)};
+    tdt.textContent=row.fn(yr_ia,yr_h,13);
+    tr.appendChild(tdt);
+    tb_c.appendChild(tr);
+  });
+  const total_neto_anual=ia_months.reduce((s,d)=>s+d.net,0)+h_months.reduce((s,d)=>s+d.net,0)-ads_bud*12;
+  $('alert-consolidado').innerHTML=mkAl(total_neto_anual>0?'ok':'warn',
+    total_neto_anual>0
+    ?`✅ <strong>Con ads de S/ ${N(ads_bud)}/mes, el negocio genera S/ ${N(total_neto_anual)} de utilidad neta en el Año 1.</strong> Break-even consolidado: Mes ${combo_be>=0?combo_be+1:'>12'}.`
+    :`⚠️ <strong>Con ads de S/ ${N(ads_bud)}/mes, el negocio aún no cubre costos en Año 1 (S/ ${N(total_neto_anual)}).</strong> Reduce el presupuesto inicial de ads o busca crecer el número de usuarios base primero.`
+  );
+
+  // ── ANÁLISIS DE PRECIOS ───────────────────────────────────────────
+  // Does CAC from ads require price increase?
+  const presencia_margin=iaP[1].gm; // monthly gross margin presencia
+  const ratio_presencia=ads_cac>0?(presencia_margin/ia_churn)/ads_cac:0;
+  const bundle_margin_total=iaP[1].gm+hP[0].gm;
+  const ratio_bundle=ads_cac>0?(bundle_margin_total/((ia_churn+pct('h_churn'))/2))/ads_cac:0;
+
+  let ap_html='';
+  ap_html+=`<p style="font-size:13px;margin-bottom:12px;line-height:1.7;">Con un CAC publicitario de <strong>S/ ${Sd(ads_cac)}</strong> y una vida media del cliente de <strong>${ia_churn>0?fmtR(1/ia_churn,1):99} meses</strong>, el LTV necesario para mantener un ratio 3× es <strong>S/ ${Sd(ads_cac*3)}</strong>.</p>`;
+
+  if(ratio_presencia>=3){
+    ap_html+=mkAl('ok',`✅ <strong>Plan Presencia (S/ ${num('ia_pr_1')}): NO necesitas subir precio.</strong> LTV:CAC = ${fmtR(ratio_presencia,1)}× con ads. El margen actual es suficiente para sostener la publicidad.`);
+  } else if(ratio_presencia>=1.5){
+    ap_html+=mkAl('warn',`⚠️ <strong>Plan Presencia (S/ ${num('ia_pr_1')}): El margen es ajustado para los Ads (LTV:CAC = ${fmtR(ratio_presencia,1)}×).</strong> Solución: empuja el bundle S/ 59 como oferta principal en los anuncios en vez del plan suelto.`);
+  } else {
+    ap_html+=mkAl('danger',`🚨 <strong>Plan Presencia solo NO rentabiliza los Ads (LTV:CAC = ${fmtR(ratio_presencia,1)}×).</strong> Necesitas subir a S/ 49-55, reducir churn a menos del 4%, o vender solo bundles.`);
+  }
+  if(ratio_bundle>=3){
+    ap_html+=mkAl('ok',`✅ <strong>Bundle IA + Hosting (S/ ${S(iaP[1].price+hP[0].price).replace('S/ ','')}): LTV:CAC = ${fmtR(ratio_bundle,1)}× con ads — SANA.</strong> Esta debe ser tu oferta estrella en los anuncios.`);
+  }
+  $('analisis-precios').innerHTML=ap_html;
+
+  // Comparador
+  const tb_comp=$('tb-comparador'); tb_comp.innerHTML='';
+  const comp_rows=[
+    {plan:'Presencia (solo)',actual:iaP[1].price,sug:iaP[1].price,margin_sin:P(iaP[1].gm_pct),margin_con:P((iaP[1].gm-ads_cac/20)/iaP[1].price),dec:'✅ No tocar'},
+    {plan:'Emprendedor (solo)',actual:iaP[2].price,sug:119,margin_sin:P(iaP[2].gm_pct),margin_con:'—',dec:'⚠️ Subir a S/119'},
+    {plan:'Agencia IA (solo)',actual:iaP[3].price,sug:299,margin_sin:P(iaP[3].gm_pct),margin_con:'—',dec:'🚨 Subir a S/299+'},
+    {plan:'Bundle Presencia+Hosting',actual:iaP[1].price+hP[0].price,sug:59,margin_sin:P((iaP[1].gm+hP[0].gm)/(iaP[1].price+hP[0].price)),margin_con:P(ratio_bundle/10),dec:'⭐ Oferta estrella'},
+  ];
+  comp_rows.forEach(row=>{
+    const tr=document.createElement('tr');
+    if(row.dec.includes('⭐'))tr.className='rec-row';
+    [row.plan,S(row.actual),row.margin_sin,S(row.sug),row.margin_con,row.dec].forEach((v,i)=>{
+      const td=document.createElement('td');td.textContent=v;
+      if(i===3)td.className='green';
+      if(i===5&&v.includes('✅'))td.className='green';
+      if(i===5&&v.includes('🚨'))td.className='red';
+      if(i===5&&v.includes('⚠️'))td.className='amber';
+      tr.appendChild(td);
+    });
+    tb_comp.appendChild(tr);
+  });
+
+  // Bundles table
+  const tb_bund=$('tb-bundles'); tb_bund.innerHTML='';
+  const bundles=[
+    ['Presencia + Hosting Prof.',`S/ ${num('ia_pr_1')} + S/ ${num('h_pr_0')} = S/ ${num('ia_pr_1')+num('h_pr_0')}`,
+     'S/ 59',Sd(bundle_margin_total/((ia_churn+pct('h_churn'))/2)),fmtR(ratio_bundle,1)+'×',ratio_bundle>=3?'✅ Lanzar YA':'⚠️ Ajustar'],
+    ['Emprendedor + Hosting Prem.',`S/ ${num('ia_pr_2')} + S/ ${num('h_pr_1')} = S/ ${num('ia_pr_2')+num('h_pr_1')}`,
+     'S/ 119','—','—','⚠️ Solo tras ajustar Emprend.'],
+  ];
+  bundles.forEach(([name,suelto,bundle,ltv,ratio,est])=>{
+    const tr=document.createElement('tr');
+    if(est.includes('✅'))tr.className='rec-row';
+    [name,suelto,bundle,ltv,ratio,est].forEach((v,i)=>{
+      const td=document.createElement('td');td.textContent=v;
+      if(i===2)td.className='green';
+      if(i===5&&v.includes('✅'))td.className='green';
+      tr.appendChild(td);
+    });
+    tb_bund.appendChild(tr);
+  });
+
+  const final_msg=ratio_bundle>=3
+    ?`<strong>⭐ Conclusión:</strong> No necesitas subir el precio del plan Presencia. Tu gran palanca es vender el <strong>Bundle Presencia+Hosting a S/ 59/mes</strong> como oferta principal en Facebook Ads. Con ese bundle tu LTV:CAC con ads es ${fmtR(ratio_bundle,1)}× — completamente sostenible. La publicidad de S/ 1,500-2,000/mes es viable AHORA, no tienes que esperar.`
+    :`<strong>⚠️ Atención:</strong> Con los parámetros actuales, los Ads son ajustados. Mueve el foco a vender el Bundle en los anuncios o reduce el presupuesto inicial a S/ 800-1,000/mes mientras optimizas la conversión.`;
+  $('alert-final').innerHTML=mkAl(ratio_bundle>=3?'purple':'warn',final_msg);
+}
+
+recalc();
+</script>
+</body>
+</html>

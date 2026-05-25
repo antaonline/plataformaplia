@@ -27,6 +27,7 @@ import { HostingModule } from './hosting/hosting.module';
 import { AiChatModule } from './experimental/iachat/iachat.module';
 import { SandboxModule } from './experimental/sandbox/sandbox.module';
 import { PreviewModule } from './experimental/preview/preview.module';
+import { MetaAdsModule } from './integrations/meta-ads/meta-ads.module';
 
 import { ThrottlerModule } from '@nestjs/throttler'
 
@@ -60,6 +61,7 @@ import { ThrottlerModule } from '@nestjs/throttler'
     AiChatModule,
     SandboxModule,
     PreviewModule,
+    MetaAdsModule,
   ],
   controllers: [AppController, OrdersController],
   providers: [AppService, ProjectsService, RenewHostingCron, PublishProjectsCron],
