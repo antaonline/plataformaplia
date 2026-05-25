@@ -179,6 +179,31 @@ export class PaymentsService {
       passwordSetupToken = token;
     }
 
+    // Correos transaccionales post-pago: recibo + bienvenida.
+    // Se envian en background (no await) para no bloquear la respuesta al
+    // cliente si el SMTP es lento. Los errores quedan en logs.
+    const appBase = (process.env.APP_URL ?? 'http://localhost:3001').replace(/\/$/, '');
+    void this.mailService.sendPaymentReceipt({
+      customerEmail: order.email!,
+      billingName: user.billingName || undefined,
+      billingAddress: user.billingAddress || undefined,
+      billingDepartment: user.billingDepartment || undefined,
+      billingEmail: user.billingEmail || undefined,
+      planName: order.plan?.name || 'Plan PLIA',
+      amount: Number(order.amount || 0),
+      orderId: order.id,
+      paidAt: new Date(),
+      dashboardUrl: `${appBase}/dashboard`,
+    });
+    if (createdUser) {
+      void this.mailService.sendWelcome({
+        email: order.email!,
+        customerName: user.name || undefined,
+        planName: order.plan?.name || undefined,
+        dashboardUrl: `${appBase}/dashboard`,
+      });
+    }
+
     return {
       message:
         order.plan?.serviceType === PlanServiceType.HOSTING_ONLY

@@ -809,7 +809,7 @@ var timer = setInterval(tick,1000);
   async requestRevision(projectId: number, userId: number, message: string) {
     const project = await this.prisma.project.findUnique({
       where: { id: projectId },
-      include: { order: true },
+      include: { order: true, user: true },
     });
     if (!project) {
       throw new NotFoundException('Project no encontrado.');
@@ -860,6 +860,19 @@ var timer = setInterval(tick,1000);
 
     void this.aiService.generateForProject(projectId, message);
 
+    // Acuse de recibo al cliente. No bloqueamos si el SMTP falla.
+    if (project.user?.email) {
+      const appBase = (process.env.APP_URL ?? 'http://localhost:3001').replace(/\/$/, '');
+      void this.mailService.sendRevisionAcknowledged(project.user.email, {
+        projectName: project.name,
+        businessName: data.businessName,
+        revisionMessage: message,
+        revisionsLeft: Math.max(0, allowed - next.length),
+        revisionsAllowed: allowed,
+        dashboardUrl: `${appBase}/dashboard/detalles-proyecto/${projectId}`,
+      });
+    }
+
     return updated;
   }
 
@@ -909,6 +922,19 @@ var timer = setInterval(tick,1000);
                   },
                 }),
               },
+            });
+            // Alerta interna al admin para intervenir antes de que el cliente
+            // se queje. No bloquea el cron.
+            const adminBase = (process.env.APP_URL ?? 'http://localhost:3001').replace(/\/$/, '');
+            void this.mailService.sendProjectFailed({
+              projectId: project.id,
+              projectName: project.name,
+              customerEmail: project.user?.email,
+              errorMessage:
+                data.aiGeneration?.error ||
+                'La generacion automatica no pudo completarse tras varios intentos.',
+              retries,
+              adminUrl: `${adminBase}/dashboard/detalles-proyecto/${project.id}`,
             });
             continue;
           }
@@ -961,10 +987,22 @@ var timer = setInterval(tick,1000);
         await this.publishProject(project.id, { publicUrl });
 
         if (project.user?.email) {
-          const loginUrl = `${process.env.APP_URL ?? 'http://localhost:3001'}/login`;
-          await this.mailService.sendProjectReady(project.user.email, {
+          const appBase = (process.env.APP_URL ?? 'http://localhost:3001').replace(/\/$/, '');
+          const resolvedPublicUrl =
+            data.publicUrl ||
+            (data.publicDomain ? `https://${data.publicDomain}` : appBase);
+          await this.mailService.sendProjectPublished(project.user.email, {
             projectName: project.name,
-            loginUrl,
+            businessName: data.businessName,
+            publicUrl: resolvedPublicUrl,
+            dashboardUrl: `${appBase}/dashboard`,
+            revisionsAllowed:
+              data.revisionsAllowed ?? (project.type === 'LANDING' ? 1 : 2),
+            revisionsLeft:
+              (data.revisionsAllowed ?? (project.type === 'LANDING' ? 1 : 2)) -
+              (Array.isArray(data.revisionRequests)
+                ? data.revisionRequests.length
+                : 0),
           });
         }
         this.logger.log(`Proyecto ${project.id} publicado exitosamente por el cron.`);
