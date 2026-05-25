@@ -7,7 +7,7 @@ import { Roles } from '../../auth/roles.decorator'
 
 @Controller('meta-ads')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('admin')
+@Roles('ADMIN')
 export class MetaAdsController {
   constructor(private readonly metaAdsService: MetaAdsService) {}
 
