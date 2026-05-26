@@ -164,8 +164,8 @@ export class ProjectsService {
 <body class="min-h-screen bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-950 text-white">
 <main class="min-h-screen flex flex-col items-center justify-center px-6 py-12">
 <div class="max-w-2xl w-full text-center">
-<div class="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-lime-400/15 ring-2 ring-lime-400/40 mb-8 animate-pulse">
-<svg viewBox="0 0 32 32" class="w-10 h-10 text-lime-400" fill="currentColor"><path d="M8 4h10a8 8 0 010 16h-4v8H8V4zm6 12h4a4 4 0 000-8h-4v8z"/></svg>
+<div class="inline-flex items-center justify-center mb-8">
+<img src="https://plia.pe/iconblack-plia.svg" alt="PLIA" width="88" height="88" style="display:block;width:88px;height:88px;border-radius:18px;filter:drop-shadow(0 0 24px rgba(191,255,0,0.35));" class="animate-pulse" />
 </div>
 <h1 class="text-4xl md:text-6xl font-extrabold tracking-tight">${businessName}</h1>
 <p class="mt-4 text-xl md:text-2xl text-slate-300 font-semibold">Estamos trabajando en tu sitio web</p>
