@@ -14,6 +14,7 @@ import {
   revisionDeployedTemplate,
   renewalNoticeTemplate,
   contactMessageTemplate,
+  siteContactSubmissionTemplate,
   TwoFactorPayload,
   AccountSetupPayload,
   WelcomePayload,
@@ -26,6 +27,7 @@ import {
   RevisionDeployedPayload,
   RenewalNoticePayload,
   ContactMessagePayload,
+  SiteContactSubmissionPayload,
 } from './templates';
 
 /**
@@ -242,6 +244,15 @@ export class MailService {
       replyTo: payload.email,
       context: 'contact',
       rendered: contactMessageTemplate(payload),
+    });
+  }
+
+  async sendSiteContactSubmission(payload: SiteContactSubmissionPayload) {
+    return this.send({
+      to: payload.recipientEmail,
+      replyTo: payload.submitterEmail,
+      context: 'site contact',
+      rendered: siteContactSubmissionTemplate(payload),
     });
   }
 

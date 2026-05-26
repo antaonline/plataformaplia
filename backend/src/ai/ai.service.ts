@@ -874,6 +874,11 @@ export class AiService {
       });
 
       // 3. Render de paginas HTML estaticas (Tailwind CDN).
+      // Endpoint propio para los formularios de contacto generados por la IA.
+      // Reemplaza la dependencia de formsubmit.co u otros servicios externos.
+      const apiBase = (process.env.PREVIEW_PROXY_BASE || 'http://localhost:3002').replace(/\/$/, '');
+      const formEndpoint = `${apiBase}/api/site-contact/${projectId}`;
+
       const filesMap = await this.websiteGen.renderAll(
         sitePlan,
         brief,
@@ -881,6 +886,7 @@ export class AiService {
         imageUrls,
         clientImages,
         clientLogo,
+        formEndpoint,
       );
 
       // 4. Mismo formato de salida que legacy: pages[{slug,html}] + html.

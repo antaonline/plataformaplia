@@ -132,6 +132,7 @@ imagePrompts: 3-6 imagenes necesarias para el sitio (hero, secciones, etc.). Las
     imageUrls: Record<string, string>,
     clientImages: string[] = [],
     clientLogo?: string,
+    formEndpoint?: string,
   ): Promise<Record<string, string>> {
     const ds = plan.design;
     const imgList = Object.entries(imageUrls)
@@ -173,6 +174,39 @@ INSTRUCCIONES DURAS PARA LAS IMAGENES DEL CLIENTE:
 6. Si son fotos del equipo/personas -> seccion equipo o testimonios.
 7. Las imagenes del cliente TIENEN PRIORIDAD sobre las generadas por IA en su categoria.
 8. Si NO hay imagen IA para un slot Y hay imagen cliente apropiada -> usa la del cliente.
+` : ''}
+${formEndpoint ? `FORMULARIOS DE CONTACTO (OBLIGATORIO si el brief pide contacto/reservas/consulta/cotizacion):
+- Si la pagina necesita un formulario, su accion DEBE ser:
+    <form action="${formEndpoint}" method="POST" data-plia-contact>
+- NUNCA uses formsubmit.co, getform.io, mailto:, ni ningun servicio externo.
+- Campos minimos obligatorios: name (required), email (required, type=email), message (required, textarea).
+- Campos opcionales segun rubro: phone, subject, business, date, time, party_size, etc.
+- INCLUYE SIEMPRE este campo honeypot oculto (anti-spam, no quitar):
+    <input type="text" name="_honeypot" tabindex="-1" autocomplete="off" style="position:absolute;left:-9999px;top:-9999px;" aria-hidden="true">
+- Coloca DENTRO del form un elemento para mensajes:
+    <p data-plia-msg style="margin-top:12px;font-size:14px;display:none;"></p>
+- Al final de la pagina (justo antes de </body>), INCLUYE EXACTAMENTE este script para UX inline sin recargar:
+<script>
+document.querySelectorAll('form[data-plia-contact]').forEach(function(f){
+  f.addEventListener('submit', async function(e){
+    e.preventDefault();
+    var msg = f.querySelector('[data-plia-msg]');
+    var btn = f.querySelector('button[type="submit"], input[type="submit"]');
+    var origBtn = btn ? btn.innerHTML : null;
+    if(btn){ btn.disabled = true; btn.innerHTML = 'Enviando...'; }
+    try {
+      var res = await fetch(f.action, { method:'POST', body:new FormData(f), headers:{'Accept':'application/json'} });
+      var data = await res.json().catch(function(){return {};});
+      if(msg){ msg.style.display='block'; msg.textContent = data.message || (res.ok?'¡Recibido! Te contactaremos pronto.':'No se pudo enviar.'); msg.style.color = res.ok ? '#16a34a' : '#dc2626'; }
+      if(res.ok){ f.reset(); }
+    } catch(err){
+      if(msg){ msg.style.display='block'; msg.textContent = 'Error de red. Intenta de nuevo.'; msg.style.color = '#dc2626'; }
+    } finally {
+      if(btn){ btn.disabled = false; btn.innerHTML = origBtn; }
+    }
+  });
+});
+</script>
 ` : ''}
 SALIDA: devuelve SOLO el HTML completo de la pagina pedida. Sin explicaciones, sin cercas \`\`\`. Empieza por <!DOCTYPE html>.`;
 

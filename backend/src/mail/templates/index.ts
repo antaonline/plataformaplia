@@ -23,6 +23,7 @@ export { revisionAcknowledgedTemplate } from './revision-acknowledged';
 export { revisionDeployedTemplate } from './revision-deployed';
 export { renewalNoticeTemplate } from './renewal-notice';
 export { contactMessageTemplate } from './contact-message';
+export { siteContactSubmissionTemplate } from './site-contact-submission';
 
 // === Tipos (compile-time only, requieren `export type`) ===
 export type { TwoFactorPayload } from './two-factor';
@@ -37,3 +38,4 @@ export type { RevisionAcknowledgedPayload } from './revision-acknowledged';
 export type { RevisionDeployedPayload } from './revision-deployed';
 export type { RenewalNoticePayload } from './renewal-notice';
 export type { ContactMessagePayload } from './contact-message';
+export type { SiteContactSubmissionPayload } from './site-contact-submission';
