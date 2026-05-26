@@ -820,6 +820,180 @@ export class AiService {
    * Mantiene el MISMO contrato de persistencia/estado que generateForProject
    * para no romper cron/publicacion/pagos.
    */
+  /**
+   * Aplica una revision a un sitio Claude YA publicado SIN regenerar.
+   * - Lee el HTML existente de uploads/previews/<id>/.
+   * - Llama a websiteGen.editPages que hace ediciones quirurgicas.
+   * - Escribe los cambios de vuelta a previews/.
+   * - Republica al public_html.
+   * - Manda el correo "revision-deployed".
+   *
+   * Retorna null si no hay archivos previos para editar (caller hace
+   * fallback a la regeneracion full).
+   */
+  private async editExistingSiteWithClaude(
+    project: any,
+    revisionNote: string,
+  ): Promise<AiGenerationResult | null> {
+    const projectId = project.id as number;
+    const onboarding = JSON.parse((project.onboardingData as string) || '{}');
+    const previewRoot = join(
+      process.cwd(),
+      'uploads',
+      'previews',
+      String(projectId),
+    );
+
+    // Si por alguna razon no hay archivos previos, devolver null para que
+    // el caller caiga al flujo normal de regeneracion.
+    if (!fs.existsSync(previewRoot)) {
+      this.logger.warn(
+        `editExistingSiteWithClaude: no existe ${previewRoot} para project=${projectId}`,
+      );
+      return null;
+    }
+
+    const htmlFiles = fs
+      .readdirSync(previewRoot)
+      .filter((f) => /\.html$/i.test(f));
+    if (htmlFiles.length === 0) {
+      this.logger.warn(
+        `editExistingSiteWithClaude: no hay .html en ${previewRoot} para project=${projectId}`,
+      );
+      return null;
+    }
+
+    const existingPages: Record<string, string> = {};
+    for (const f of htmlFiles) {
+      existingPages[f] = fs.readFileSync(join(previewRoot, f), 'utf-8');
+    }
+
+    const planType = project.type as PlanType;
+    const brief = this.buildUserPrompt(onboarding, planType);
+    const clientImages: string[] = Array.isArray(onboarding.images)
+      ? onboarding.images.filter((x: any) => typeof x === 'string')
+      : [];
+    const clientLogo: string | undefined =
+      typeof onboarding.logoUrl === 'string' && onboarding.logoUrl
+        ? onboarding.logoUrl
+        : undefined;
+
+    this.logger.log(
+      `AI(claude-edit) start project=${projectId} pages=${htmlFiles.join(',')} note="${revisionNote.slice(0, 80)}"`,
+    );
+
+    let editedPages: Record<string, string>;
+    try {
+      editedPages = await this.websiteGen.editPages(
+        existingPages,
+        revisionNote,
+        brief,
+        clientImages,
+        clientLogo,
+      );
+    } catch (error: any) {
+      this.logger.error(
+        `Fallo AI(claude-edit) ${projectId}: ${error?.message || error}`,
+      );
+      // Marcar FAILED no, porque el sitio publicado sigue intacto. Solo
+      // logueamos el error y devolvemos null para que el caller decida.
+      return null;
+    }
+
+    // Escribir los cambios de vuelta (solo paginas que realmente cambiaron).
+    let changedCount = 0;
+    for (const [file, newHtml] of Object.entries(editedPages)) {
+      if (newHtml && newHtml !== existingPages[file]) {
+        fs.writeFileSync(join(previewRoot, file), newHtml, 'utf-8');
+        changedCount += 1;
+      }
+    }
+
+    this.logger.log(
+      `AI(claude-edit) done project=${projectId} changedFiles=${changedCount}/${htmlFiles.length}`,
+    );
+
+    // Actualizar metadata en DB (status sigue DELIVERED).
+    const target = onboarding?.aiGeneration?.target as string | undefined;
+    await this.prisma.project.update({
+      where: { id: projectId },
+      data: {
+        // status DELIVERED preservado (no se toca)
+        onboardingData: JSON.stringify({
+          ...onboarding,
+          aiGeneration: {
+            ...(onboarding.aiGeneration || {}),
+            status: 'READY',
+            mode: 'edit',
+            model: 'claude-static-edit',
+            updatedAt: new Date().toISOString(),
+            finishedAt: new Date().toISOString(),
+            revisionDeployedAt: new Date().toISOString(),
+            lastRevisionNote: revisionNote.slice(0, 500),
+            editedFiles: changedCount,
+          },
+        }),
+      },
+    });
+
+    // Republicar al public_html.
+    if (target) {
+      try {
+        if (fs.existsSync(previewRoot)) {
+          this.copyDirRecursive(previewRoot, target);
+          this.logger.log(
+            `Edicion publicada en ${target} para project=${projectId}`,
+          );
+        }
+      } catch (repubErr: any) {
+        this.logger.error(
+          `Fallo republicacion tras edicion project=${projectId}: ${repubErr?.message || repubErr}`,
+        );
+      }
+    }
+
+    // Mandar correo "revision-deployed" al cliente.
+    try {
+      const customerEmail = project?.user?.email;
+      if (customerEmail) {
+        const appBase = (process.env.APP_URL ?? 'http://localhost:3001').replace(/\/$/, '');
+        const resolvedPublicUrl =
+          onboarding.publicUrl ||
+          (onboarding.publicDomain
+            ? `https://${onboarding.publicDomain}`
+            : appBase);
+        await this.mailService.sendRevisionDeployed(customerEmail, {
+          projectName: project.name,
+          businessName: onboarding.businessName,
+          publicUrl: resolvedPublicUrl,
+          dashboardUrl: `${appBase}/dashboard`,
+        });
+      }
+    } catch (mailErr: any) {
+      this.logger.warn(
+        `No se pudo enviar revision-deployed (edit) project=${projectId}: ${mailErr?.message || mailErr}`,
+      );
+    }
+
+    // Retornar shape compatible (caller solo usa que sea truthy).
+    return {
+      spec: {} as any,
+      images: [],
+      html: editedPages['index.html'] || Object.values(editedPages)[0] || '',
+      pages: Object.entries(editedPages).map(([file, html]) => ({
+        slug: file === 'index.html' ? 'index' : file.replace(/\.html$/i, ''),
+        html,
+      })),
+      score: {
+        conversion: 90,
+        seo: 85,
+        accessibility: 80,
+        performance: 90,
+        notes: [`Edicion quirurgica aplicada (${changedCount} archivos modificados)`],
+      },
+    } as AiGenerationResult;
+  }
+
   private async generateStaticWithClaude(
     project: any,
     revisionNote?: string,
@@ -831,6 +1005,20 @@ export class AiService {
     // status DELIVERED al final y re-publicar archivos al public_html.
     const wasDelivered = project.status === ProjectStatus.DELIVERED;
     const isRevision = !!(revisionNote && revisionNote.trim().length > 0);
+
+    // FAST-PATH para revisiones sobre sitios YA publicados: en vez de
+    // regenerar desde cero (plan + DALL-E + render full), edita
+    // quirurgicamente el HTML existente. Mas barato, mas rapido, conserva
+    // imagenes/estructura/contenido no afectado.
+    if (isRevision && wasDelivered) {
+      const fast = await this.editExistingSiteWithClaude(project, revisionNote!);
+      if (fast) return fast;
+      // Si la edicion quirurgica fallo (p.ej. no habian archivos previos),
+      // cae al flujo normal de regeneracion como fallback.
+      this.logger.warn(
+        `editExistingSiteWithClaude fallback project=${projectId}: regenerando desde cero.`,
+      );
+    }
     try {
       const planType = project.type as PlanType;
       const mode: WebMode = planType === 'LANDING' ? 'LANDING' : 'WEB';

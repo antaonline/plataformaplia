@@ -238,4 +238,85 @@ SALIDA: devuelve SOLO el HTML completo de la pagina pedida. Sin explicaciones, s
     }
     return files;
   }
+
+  /**
+   * Edicion QUIRURGICA: aplica una solicitud de revision a HTML que ya
+   * existe. Cero plan, cero DALL-E, cero regeneracion desde scratch.
+   *
+   * Para CADA pagina existente:
+   *   1) Pasa el HTML actual + la solicitud del cliente
+   *   2) Claude devuelve el HTML modificado preservando todo lo demas
+   *   3) Si Claude considera que la pagina no requiere cambios, retorna
+   *      el mismo HTML (idempotente)
+   *
+   * Costo aprox: 1 llamada Sonnet por pagina, sin imagenes nuevas.
+   * Para un LANDING tipico: ~$0.05-0.15 vs $0.55+ de una regeneracion full.
+   */
+  async editPages(
+    existingPages: Record<string, string>,
+    revisionNote: string,
+    brief: string,
+    clientImages: string[] = [],
+    clientLogo?: string,
+  ): Promise<Record<string, string>> {
+    const validClientImages = clientImages.filter((s) => /^https?:\/\//.test(s));
+    const hasLogo = !!clientLogo && /^https?:\/\//.test(clientLogo);
+    const multimodalImages = hasLogo
+      ? [clientLogo as string, ...validClientImages]
+      : validClientImages;
+
+    const system = `Estas EDITANDO una pagina HTML que YA EXISTE y esta publicada. Tu trabajo es aplicar una solicitud de cambio del cliente de forma QUIRURGICA — modifica EXCLUSIVAMENTE lo que el cliente esta pidiendo y deja TODO LO DEMAS intacto.
+
+REGLAS DURAS:
+1. PRESERVAR EXACTAMENTE: la paleta de colores, las fuentes, la estructura general, los breakpoints responsive, los scripts, los meta tags, el head completo, y todas las secciones que el cliente NO mencione.
+2. PRESERVAR las URLs de imagenes existentes. NO inventes ni cambies URLs de imagenes salvo que el cliente lo pida explicitamente.
+3. PRESERVAR los formularios (action, method, campos hidden como _honeypot) salvo que el cliente pida cambiarlos.
+4. SOLO modifica el texto, color, seccion, o elemento que el cliente esta pidiendo en su solicitud.
+5. Si la solicitud del cliente NO aplica a esta pagina, devuelve la pagina EXACTAMENTE igual sin cambios.
+6. Mantén el doctype html5 y la estructura <html><head><body>.
+7. NO agregues "estoy editando..." ni comentarios sobre el proceso. Solo devuelve el HTML final.
+
+CONTEXTO DEL NEGOCIO (para que entiendas el sitio):
+${brief.slice(0, 1500)}
+
+SALIDA: devuelve SOLO el HTML completo modificado. Sin explicaciones, sin cercas \`\`\`. Empieza por <!DOCTYPE html>.`;
+
+    const edited: Record<string, string> = {};
+    for (const [file, html] of Object.entries(existingPages)) {
+      const userMsg = `HTML ACTUAL de la pagina "${file}":
+
+\`\`\`
+${html}
+\`\`\`
+
+=== SOLICITUD DEL CLIENTE ===
+${revisionNote.trim()}
+
+Devuelve el HTML completo de la pagina con el cambio aplicado. Si esta solicitud no aplica a esta pagina (porque trata de otra seccion/pagina), devuelve el mismo HTML sin modificar.`;
+
+      const raw = await this.provider.complete(
+        system,
+        [{ role: 'user', content: userMsg }],
+        {
+          model: MODEL_SONNET,
+          maxTokens: 32000, // mas alto: el HTML de entrada puede ser grande
+          temperature: 0.3, // baja temperatura = ediciones predecibles
+          images: multimodalImages,
+        },
+      );
+      const cleaned = this.stripFences(raw);
+      // Sanity check: si Claude devolvio algo muy chiquito comparado con
+      // el HTML original, probablemente algo salio mal y mejor preservamos
+      // el original que arruinar la pagina.
+      if (cleaned.length < Math.max(500, html.length * 0.3)) {
+        this.logger.warn(
+          `editPages: respuesta sospechosamente chica para ${file} (${cleaned.length} chars vs ${html.length} original). Preservando original.`,
+        );
+        edited[file] = html;
+      } else {
+        edited[file] = cleaned;
+      }
+    }
+    return edited;
+  }
 }
