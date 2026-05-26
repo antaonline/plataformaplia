@@ -3385,7 +3385,7 @@ export default function DashboardPage() {
                           <DialogHeader>
                             <DialogTitle>Solicitar cambios</DialogTitle>
                             <DialogDescription>
-                              Detalla los ajustes que necesitas y la IA aplicara los cambios.
+                              Detalla los ajustes que necesites y aplicaremos los cambios.
                             </DialogDescription>
                           </DialogHeader>
                           <div className="space-y-2">
