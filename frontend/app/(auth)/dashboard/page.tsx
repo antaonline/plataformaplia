@@ -2561,7 +2561,7 @@ export default function DashboardPage() {
                           <div>
                             <label className="text-sm font-medium">Sube tu logo</label>
                             <p className="mt-1 text-xs text-muted-foreground">
-                              Formato recomendado: <span className="font-semibold">.png sin fondo</span> (transparente). Así la IA lo coloca limpio sobre cualquier color de fondo.
+                              Formato recomendado: <span className="font-semibold">.png sin fondo</span> (transparente). Así podemos aplicarlo limpio sobre cualquier color de fondo.
                             </p>
                             <Input
                               type="file"

@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 1920" width="1080" height="1920">
+  <rect width="1080" height="1920" fill="#14181F"/>
+  <!-- Top accent bar -->
+  <rect x="0" y="0" width="1080" height="12" fill="#BFFF00"/>
+  <!-- Logo centered top -->
+  <g transform="translate(92,80) scale(0.54)">
+    <path fill="#BFFF00" d="M0,4.17v50.78c0,2.3,1.87,4.17,4.17,4.17h139.46c2.3,0,4.17,1.87,4.17,4.17v50.78c0,2.3-1.87,4.17-4.17,4.17H4.17c-2.3,0-4.17,1.87-4.17,4.17v102c0,4.45,5.39,6.69,8.54,3.54l50.58-50.58h84.54c2.65,0,5.2-1.05,7.07-2.93l53.26-53.26c1.88-1.88,2.93-4.42,2.93-7.07V20c0-11.05-8.95-20-20-20H4.17C1.87,0,0,1.87,0,4.17z"/>
+    <path fill="#FFFFFF" d="M279,38.17v135.59c0,2.3,1.87,4.17,4.17,4.17h26.06c2.3,0,4.17-1.87,4.17-4.17v-39.63h81.92c20.38,0,36.9-16.53,36.9-36.93V70.93c0-20.39-16.52-36.93-36.9-36.93H283.17C280.87,34,279,35.87,279,38.17z M394,102.84h-80.6V65.29H394c3.84,0,6.95,3.11,6.95,6.95v23.64C400.95,99.73,397.84,102.84,394,102.84z"/>
+    <path fill="#FFFFFF" d="M500.62,139.35V38.17c0-2.3-1.87-4.17-4.17-4.17H470.4c-2.3,0-4.17,1.87-4.17,4.17v105.35c0,19.01,15.4,34.42,34.4,34.42h105.27c2.3,0,4.17-1.87,4.17-4.17v-26.08c0-2.3-1.87-4.17-4.17-4.17h-101.1C502.49,143.52,500.62,141.65,500.62,139.35z"/>
+    <path fill="#FFFFFF" d="M672.18,177.94h-26.05c-2.3,0-4.17-1.87-4.17-4.17V38.17c0-2.3,1.87-4.17,4.17-4.17h26.05c2.3,0,4.17,1.87,4.17,4.17v135.6C676.35,176.07,674.48,177.94,672.18,177.94z"/>
+    <path fill="#FFFFFF" d="M894.45,171.71L817.87,36.12c-0.74-1.31-2.13-2.12-3.63-2.12h-38.77c-1.58,0-3.02,0.89-3.73,2.31L704,171.9c-1.39,2.77,0.63,6.04,3.73,6.04h31.33c1.58,0,3.02-0.89,3.73-2.31l50.23-100.54c1.24-2.49,4.76-2.58,6.13-0.16l56.98,100.88c0.74,1.31,2.13,2.12,3.63,2.12h31.07C894.02,177.94,896.03,174.49,894.45,171.71z"/>
+  </g>
+  <!-- Plan label -->
+  <text x="540" y="430" text-anchor="middle" font-family="Arial,sans-serif" font-size="48" fill="#8A8FA8" letter-spacing="8">PLAN LANDING</text>
+  <!-- Big price -->
+  <text x="540" y="680" text-anchor="middle" font-family="Arial,sans-serif" font-size="240" fill="#BFFF00" font-weight="800">S/390</text>
+  <text x="540" y="760" text-anchor="middle" font-family="Arial,sans-serif" font-size="44" fill="#BFFF00" fill-opacity="0.6">pago único · sin mensualidades</text>
+  <!-- Divider -->
+  <line x1="200" y1="840" x2="880" y2="840" stroke="#2A2F3E" stroke-width="2"/>
+  <!-- Headline -->
+  <text x="540" y="960" text-anchor="middle" font-family="Arial,sans-serif" font-size="88" fill="#FFFFFF" font-weight="800">Tu web profesional</text>
+  <text x="540" y="1060" text-anchor="middle" font-family="Arial,sans-serif" font-size="88" fill="#FFFFFF" font-weight="800">lista en 48 horas</text>
+  <!-- Features -->
+  <circle cx="260" cy="1160" r="18" fill="#BFFF00"/>
+  <text x="296" y="1170" font-family="Arial,sans-serif" font-size="48" fill="#FFFFFF">Diseño personalizado</text>
+  <circle cx="260" cy="1248" r="18" fill="#BFFF00"/>
+  <text x="296" y="1258" font-family="Arial,sans-serif" font-size="48" fill="#FFFFFF">Dominio .pe incluido</text>
+  <circle cx="260" cy="1336" r="18" fill="#BFFF00"/>
+  <text x="296" y="1346" font-family="Arial,sans-serif" font-size="48" fill="#FFFFFF">Soporte post-entrega</text>
+  <!-- CTA -->
+  <rect x="190" y="1460" width="700" height="120" rx="60" fill="#BFFF00"/>
+  <text x="540" y="1533" text-anchor="middle" font-family="Arial,sans-serif" font-size="56" fill="#14181F" font-weight="800">Empieza en plia.pe →</text>
+  <!-- Bottom URL -->
+  <text x="540" y="1860" text-anchor="middle" font-family="Arial,sans-serif" font-size="40" fill="#2A2F3E">plia.pe</text>
+</svg>
