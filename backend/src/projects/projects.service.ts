@@ -80,6 +80,97 @@ export class ProjectsService {
     }
   }
 
+  /**
+   * Migra los assets generados (imagenes IA) del directorio compartido de
+   * uploads/ al hosting del cliente y reescribe el HTML para que apunte a
+   * rutas relativas. Luego limpia los archivos en uploads/ para que el
+   * almacenamiento del servidor de PLIA no crezca con assets que ya viven
+   * en el hosting del cliente. Una vez publicado, los archivos son
+   * 100% del cliente.
+   *
+   * Estructura resultante en public_html del cliente:
+   *   public_html/
+   *     index.html (y otros .html)
+   *     assets/
+   *       images/
+   *         hero-0.webp, tcg-1.webp, etc.
+   */
+  private migrateAssetsToHosting(projectId: number, targetDir: string) {
+    const previewRoot = join(process.cwd(), 'uploads', 'previews', String(projectId));
+    const generatedRoot = join(process.cwd(), 'uploads', 'generated', String(projectId));
+
+    let imagesCopied = 0;
+
+    // 1) Copiar todas las imagenes a public_html/assets/images/
+    if (fs.existsSync(generatedRoot)) {
+      const targetAssetsDir = join(targetDir, 'assets', 'images');
+      try {
+        fs.mkdirSync(targetAssetsDir, { recursive: true });
+        for (const file of fs.readdirSync(generatedRoot)) {
+          const src = join(generatedRoot, file);
+          if (fs.lstatSync(src).isFile()) {
+            fs.copyFileSync(src, join(targetAssetsDir, file));
+            imagesCopied += 1;
+          }
+        }
+        this.logger.log(
+          `Migrados ${imagesCopied} assets a ${targetAssetsDir} para project=${projectId}`,
+        );
+      } catch (err: any) {
+        this.logger.error(
+          `Error copiando assets a ${targetAssetsDir} para project=${projectId}: ${err?.message || err}`,
+        );
+      }
+    }
+
+    // 2) Reescribir referencias absolutas a relativas en cada .html del hosting.
+    //    Captura cualquier URL del tipo:
+    //      https://api.plia.pe/uploads/generated/<projectId>/<archivo>
+    //      http://...:3002/uploads/generated/<projectId>/<archivo>
+    //    y la convierte a "assets/images/<archivo>".
+    if (fs.existsSync(targetDir)) {
+      const absoluteUrlRegex = new RegExp(
+        `https?://[^/'"\\s)]+/uploads/generated/${projectId}/([^'"\\s)]+)`,
+        'g',
+      );
+      let htmlRewrites = 0;
+      for (const file of fs.readdirSync(targetDir)) {
+        if (!/\.html?$/i.test(file)) continue;
+        const filePath = join(targetDir, file);
+        try {
+          const before = fs.readFileSync(filePath, 'utf-8');
+          const after = before.replace(absoluteUrlRegex, 'assets/images/$1');
+          if (after !== before) {
+            fs.writeFileSync(filePath, after, 'utf-8');
+            htmlRewrites += 1;
+          }
+        } catch (err: any) {
+          this.logger.warn(
+            `No se pudo reescribir ${filePath}: ${err?.message || err}`,
+          );
+        }
+      }
+      this.logger.log(
+        `Reescritas ${htmlRewrites} paginas HTML con paths relativos para project=${projectId}`,
+      );
+    }
+
+    // 3) Limpiar uploads/generated y uploads/previews del servidor PLIA.
+    //    El cliente ya tiene todo en su hosting; no duplicamos almacenamiento.
+    for (const dir of [generatedRoot, previewRoot]) {
+      try {
+        if (fs.existsSync(dir)) {
+          fs.rmSync(dir, { recursive: true, force: true });
+          this.logger.log(`Limpieza: eliminado ${dir}`);
+        }
+      } catch (err: any) {
+        this.logger.warn(
+          `No se pudo eliminar ${dir} tras publicacion: ${err?.message || err}`,
+        );
+      }
+    }
+  }
+
   private buildPreviewUrl(projectId: number) {
     // Los /uploads los sirve el backend, no el frontend (APP_URL).
     const appUrl = (process.env.PREVIEW_PROXY_BASE || 'http://localhost:3002').replace(/\/$/, '');
@@ -675,11 +766,12 @@ var timer = setInterval(tick,1000);
         this.logger.log(`Publicando archivos fisicos para proyecto ${id} en ${targetDir}...`);
         this.copyFolderRecursive(previewRoot, targetDir);
         this.logger.log(`Publicacion fisica exitosa para proyecto ${id}.`);
+        // Tras copiar el HTML, migrar imagenes generadas + reescribir paths
+        // + limpiar uploads/ para que el cliente tenga TODO en su hosting
+        // y nuestro servidor no duplique el almacenamiento.
+        this.migrateAssetsToHosting(id, targetDir);
       } catch (err: any) {
         this.logger.error(`Error al copiar archivos a public_html para proyecto ${id}: ${err.message}`);
-        // No lanzamos error para permitir que el estado se actualice, 
-        // o podriamos lanzarlo si queremos que reintente en el proximo cron.
-        // Por ahora lanzamos para que el cron lo capture y lo registre.
         throw new Error(`Fallo la copia fisica de archivos: ${err.message}`);
       }
     } else {

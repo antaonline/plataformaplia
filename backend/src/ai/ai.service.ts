@@ -837,35 +837,30 @@ export class AiService {
   ): Promise<AiGenerationResult | null> {
     const projectId = project.id as number;
     const onboarding = JSON.parse((project.onboardingData as string) || '{}');
-    const previewRoot = join(
-      process.cwd(),
-      'uploads',
-      'previews',
-      String(projectId),
-    );
-
-    // Si por alguna razon no hay archivos previos, devolver null para que
-    // el caller caiga al flujo normal de regeneracion.
-    if (!fs.existsSync(previewRoot)) {
+    // Para sitios YA publicados, la fuente de verdad es el public_html
+    // del hosting del cliente (uploads/previews ya fue limpiado tras la
+    // publicacion inicial). Editamos directamente alli.
+    const targetDir = onboarding?.aiGeneration?.target as string | undefined;
+    if (!targetDir || !fs.existsSync(targetDir)) {
       this.logger.warn(
-        `editExistingSiteWithClaude: no existe ${previewRoot} para project=${projectId}`,
+        `editExistingSiteWithClaude: target dir invalido o inexistente (${targetDir}) project=${projectId}`,
       );
       return null;
     }
 
     const htmlFiles = fs
-      .readdirSync(previewRoot)
+      .readdirSync(targetDir)
       .filter((f) => /\.html$/i.test(f));
     if (htmlFiles.length === 0) {
       this.logger.warn(
-        `editExistingSiteWithClaude: no hay .html en ${previewRoot} para project=${projectId}`,
+        `editExistingSiteWithClaude: no hay .html en ${targetDir} para project=${projectId}`,
       );
       return null;
     }
 
     const existingPages: Record<string, string> = {};
     for (const f of htmlFiles) {
-      existingPages[f] = fs.readFileSync(join(previewRoot, f), 'utf-8');
+      existingPages[f] = fs.readFileSync(join(targetDir, f), 'utf-8');
     }
 
     const planType = project.type as PlanType;
@@ -900,21 +895,21 @@ export class AiService {
       return null;
     }
 
-    // Escribir los cambios de vuelta (solo paginas que realmente cambiaron).
+    // Escribir los cambios DIRECTAMENTE al hosting del cliente
+    // (target = /home/<dominio>/public_html). Solo paginas que cambiaron.
     let changedCount = 0;
     for (const [file, newHtml] of Object.entries(editedPages)) {
       if (newHtml && newHtml !== existingPages[file]) {
-        fs.writeFileSync(join(previewRoot, file), newHtml, 'utf-8');
+        fs.writeFileSync(join(targetDir, file), newHtml, 'utf-8');
         changedCount += 1;
       }
     }
 
     this.logger.log(
-      `AI(claude-edit) done project=${projectId} changedFiles=${changedCount}/${htmlFiles.length}`,
+      `AI(claude-edit) done project=${projectId} target=${targetDir} changedFiles=${changedCount}/${htmlFiles.length}`,
     );
 
     // Actualizar metadata en DB (status sigue DELIVERED).
-    const target = onboarding?.aiGeneration?.target as string | undefined;
     await this.prisma.project.update({
       where: { id: projectId },
       data: {
@@ -935,22 +930,6 @@ export class AiService {
         }),
       },
     });
-
-    // Republicar al public_html.
-    if (target) {
-      try {
-        if (fs.existsSync(previewRoot)) {
-          this.copyDirRecursive(previewRoot, target);
-          this.logger.log(
-            `Edicion publicada en ${target} para project=${projectId}`,
-          );
-        }
-      } catch (repubErr: any) {
-        this.logger.error(
-          `Fallo republicacion tras edicion project=${projectId}: ${repubErr?.message || repubErr}`,
-        );
-      }
-    }
 
     // Mandar correo "revision-deployed" al cliente.
     try {
