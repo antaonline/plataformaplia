@@ -20,6 +20,7 @@ export { projectPublishedTemplate } from './project-published';
 export { projectFailedTemplate } from './project-failed';
 export { hostingPanelReadyTemplate } from './hosting-panel-ready';
 export { revisionAcknowledgedTemplate } from './revision-acknowledged';
+export { revisionDeployedTemplate } from './revision-deployed';
 export { renewalNoticeTemplate } from './renewal-notice';
 export { contactMessageTemplate } from './contact-message';
 
@@ -33,5 +34,6 @@ export type { ProjectPublishedPayload } from './project-published';
 export type { ProjectFailedPayload } from './project-failed';
 export type { HostingPanelReadyPayload } from './hosting-panel-ready';
 export type { RevisionAcknowledgedPayload } from './revision-acknowledged';
+export type { RevisionDeployedPayload } from './revision-deployed';
 export type { RenewalNoticePayload } from './renewal-notice';
 export type { ContactMessagePayload } from './contact-message';

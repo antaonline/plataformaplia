@@ -11,6 +11,7 @@ import {
   projectFailedTemplate,
   hostingPanelReadyTemplate,
   revisionAcknowledgedTemplate,
+  revisionDeployedTemplate,
   renewalNoticeTemplate,
   contactMessageTemplate,
   TwoFactorPayload,
@@ -22,6 +23,7 @@ import {
   ProjectFailedPayload,
   HostingPanelReadyPayload,
   RevisionAcknowledgedPayload,
+  RevisionDeployedPayload,
   RenewalNoticePayload,
   ContactMessagePayload,
 } from './templates';
@@ -207,6 +209,17 @@ export class MailService {
       to: email,
       context: 'revision acknowledged',
       rendered: revisionAcknowledgedTemplate(payload),
+    });
+  }
+
+  async sendRevisionDeployed(
+    email: string,
+    payload: RevisionDeployedPayload,
+  ) {
+    return this.send({
+      to: email,
+      context: 'revision deployed',
+      rendered: revisionDeployedTemplate(payload),
     });
   }
 

@@ -6,6 +6,7 @@ import { AiGenerationResult, AiMode, SiteSpec } from './ai.types';
 import { PrismaService } from '../prisma/prisma.service';
 import { NextExportService } from '../integrations/next-export/next-export.service';
 import { WebsiteGenService, WebMode } from './website-gen.service';
+import { MailService } from '../mail/mail.service';
 import { ProjectStatus } from '@prisma/client';
 
 type PlanType = 'LANDING' | 'WEB';
@@ -18,7 +19,26 @@ export class AiService {
     private prisma: PrismaService,
     private nextExportService: NextExportService,
     private websiteGen: WebsiteGenService,
+    private mailService: MailService,
   ) {}
+
+  /**
+   * Copia recursiva de un directorio a otro. Usada para republicar
+   * archivos del preview al public_html cuando se aplica una revision
+   * sobre un sitio ya DELIVERED.
+   */
+  private copyDirRecursive(src: string, dest: string) {
+    fs.mkdirSync(dest, { recursive: true });
+    for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
+      const s = join(src, entry.name);
+      const d = join(dest, entry.name);
+      if (entry.isDirectory()) {
+        this.copyDirRecursive(s, d);
+      } else {
+        fs.copyFileSync(s, d);
+      }
+    }
+  }
 
   private get env() {
     return {
@@ -625,7 +645,7 @@ export class AiService {
 
     // Motor Claude estatico (detras de feature flag; legacy intacto).
     if ((process.env.WEBDEV_ENGINE || 'legacy').toLowerCase() === 'claude') {
-      return this.generateStaticWithClaude(project);
+      return this.generateStaticWithClaude(project, revisionNote);
     }
 
     try {
@@ -802,13 +822,24 @@ export class AiService {
    */
   private async generateStaticWithClaude(
     project: any,
+    revisionNote?: string,
   ): Promise<AiGenerationResult | null> {
     const projectId = project.id as number;
     const onboarding = JSON.parse((project.onboardingData as string) || '{}');
+    // Estado original: si era DELIVERED y nos llega revisionNote, esto es
+    // una revision sobre un sitio publicado. Tenemos que preservar el
+    // status DELIVERED al final y re-publicar archivos al public_html.
+    const wasDelivered = project.status === ProjectStatus.DELIVERED;
+    const isRevision = !!(revisionNote && revisionNote.trim().length > 0);
     try {
       const planType = project.type as PlanType;
       const mode: WebMode = planType === 'LANDING' ? 'LANDING' : 'WEB';
-      const brief = this.buildUserPrompt(onboarding, planType);
+      const baseBrief = this.buildUserPrompt(onboarding, planType);
+      // Inyectar la instruccion de revision con maxima prioridad al brief
+      // para que Claude lo respete sin perder el contexto del sitio.
+      const brief = isRevision
+        ? `${baseBrief}\n\n=== AJUSTE SOLICITADO POR EL CLIENTE (PRIORITARIO) ===\n${revisionNote!.trim()}\n\nAplica este cambio especifico SIN romper el resto del sitio. Mantén la misma paleta, tipografía y estructura general, solo modifica lo que el cliente está pidiendo.`
+        : baseBrief;
       const clientImages: string[] = Array.isArray(onboarding.images)
         ? onboarding.images.filter((x: any) => typeof x === 'string')
         : [];
@@ -894,10 +925,20 @@ export class AiService {
       );
       const previewExists = fs.existsSync(previewPath);
 
+      // Si esta corrida es una REVISION sobre un sitio ya DELIVERED, hay
+      // que (a) preservar el status DELIVERED en lugar de regresarlo a
+      // IN_PROGRESS, y (b) republicar inmediatamente los archivos nuevos
+      // a /home/<dominio>/public_html — porque el cron normal solo procesa
+      // IN_PROGRESS con deadline vencido, y esto no aplica aqui.
+      const willRepublish = isRevision && wasDelivered;
+      const finalStatus = willRepublish
+        ? ProjectStatus.DELIVERED
+        : ProjectStatus.IN_PROGRESS;
+
       await this.prisma.project.update({
         where: { id: projectId },
         data: {
-          status: ProjectStatus.IN_PROGRESS,
+          status: finalStatus,
           onboardingData: JSON.stringify({
             ...onboarding,
             aiGeneration: {
@@ -913,10 +954,61 @@ export class AiService {
               model: 'claude-static',
               domain: domain || null,
               checks: { previewPath, previewExists },
+              ...(willRepublish
+                ? { revisionDeployedAt: new Date().toISOString() }
+                : {}),
             },
           }),
         },
       });
+
+      // Auto-publicacion al public_html cuando es una revision aplicada.
+      if (willRepublish && deployment.target) {
+        try {
+          const previewRoot = join(
+            process.cwd(),
+            'uploads',
+            'previews',
+            String(projectId),
+          );
+          if (fs.existsSync(previewRoot)) {
+            this.copyDirRecursive(previewRoot, deployment.target);
+            this.logger.log(
+              `Revision aplicada y republicada en ${deployment.target} para project=${projectId}`,
+            );
+            // Avisar al cliente con el correo "revision-deployed".
+            try {
+              const customerEmail = project?.user?.email;
+              if (customerEmail) {
+                const appBase = (process.env.APP_URL ?? 'http://localhost:3001').replace(/\/$/, '');
+                const resolvedPublicUrl =
+                  onboarding.publicUrl ||
+                  (onboarding.publicDomain
+                    ? `https://${onboarding.publicDomain}`
+                    : appBase);
+                await this.mailService.sendRevisionDeployed(customerEmail, {
+                  projectName: project.name,
+                  businessName: onboarding.businessName,
+                  publicUrl: resolvedPublicUrl,
+                  dashboardUrl: `${appBase}/dashboard`,
+                });
+              }
+            } catch (mailErr: any) {
+              this.logger.warn(
+                `No se pudo enviar revision-deployed project=${projectId}: ${mailErr?.message || mailErr}`,
+              );
+            }
+          } else {
+            this.logger.warn(
+              `Revision: previewRoot no existe (${previewRoot}), no se republicó.`,
+            );
+          }
+        } catch (repubErr: any) {
+          this.logger.error(
+            `Fallo republicacion tras revision project=${projectId}: ${repubErr?.message || repubErr}`,
+          );
+        }
+      }
 
       return {
         spec: {} as any,
