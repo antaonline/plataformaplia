@@ -149,4 +149,36 @@ export class HostingController {
   ) {
     return this.hostingService.confirmUpgrade(req.user.id, payload, slug);
   }
+
+  // ─── Mailboxes ────────────────────────────────────────────────────────
+
+  @UseGuards(JwtAuthGuard)
+  @Get('mailboxes')
+  async listMailboxes(@Req() req: any) {
+    return this.hostingService.listMailboxes(req.user.id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('mailboxes')
+  async createMailbox(
+    @Req() req: any,
+    @Body() body: { siteId: number; localPart: string; password: string },
+  ) {
+    if (!body?.siteId || !body?.localPart || !body?.password) {
+      throw new BadRequestException(
+        'Faltan campos requeridos: siteId, localPart, password.',
+      );
+    }
+    return this.hostingService.createMailbox(req.user.id, {
+      siteId: Number(body.siteId),
+      localPart: String(body.localPart),
+      password: String(body.password),
+    });
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Delete('mailboxes/:id')
+  async deleteMailbox(@Req() req: any, @Param('id', ParseIntPipe) id: number) {
+    return this.hostingService.deleteMailbox(req.user.id, id);
+  }
 }

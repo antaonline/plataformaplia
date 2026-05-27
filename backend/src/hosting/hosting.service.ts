@@ -1305,4 +1305,157 @@ export class HostingService {
       );
     }
   }
+
+  // ─── Mailboxes ────────────────────────────────────────────────────────
+
+  /**
+   * Sincroniza los mailboxes que existen en CyberPanel para los dominios
+   * del usuario y los importa a HostedMailbox si faltan. Idempotente.
+   */
+  private async syncMailboxesForAccount(
+    account: Awaited<ReturnType<HostingService['getAccountOrThrow']>>,
+  ) {
+    try {
+      const domains = account.sites.map((s) => s.domain);
+      if (!domains.length) return 0;
+
+      const remote = await this.cyberpanelService.listMailboxesForDomains(domains);
+      if (!remote.length) return 0;
+
+      const domainToSiteId = new Map(account.sites.map((s) => [s.domain, s.id]));
+      const known = new Set(
+        account.sites.flatMap((s) => s.mailboxes.map((m) => m.email.toLowerCase())),
+      );
+
+      let imported = 0;
+      for (const mb of remote) {
+        const email = mb.email.toLowerCase();
+        if (known.has(email)) continue;
+        const siteId = domainToSiteId.get(mb.domain);
+        if (!siteId) continue;
+        try {
+          await this.prisma.hostedMailbox.create({
+            data: {
+              hostedSiteId: siteId,
+              email,
+              status: 'ACTIVE',
+            },
+          });
+          imported += 1;
+        } catch (err: any) {
+          // unique constraint si ya existe — ignore
+          if (!/unique/i.test(err?.message || '')) {
+            this.logger.warn(`No se pudo importar mailbox ${email}: ${err?.message || err}`);
+          }
+        }
+      }
+      if (imported > 0) {
+        this.logger.log(`Importados ${imported} mailbox(es) desde CyberPanel`);
+      }
+      return imported;
+    } catch (error: any) {
+      this.logger.warn(`syncMailboxesForAccount fallo: ${error?.message || error}`);
+      return 0;
+    }
+  }
+
+  async listMailboxes(userId: number) {
+    await this.assertHostingSchemaReady();
+    let account = await this.getAccountOrThrow(userId);
+
+    // Sincronizamos cada vez (es barato, query MySQL local) para incluir
+    // mailboxes creados directamente en CyberPanel.
+    if (account.sites.length) {
+      const imported = await this.syncMailboxesForAccount(account);
+      if (imported > 0) {
+        account = await this.getAccountOrThrow(userId);
+      }
+    }
+
+    return {
+      webmailUrl: this.cyberpanelService.getWebmailUrl(),
+      maxMailboxes: account.maxSites * account.mailboxesPerSite,
+      sites: account.sites.map((site) => ({
+        id: site.id,
+        domain: site.domain,
+        name: site.name,
+        mailboxesPerSite: account.mailboxesPerSite,
+        mailboxes: site.mailboxes.map((m) => ({
+          id: m.id,
+          email: m.email,
+          status: m.status,
+          createdAt: m.createdAt,
+        })),
+      })),
+    };
+  }
+
+  async createMailbox(
+    userId: number,
+    dto: { siteId: number; localPart: string; password: string },
+  ) {
+    await this.assertHostingSchemaReady();
+    const account = await this.getAccountOrThrow(userId);
+    this.assertWritableAccount(account as any);
+
+    const site = account.sites.find((s) => s.id === dto.siteId);
+    if (!site) {
+      throw new NotFoundException('Sitio no encontrado.');
+    }
+
+    // Limite por sitio
+    if (site.mailboxes.length >= account.mailboxesPerSite) {
+      throw new BadRequestException(
+        `Ya alcanzaste el limite de ${account.mailboxesPerSite} cuentas de correo para ${site.domain}.`,
+      );
+    }
+
+    const localPart = (dto.localPart || '').trim().toLowerCase();
+    const email = `${localPart}@${site.domain}`;
+
+    // Evitar duplicado
+    const existing = await this.prisma.hostedMailbox.findUnique({ where: { email } });
+    if (existing) {
+      throw new BadRequestException(`La direccion ${email} ya existe.`);
+    }
+
+    await this.cyberpanelService.createMailbox({
+      domain: site.domain,
+      localPart,
+      password: dto.password,
+    });
+
+    const mailbox = await this.prisma.hostedMailbox.create({
+      data: {
+        hostedSiteId: site.id,
+        email,
+        status: 'ACTIVE',
+      },
+    });
+
+    return {
+      id: mailbox.id,
+      email,
+      domain: site.domain,
+      siteId: site.id,
+      webmailUrl: this.cyberpanelService.getWebmailUrl(site.domain),
+    };
+  }
+
+  async deleteMailbox(userId: number, mailboxId: number) {
+    await this.assertHostingSchemaReady();
+    const mailbox = await this.prisma.hostedMailbox.findUnique({
+      where: { id: mailboxId },
+      include: {
+        hostedSite: { include: { hostingAccount: true } },
+      },
+    });
+    if (!mailbox || mailbox.hostedSite.hostingAccount.userId !== userId) {
+      throw new NotFoundException('Cuenta de correo no encontrada.');
+    }
+
+    await this.cyberpanelService.deleteMailbox(mailbox.email);
+    await this.prisma.hostedMailbox.delete({ where: { id: mailbox.id } });
+    return { ok: true };
+  }
 }

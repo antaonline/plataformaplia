@@ -1007,4 +1007,156 @@ export class CyberpanelService {
 
     return this.request(this.changePackagePath, body);
   }
+
+  buildStrongMailboxPassword(length = 14) {
+    return this.buildStrongPassword(length);
+  }
+
+  /**
+   * URL del webmail que abre el cliente con sus credenciales recien creadas.
+   * Por defecto apunta al SnappyMail bundleado dentro de CyberPanel.
+   */
+  getWebmailUrl(_domain?: string) {
+    const explicit = process.env.CYBERPANEL_WEBMAIL_URL;
+    if (explicit) return explicit;
+    const base = this.panelUrl.replace(/\/?$/, '/');
+    return `${base}snappymail/`;
+  }
+
+  /**
+   * Lista los mailboxes (cuentas de correo) que pertenecen a los dominios
+   * pasados. Consulta la BD MySQL local de CyberPanel ya que CyberPanel no
+   * tiene endpoint API estable para listarlos.
+   */
+  async listMailboxesForDomains(
+    domains: string[],
+  ): Promise<Array<{ email: string; domain: string }>> {
+    if (!domains.length) return [];
+    // Hardening: solo dominios que parezcan validos.
+    const safe = domains.filter((d) => /^[a-zA-Z0-9.-]+$/.test(d));
+    if (!safe.length) return [];
+
+    const password = this.resolveCyberpanelDbPassword();
+    if (!password) {
+      this.logger.warn('listMailboxesForDomains: no se pudo obtener password MySQL');
+      return [];
+    }
+
+    const dbUser = process.env.CYBERPANEL_DB_USER || 'root';
+    const dbName = process.env.CYBERPANEL_DB_NAME || 'cyberpanel';
+
+    // CyberPanel ha cambiado de nombres de tabla entre versiones. Intentamos
+    // las dos mas comunes en orden.
+    const candidates: Array<{ table: string; emailCol: string }> = [
+      { table: 'e_users', emailCol: 'email' },
+      { table: 'mailServer_eusers', emailCol: 'email' },
+      { table: 'mailserver_eusers', emailCol: 'email' },
+    ];
+
+    const domainsList = safe.map((d) => `'${d}'`).join(',');
+    const emailLikeClauses = safe
+      .map((d) => `${candidates[0].emailCol} LIKE '%@${d}'`)
+      .join(' OR ');
+
+    for (const cand of candidates) {
+      const sql =
+        `SELECT ${cand.emailCol} FROM ${cand.table} WHERE ` +
+        safe.map((d) => `${cand.emailCol} LIKE '%@${d}'`).join(' OR ');
+      try {
+        const output = execFileSync(
+          'mysql',
+          [`-u${dbUser}`, '-N', '-B', dbName, '-e', sql],
+          {
+            env: { ...process.env, MYSQL_PWD: password },
+            timeout: 10000,
+            encoding: 'utf8',
+            stdio: ['ignore', 'pipe', 'pipe'],
+          },
+        );
+        const rows = output
+          .split('\n')
+          .map((l) => l.trim())
+          .filter(Boolean)
+          .map((email) => {
+            const at = email.lastIndexOf('@');
+            return {
+              email,
+              domain: at > 0 ? email.slice(at + 1) : '',
+            };
+          })
+          .filter((r) => r.email.includes('@'));
+        this.logger.log(
+          `listMailboxesForDomains via ${cand.table}: ${rows.length} mailboxes`,
+        );
+        return rows;
+      } catch (error: any) {
+        const stderr = (error?.stderr?.toString?.() || '').slice(0, 200);
+        this.logger.log(
+          `listMailboxesForDomains tabla ${cand.table} fallo (probamos siguiente): ${stderr || error?.message}`,
+        );
+        // probamos con la siguiente
+      }
+    }
+
+    this.logger.warn(
+      'listMailboxesForDomains: ninguna tabla candidata respondio. Verifica el schema de tu CyberPanel.',
+    );
+    void domainsList;
+    void emailLikeClauses;
+    return [];
+  }
+
+  async createMailbox(params: { domain: string; localPart: string; password: string }) {
+    const localPart = (params.localPart || '').trim().toLowerCase();
+    if (!/^[a-z0-9._-]+$/.test(localPart)) {
+      throw new BadRequestException(
+        'El nombre del correo solo puede usar letras minusculas, numeros, puntos, guiones o guion bajo.',
+      );
+    }
+    if (!params.password || params.password.length < 8) {
+      throw new BadRequestException(
+        'La contrasena debe tener al menos 8 caracteres.',
+      );
+    }
+    if (!/^[a-zA-Z0-9.-]+$/.test(params.domain)) {
+      throw new BadRequestException('Dominio invalido.');
+    }
+
+    const body: Record<string, any> = {
+      domain: params.domain,
+      username: localPart,
+      password: params.password,
+    };
+
+    if (process.env.CYBERPANEL_ADMIN_USER && process.env.CYBERPANEL_ADMIN_PASS) {
+      body.adminUser = process.env.CYBERPANEL_ADMIN_USER;
+      body.adminPass = process.env.CYBERPANEL_ADMIN_PASS;
+    }
+
+    // CyberPanel CloudAPI: /api/submitEmailCreation
+    const path = process.env.CYBERPANEL_API_CREATE_EMAIL_PATH || '/api/submitEmailCreation';
+    await this.request(path, body, 30000);
+    return { email: `${localPart}@${params.domain}` };
+  }
+
+  async deleteMailbox(email: string) {
+    if (!/^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+$/.test(email)) {
+      throw new BadRequestException('Email invalido.');
+    }
+    const body: Record<string, any> = { email };
+    if (process.env.CYBERPANEL_ADMIN_USER && process.env.CYBERPANEL_ADMIN_PASS) {
+      body.adminUser = process.env.CYBERPANEL_ADMIN_USER;
+      body.adminPass = process.env.CYBERPANEL_ADMIN_PASS;
+    }
+    const path = process.env.CYBERPANEL_API_DELETE_EMAIL_PATH || '/api/submitEmailDeletion';
+    try {
+      await this.request(path, body, 30000);
+      return true;
+    } catch (error: any) {
+      this.logger.error(
+        `deleteMailbox(${email}) fallo: ${error?.message || error}`,
+      );
+      return false;
+    }
+  }
 }

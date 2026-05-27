@@ -760,17 +760,43 @@ export default function HostingDashboardPage() {
                   </CardHeader>
                   <CardContent>
                     <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-                      {stats.slice(0, 3).map((stat) => (
-                        <div key={stat.key} className="rounded-2xl border border-border bg-muted/30 p-5 group hover:border-cta/50 transition-colors">
-                          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white border border-border text-foreground group-hover:bg-cta group-hover:text-cta-foreground group-hover:border-cta transition-colors">
-                            <stat.icon className="h-5 w-5" />
+                      {stats.slice(0, 3).map((stat) => {
+                        const isEmails = stat.key === 'emails';
+                        const cardInner = (
+                          <>
+                            <div className="flex items-start justify-between">
+                              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white border border-border text-foreground group-hover:bg-cta group-hover:text-cta-foreground group-hover:border-cta transition-colors">
+                                <stat.icon className="h-5 w-5" />
+                              </div>
+                              {isEmails && (
+                                <span className="text-[10px] font-bold uppercase tracking-wider text-cta-foreground/70 group-hover:text-foreground transition-colors flex items-center gap-1">
+                                  Gestionar <ChevronRight className="h-3 w-3" />
+                                </span>
+                              )}
+                            </div>
+                            <p className="mt-5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{stat.label}</p>
+                            <p className="mt-1 text-3xl font-bold text-foreground">{stat.value}</p>
+                            <Progress value={stat.progress} className="mt-5 h-1.5" />
+                            <p className="mt-3 text-[11px] text-muted-foreground">{stat.detail}</p>
+                          </>
+                        );
+                        if (isEmails) {
+                          return (
+                            <Link
+                              key={stat.key}
+                              href="/dashboard/hosting/emails"
+                              className="rounded-2xl border border-border bg-muted/30 p-5 group hover:border-cta hover:bg-cta/5 transition-colors cursor-pointer block"
+                            >
+                              {cardInner}
+                            </Link>
+                          );
+                        }
+                        return (
+                          <div key={stat.key} className="rounded-2xl border border-border bg-muted/30 p-5 group hover:border-cta/50 transition-colors">
+                            {cardInner}
                           </div>
-                          <p className="mt-5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{stat.label}</p>
-                          <p className="mt-1 text-3xl font-bold text-foreground">{stat.value}</p>
-                          <Progress value={stat.progress} className="mt-5 h-1.5" />
-                          <p className="mt-3 text-[11px] text-muted-foreground">{stat.detail}</p>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </CardContent>
                 </Card>
