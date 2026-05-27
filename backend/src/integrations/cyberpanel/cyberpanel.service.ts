@@ -465,7 +465,16 @@ export class CyberpanelService {
     for (const project of projects) {
       const parsed = JSON.parse((project.onboardingData as string) || '{}');
       const account = parsed?.cyberpanel?.account;
-      if (account?.username && account?.panelUrl) {
+      // Ignorar cuentas tipo "shared-admin" (legacy del shortcut
+      // CYBERPANEL_OWNER=admin). Solo nos interesan cuentas reales
+      // pl<id><slug> que representan al usuario PLIA en CyberPanel.
+      // Asi un usuario con sitios viejos bajo admin + un sitio nuevo
+      // bajo su cuenta real, retorna la real cuando crea un proyecto mas.
+      if (
+        account?.username &&
+        account?.panelUrl &&
+        account.ownerType !== 'shared-admin'
+      ) {
         return account as StoredCyberpanelAccount;
       }
     }
