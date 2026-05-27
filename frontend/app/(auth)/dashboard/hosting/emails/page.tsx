@@ -52,6 +52,15 @@ type MailboxData = {
   }>;
 };
 
+const normalizeUrl = (raw: string | undefined | null) => {
+  if (!raw) return '#';
+  let v = raw.trim();
+  // repara typos comunes "https=//..." o "https=..."
+  v = v.replace(/^(https?)=\/\//, '$1://').replace(/^(https?)=/, '$1://');
+  if (!/^https?:\/\//i.test(v)) v = `https://${v}`;
+  return v;
+};
+
 const buildStrongPassword = (length = 14) => {
   const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
   const lower = 'abcdefghijkmnopqrstuvwxyz';
@@ -304,7 +313,7 @@ export default function HostingMailboxesPage() {
                             asChild
                           >
                             <a
-                              href={data.webmailUrl}
+                              href={normalizeUrl(data.webmailUrl)}
                               target="_blank"
                               rel="noopener noreferrer"
                             >
@@ -500,7 +509,7 @@ export default function HostingMailboxesPage() {
                 </Button>
                 <Button variant="outline" className="w-full rounded-xl" asChild>
                   <a
-                    href={successCreds.webmailUrl}
+                    href={normalizeUrl(successCreds.webmailUrl)}
                     target="_blank"
                     rel="noopener noreferrer"
                   >

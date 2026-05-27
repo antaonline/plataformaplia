@@ -83,7 +83,12 @@ export class CyberpanelService {
   }
 
   private get panelUrl() {
-    const raw = process.env.CYBERPANEL_PANEL_URL || this.baseUrl;
+    let raw = (process.env.CYBERPANEL_PANEL_URL || this.baseUrl || '').trim();
+    // Repara typos comunes en ecosystem.config.js:
+    //   "https=//host" o "https=host" -> "https://host"
+    raw = raw.replace(/^(https?)=\/\//, '$1://').replace(/^(https?)=/, '$1://');
+    // Si quedo sin protocolo, asumimos https
+    if (!/^https?:\/\//.test(raw)) raw = `https://${raw}`;
     return raw.replace(/\/?$/, '/');
   }
 
