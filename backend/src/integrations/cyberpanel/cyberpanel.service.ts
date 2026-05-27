@@ -1,9 +1,9 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import axios from 'axios';
+import { execFileSync } from 'child_process';
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'crypto';
 import * as fs from 'fs';
 import https from 'https';
-import { join } from 'path';
 import { PrismaService } from '../../prisma/prisma.service';
 
 export type StoredCyberpanelAccount = {
@@ -896,100 +896,102 @@ export class CyberpanelService {
     return true;
   }
 
-  private resolveLinuxUidForUser(username: string): number | null {
+  private resolveCyberpanelDbPassword(): string | null {
+    // Prioridad 1: env var explicita
+    const fromEnv = process.env.CYBERPANEL_DB_PASSWORD;
+    if (fromEnv) return fromEnv;
+
+    // Prioridad 2: archivo estandar de CyberPanel (root user puede leerlo)
     try {
-      const passwd = fs.readFileSync('/etc/passwd', 'utf8');
-      const line = passwd.split('\n').find((l) => {
-        const parts = l.split(':');
-        return parts[0] === username;
-      });
-      if (!line) return null;
-      const uid = Number(line.split(':')[2]);
-      return Number.isFinite(uid) ? uid : null;
-    } catch (error: any) {
-      this.logger.warn(
-        `resolveLinuxUidForUser(${username}) no pudo leer /etc/passwd: ${error?.message || error}`,
-      );
-      return null;
+      if (fs.existsSync('/etc/cyberpanel/mysqlPassword')) {
+        const value = fs.readFileSync('/etc/cyberpanel/mysqlPassword', 'utf8').trim();
+        if (value) return value;
+      }
+    } catch {
+      // sin permisos para leer
     }
+
+    // Prioridad 3: en este servidor coinciden con ADMIN_PASS
+    return process.env.CYBERPANEL_ADMIN_PASS || null;
   }
 
   /**
    * Lista los sitios pertenecientes a un usuario CyberPanel.
    *
-   * En este servidor CyberPanel no expone un endpoint HTTP confiable para
-   * listar sitios por owner (fetchWebsites devuelve HTML "domain does not
-   * exists" y /api/fetchWebsites es 404). Pero cada cuenta CyberPanel tiene
-   * un usuario Linux con el mismo nombre, y cada sitio se almacena en
-   * /home/<dominio>/public_html con el owner Linux correcto. Aprovechamos
-   * eso: traducimos username -> UID via /etc/passwd y escaneamos /home/*
-   * filtrando por UID. Es 100% local, deterministico y no depende de la
-   * API de CyberPanel.
+   * CyberPanel guarda sus sitios en su propia base MySQL local
+   * (`cyberpanel` DB, tabla `websiteFunctions_websites`) con FK a
+   * `loginSystem_administrator(userName)`. Lo consultamos directamente
+   * con el CLI `mysql` (ya instalado en el server) usando MYSQL_PWD para
+   * no exponer la password en argv. Es 100% confiable y no depende de
+   * las APIs HTTP de CyberPanel (que en esta version devuelven HTML).
    */
   async listSitesForOwner(
     ownerUsername: string,
   ): Promise<Array<{ domain: string; admin: string; state?: string; adminEmail?: string }>> {
     if (!ownerUsername) return [];
 
-    const sitesRoot = process.env.CYBERPANEL_SITES_ROOT || '/home';
-    const publicDir = process.env.CYBERPANEL_PUBLIC_DIR || 'public_html';
-
-    if (!fs.existsSync(sitesRoot)) {
+    // Hardening contra SQL injection: el username CyberPanel siempre es
+    // alfanumerico (pl<id><slug>), pero validamos por si acaso.
+    if (!/^[A-Za-z0-9_-]+$/.test(ownerUsername)) {
       this.logger.warn(
-        `listSitesForOwner(${ownerUsername}): sitesRoot ${sitesRoot} no existe`,
+        `listSitesForOwner: ownerUsername invalido "${ownerUsername}"`,
       );
       return [];
     }
 
-    const ownerUid = this.resolveLinuxUidForUser(ownerUsername);
-    if (ownerUid === null) {
+    const password = this.resolveCyberpanelDbPassword();
+    if (!password) {
       this.logger.warn(
-        `listSitesForOwner(${ownerUsername}): no se encontro UID en /etc/passwd. Posiblemente el usuario CyberPanel no fue creado como usuario Linux.`,
+        `listSitesForOwner(${ownerUsername}): no se pudo obtener password MySQL de CyberPanel (define CYBERPANEL_DB_PASSWORD o CYBERPANEL_ADMIN_PASS, o asegura /etc/cyberpanel/mysqlPassword)`,
       );
       return [];
     }
 
-    this.logger.log(
-      `listSitesForOwner(${ownerUsername}): escaneando ${sitesRoot} con uid=${ownerUid}`,
-    );
-
-    const matched: Array<{ domain: string; admin: string; state?: string; adminEmail?: string }> = [];
+    const dbUser = process.env.CYBERPANEL_DB_USER || 'root';
+    const dbName = process.env.CYBERPANEL_DB_NAME || 'cyberpanel';
+    const sql =
+      `SELECT w.domain, w.adminEmail, w.state ` +
+      `FROM websiteFunctions_websites w ` +
+      `JOIN loginSystem_administrator a ON w.admin_id = a.id ` +
+      `WHERE a.userName = '${ownerUsername}'`;
 
     try {
-      const entries = fs.readdirSync(sitesRoot, { withFileTypes: true });
-      for (const entry of entries) {
-        if (!entry.isDirectory()) continue;
-        // Filtrar entradas que no parecen dominios (sin punto).
-        if (!entry.name.includes('.')) continue;
+      const output = execFileSync(
+        'mysql',
+        [`-u${dbUser}`, '-N', '-B', dbName, '-e', sql],
+        {
+          env: { ...process.env, MYSQL_PWD: password },
+          timeout: 10000,
+          encoding: 'utf8',
+          stdio: ['ignore', 'pipe', 'pipe'],
+        },
+      );
 
-        const dirPath = join(sitesRoot, entry.name);
-        const pubPath = join(dirPath, publicDir);
-        if (!fs.existsSync(pubPath)) continue;
+      const lines = output.split('\n').map((l) => l.trim()).filter(Boolean);
+      const matched = lines
+        .map((line) => {
+          const cols = line.split('\t');
+          return {
+            domain: (cols[0] || '').trim(),
+            admin: ownerUsername,
+            adminEmail: (cols[1] || '').trim() || undefined,
+            state: (cols[2] || '').trim() || undefined,
+          };
+        })
+        .filter((r) => r.domain);
 
-        try {
-          const stat = fs.statSync(dirPath);
-          if (stat.uid === ownerUid) {
-            matched.push({
-              domain: entry.name,
-              admin: ownerUsername,
-              state: 'Active',
-            });
-          }
-        } catch {
-          // skip entries we cant stat
-        }
-      }
+      this.logger.log(
+        `listSitesForOwner(${ownerUsername}): ${matched.length} sitios via cyberpanel DB [${matched.map((m) => m.domain).join(',')}]`,
+      );
+      return matched;
     } catch (error: any) {
+      const stderr =
+        (error?.stderr && error.stderr.toString && error.stderr.toString().slice(0, 400)) || '';
       this.logger.warn(
-        `listSitesForOwner(${ownerUsername}): error leyendo ${sitesRoot}: ${error?.message || error}`,
+        `listSitesForOwner(${ownerUsername}): query MySQL fallo: ${error?.message || error} stderr=${stderr}`,
       );
       return [];
     }
-
-    this.logger.log(
-      `listSitesForOwner(${ownerUsername}): encontrados ${matched.length} sitios [${matched.map((m) => m.domain).join(',')}]`,
-    );
-    return matched;
   }
 
   async changePackage(username: string, packageName: string) {
