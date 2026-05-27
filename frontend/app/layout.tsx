@@ -12,6 +12,14 @@ export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: "Plia",
   description: "Plataforma de soluciones web sin complicaciones",
+  icons: {
+    icon: [
+      { url: "/iconblack-plia-cuadrado.svg", type: "image/svg+xml" },
+      { url: "/favicon.ico", sizes: "any" },
+    ],
+    shortcut: "/iconblack-plia-cuadrado.svg",
+    apple: "/iconblack-plia-cuadrado.svg",
+  },
   openGraph: {
     title: "Plia Platform",
     description: "Tu Plataforma de soluciones web sin complicaciones",
