@@ -1,6 +1,3 @@
-import type { Metadata } from "next";
-/*import { sansationfont } from "next/font/google"*/
-
 import Script from "next/script";
 import "app/globals.css";
 import Header from "@/components/layout/Header";
@@ -12,26 +9,8 @@ import Footer from "@/components/layout/Footer";
   subsets: ["latin"],
 });*/
 
-export const metadata: Metadata = {
-  metadataBase: process.env.NEXT_PUBLIC_SITE_URL 
-  ? new URL(process.env.NEXT_PUBLIC_SITE_URL) 
-  : null,
-  title: "Plia",
-  description: "Plataforma de soluciones web sin complicaciones",
-  openGraph: {
-    title: "Plia Platform",
-    description: "Tu Plataforma de soluciones web sin complicaciones",
-    images: [
-      {
-        url: "/pliaportadaurl.png",
-      },
-    ],
-  },
-  twitter: {
-    card: "summary_large_image",
-    images: ["/pliaportadaurl.png"],
-  },
-};
+// Metadata global vive en app/layout.tsx; cada pagina publica define
+// la suya en su propio layout.tsx (per-route) para SEO especifico.
 
 export default function PublicLayout({
   children,

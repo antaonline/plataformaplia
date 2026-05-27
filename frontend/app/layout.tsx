@@ -10,8 +10,38 @@ const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://plia.pe';
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
-  title: "Plia",
-  description: "Plataforma de soluciones web sin complicaciones",
+  title: {
+    default: "PLIA • Tu Web Fácil — Páginas web y hosting en Perú",
+    template: "%s • PLIA",
+  },
+  description:
+    "PLIA crea tu página web profesional con IA en minutos. Hosting, dominio, diseño y soporte 24/7 — todo incluido. Pensado para emprendedores peruanos.",
+  keywords: [
+    "PLIA",
+    "Tu Web Fácil",
+    "página web Peru",
+    "hosting Peru",
+    "crear página web",
+    "diseño web Lima",
+    "página web con IA",
+    "página web sin programar",
+    "alojamiento web Peru",
+    "dominio .pe",
+    "web emprendedor",
+    "tienda online Peru",
+    "ecommerce Lima",
+    "página web pyme",
+    "hosting WordPress Peru",
+    "página web profesional",
+  ],
+  authors: [{ name: "PLIA", url: siteUrl }],
+  creator: "PLIA",
+  publisher: "PLIA",
+  applicationName: "PLIA",
+  category: "Technology",
+  alternates: {
+    canonical: "/",
+  },
   icons: {
     icon: [
       { url: "/iconblack-plia-cuadrado.svg", type: "image/svg+xml" },
@@ -21,16 +51,17 @@ export const metadata: Metadata = {
     apple: "/iconblack-plia-cuadrado.svg",
   },
   openGraph: {
-    title: "Plia Platform",
-    description: "Tu Plataforma de soluciones web sin complicaciones",
+    title: "PLIA • Tu Web Fácil — Páginas web y hosting en Perú",
+    description:
+      "Crea tu página web con IA en minutos. Hosting, dominio y soporte 24/7 — todo incluido. Pensado para emprendedores peruanos.",
     url: siteUrl,
-    siteName: "Plia",
+    siteName: "PLIA",
     images: [
       {
         url: "/pliaportadaurl.png",
         width: 1200,
         height: 630,
-        alt: "Plia Platform",
+        alt: "PLIA - Tu Web Fácil",
       },
     ],
     locale: "es_PE",
@@ -38,9 +69,25 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Plia Platform",
-    description: "Tu Plataforma de soluciones web sin complicaciones",
+    title: "PLIA • Tu Web Fácil — Páginas web y hosting en Perú",
+    description:
+      "Crea tu página web con IA en minutos. Hosting, dominio y soporte 24/7 — todo incluido.",
     images: ["/pliaportadaurl.png"],
+    creator: "@plia_pe",
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+      "max-video-preview": -1,
+    },
+  },
+  formatDetection: {
+    telephone: false,
   },
 };
 
@@ -49,14 +96,61 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const orgJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    name: "PLIA",
+    alternateName: "PLIA - Tu Web Fácil",
+    url: siteUrl,
+    logo: `${siteUrl}/iconblack-plia-cuadrado.svg`,
+    image: `${siteUrl}/pliaportadaurl.png`,
+    description:
+      "PLIA es la plataforma peruana que permite crear páginas web con inteligencia artificial. Incluye hosting, dominio, diseño y soporte 24/7.",
+    address: {
+      "@type": "PostalAddress",
+      addressLocality: "Lima",
+      addressCountry: "PE",
+    },
+    contactPoint: {
+      "@type": "ContactPoint",
+      contactType: "customer service",
+      email: "soporte@plia.pe",
+      availableLanguage: ["es"],
+      areaServed: "PE",
+    },
+    sameAs: [],
+  };
+  const websiteJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    name: "PLIA",
+    url: siteUrl,
+    inLanguage: "es-PE",
+    potentialAction: {
+      "@type": "SearchAction",
+      target: `${siteUrl}/?q={search_term_string}`,
+      "query-input": "required name=search_term_string",
+    },
+  };
+
   return (
-    <html lang="es">
+    <html lang="es-PE">
       <body
         className={`antialiased`}
       >
         <link
           href="https://fonts.googleapis.com/css2?family=Sansation:ital,wght@0,300;0,400;0,700;1,300;1,400;1,700&display=swap"
           rel="stylesheet"
+        />
+        <Script
+          id="ld-org"
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(orgJsonLd) }}
+        />
+        <Script
+          id="ld-website"
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteJsonLd) }}
         />
         <link
           rel="stylesheet"
