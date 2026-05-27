@@ -1,7 +1,9 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import axios from 'axios';
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'crypto';
+import * as fs from 'fs';
 import https from 'https';
+import { join } from 'path';
 import { PrismaService } from '../../prisma/prisma.service';
 
 export type StoredCyberpanelAccount = {
@@ -894,143 +896,100 @@ export class CyberpanelService {
     return true;
   }
 
+  private resolveLinuxUidForUser(username: string): number | null {
+    try {
+      const passwd = fs.readFileSync('/etc/passwd', 'utf8');
+      const line = passwd.split('\n').find((l) => {
+        const parts = l.split(':');
+        return parts[0] === username;
+      });
+      if (!line) return null;
+      const uid = Number(line.split(':')[2]);
+      return Number.isFinite(uid) ? uid : null;
+    } catch (error: any) {
+      this.logger.warn(
+        `resolveLinuxUidForUser(${username}) no pudo leer /etc/passwd: ${error?.message || error}`,
+      );
+      return null;
+    }
+  }
+
+  /**
+   * Lista los sitios pertenecientes a un usuario CyberPanel.
+   *
+   * En este servidor CyberPanel no expone un endpoint HTTP confiable para
+   * listar sitios por owner (fetchWebsites devuelve HTML "domain does not
+   * exists" y /api/fetchWebsites es 404). Pero cada cuenta CyberPanel tiene
+   * un usuario Linux con el mismo nombre, y cada sitio se almacena en
+   * /home/<dominio>/public_html con el owner Linux correcto. Aprovechamos
+   * eso: traducimos username -> UID via /etc/passwd y escaneamos /home/*
+   * filtrando por UID. Es 100% local, deterministico y no depende de la
+   * API de CyberPanel.
+   */
   async listSitesForOwner(
     ownerUsername: string,
   ): Promise<Array<{ domain: string; admin: string; state?: string; adminEmail?: string }>> {
     if (!ownerUsername) return [];
-    const authContext = await this.getAuthCookie();
-    if (!authContext) {
+
+    const sitesRoot = process.env.CYBERPANEL_SITES_ROOT || '/home';
+    const publicDir = process.env.CYBERPANEL_PUBLIC_DIR || 'public_html';
+
+    if (!fs.existsSync(sitesRoot)) {
       this.logger.warn(
-        `listSitesForOwner(${ownerUsername}): no se pudo obtener cookie de sesion CyberPanel`,
+        `listSitesForOwner(${ownerUsername}): sitesRoot ${sitesRoot} no existe`,
       );
       return [];
     }
 
-    // Probamos varios endpoints porque cambian entre versiones de CyberPanel:
-    //  - /websites/fetchWebsites (interno, requiere session)
-    //  - /websites/fetchWebsitesPagination (interno paginado)
-    //  - /api/fetchWebsites (CloudAPI con basic auth)
-    const candidates: Array<{ url: string; body: Record<string, any>; useCookie: boolean }> = [
-      {
-        url: `${this.baseUrl}/websites/fetchWebsites`,
-        body: { page: 1, recordsToShow: 1000 },
-        useCookie: true,
-      },
-      {
-        url: `${this.baseUrl}/websites/fetchWebsitesPagination`,
-        body: { page: 1, recordsToShow: 1000 },
-        useCookie: true,
-      },
-      {
-        url: `${this.baseUrl}/api/fetchWebsites`,
-        body: (() => {
-          const b: Record<string, any> = { page: 1, recordsToShow: 1000 };
-          if (process.env.CYBERPANEL_ADMIN_USER && process.env.CYBERPANEL_ADMIN_PASS) {
-            b.adminUser = process.env.CYBERPANEL_ADMIN_USER;
-            b.adminPass = process.env.CYBERPANEL_ADMIN_PASS;
-          }
-          return b;
-        })(),
-        useCookie: false,
-      },
-    ];
-
-    for (const candidate of candidates) {
-      try {
-        const reqHeaders: Record<string, string> = { ...this.headers };
-        if (candidate.useCookie) {
-          reqHeaders['Cookie'] = authContext.cookie;
-          if (authContext.csrfToken) {
-            reqHeaders['X-CSRFToken'] = authContext.csrfToken;
-            reqHeaders['Referer'] = `${this.baseUrl}/`;
-          }
-        }
-
-        const res = await axios.post(candidate.url, candidate.body, {
-          headers: reqHeaders,
-          httpsAgent: this.httpsAgent,
-          timeout: 30000,
-        });
-
-        let payload: any = res.data;
-        const preview =
-          typeof payload === 'string'
-            ? payload.slice(0, 300)
-            : JSON.stringify(payload || {}).slice(0, 300);
-        this.logger.log(
-          `listSitesForOwner(${ownerUsername}) <- ${candidate.url} status=${res.status} bodyPreview=${preview}`,
-        );
-
-        if (typeof payload === 'string') {
-          try {
-            payload = JSON.parse(payload);
-          } catch {
-            continue;
-          }
-        }
-
-        let rows: any =
-          payload?.data ??
-          payload?.websites ??
-          payload?.websiteList ??
-          payload?.records ??
-          [];
-        if (typeof rows === 'string') {
-          try {
-            rows = JSON.parse(rows);
-          } catch {
-            rows = [];
-          }
-        }
-        if (!Array.isArray(rows) || rows.length === 0) {
-          this.logger.log(
-            `listSitesForOwner(${ownerUsername}): ${candidate.url} sin sitios, probando siguiente endpoint`,
-          );
-          continue;
-        }
-
-        const sampleKeys = Object.keys(rows[0] || {}).join(',');
-        const allOwners = Array.from(
-          new Set(
-            rows
-              .map((r: any) => r?.admin || r?.adminUser || r?.owner || r?.websiteOwner)
-              .filter(Boolean),
-          ),
-        );
-        this.logger.log(
-          `listSitesForOwner(${ownerUsername}): ${rows.length} total sitios, owners=[${allOwners.join('|')}], sampleKeys=${sampleKeys}`,
-        );
-
-        const matched = rows
-          .filter((row: any) => row && typeof row === 'object')
-          .map((row: any) => ({
-            domain: (row.domain || row.domainName || '').toString().trim(),
-            admin: (row.admin || row.adminUser || row.owner || row.websiteOwner || '')
-              .toString()
-              .trim(),
-            adminEmail: row.adminEmail || row.email || undefined,
-            state: row.state || row.status || undefined,
-          }))
-          .filter((row) => row.domain && row.admin === ownerUsername);
-
-        this.logger.log(
-          `listSitesForOwner(${ownerUsername}): matched=${matched.length} dominios=[${matched.map((m) => m.domain).join(',')}]`,
-        );
-
-        return matched;
-      } catch (error: any) {
-        const status = error?.response?.status;
-        this.logger.warn(
-          `listSitesForOwner(${ownerUsername}) ${candidate.url} fallo status=${status}: ${error?.message || error}`,
-        );
-        // siguiente candidato
-      }
+    const ownerUid = this.resolveLinuxUidForUser(ownerUsername);
+    if (ownerUid === null) {
+      this.logger.warn(
+        `listSitesForOwner(${ownerUsername}): no se encontro UID en /etc/passwd. Posiblemente el usuario CyberPanel no fue creado como usuario Linux.`,
+      );
+      return [];
     }
 
-    this.logger.warn(
-      `listSitesForOwner(${ownerUsername}): ningun endpoint devolvio sitios`,
+    this.logger.log(
+      `listSitesForOwner(${ownerUsername}): escaneando ${sitesRoot} con uid=${ownerUid}`,
     );
-    return [];
+
+    const matched: Array<{ domain: string; admin: string; state?: string; adminEmail?: string }> = [];
+
+    try {
+      const entries = fs.readdirSync(sitesRoot, { withFileTypes: true });
+      for (const entry of entries) {
+        if (!entry.isDirectory()) continue;
+        // Filtrar entradas que no parecen dominios (sin punto).
+        if (!entry.name.includes('.')) continue;
+
+        const dirPath = join(sitesRoot, entry.name);
+        const pubPath = join(dirPath, publicDir);
+        if (!fs.existsSync(pubPath)) continue;
+
+        try {
+          const stat = fs.statSync(dirPath);
+          if (stat.uid === ownerUid) {
+            matched.push({
+              domain: entry.name,
+              admin: ownerUsername,
+              state: 'Active',
+            });
+          }
+        } catch {
+          // skip entries we cant stat
+        }
+      }
+    } catch (error: any) {
+      this.logger.warn(
+        `listSitesForOwner(${ownerUsername}): error leyendo ${sitesRoot}: ${error?.message || error}`,
+      );
+      return [];
+    }
+
+    this.logger.log(
+      `listSitesForOwner(${ownerUsername}): encontrados ${matched.length} sitios [${matched.map((m) => m.domain).join(',')}]`,
+    );
+    return matched;
   }
 
   async changePackage(username: string, packageName: string) {
