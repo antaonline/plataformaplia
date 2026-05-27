@@ -149,6 +149,12 @@ export default function HostingDashboardPage() {
   const [backupsSite, setBackupsSite] = useState<{ id: number; domain: string } | null>(null);
   const [backupsShowPass, setBackupsShowPass] = useState(false);
   const [backupsCopied, setBackupsCopied] = useState<string | null>(null);
+  const [emailActivateSite, setEmailActivateSite] = useState<{ id: number; domain: string } | null>(null);
+  const [emailActivateStep, setEmailActivateStep] = useState<'intro' | 'activating' | 'records' | 'verifying' | 'failed' | 'success'>('intro');
+  const [emailDns, setEmailDns] = useState<any>(null);
+  const [emailVerify, setEmailVerify] = useState<any>(null);
+  const [emailCopied, setEmailCopied] = useState<string | null>(null);
+  const [emailStatuses, setEmailStatuses] = useState<Record<number, { isCustomDomain: boolean; activated: boolean }>>({});
   const [subdomainSite, setSubdomainSite] = useState<{ id: number; domain: string } | null>(null);
   const [subdomainList, setSubdomainList] = useState<Array<{ domain: string; state: string }>>([]);
   const [subdomainInput, setSubdomainInput] = useState('');
@@ -180,6 +186,10 @@ export default function HostingDashboardPage() {
     domain: '',
   });
   const [busy, setBusy] = useState(false);
+  const [customStep, setCustomStep] = useState<'form' | 'records' | 'verifying' | 'failed'>('form');
+  const [dnsCheck, setDnsCheck] = useState<any>(null);
+  const [dnsGuideOpen, setDnsGuideOpen] = useState<string | null>(null);
+  const [copiedDns, setCopiedDns] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [renewOpen, setRenewOpen] = useState(false);
@@ -228,7 +238,10 @@ export default function HostingDashboardPage() {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error((await res.text()) || 'No se pudo cargar el dashboard de hosting.');
-      setData(await res.json());
+      const dashboardData = await res.json();
+      setData(dashboardData);
+      // estado de emails por sitio (custom domain vs subdomain, activado vs no)
+      fetchEmailStatuses(dashboardData.sites || []);
 
       const renRes = await fetch(`${apiBase}/subscriptions/renewals`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -435,8 +448,123 @@ export default function HostingDashboardPage() {
     return slug === 'premium' || slug === 'agencia';
   }, [data?.plan.slug]);
 
+  const SERVER_IP = process.env.NEXT_PUBLIC_SERVER_IP || '142.171.227.112';
+
+  const resetCreateForm = () => {
+    setCreateForm({ name: '', mode: 'subdomain', subdomain: '', domain: '' });
+    setCustomStep('form');
+    setDnsCheck(null);
+    setDnsGuideOpen(null);
+  };
+
+  const closeCreate = () => {
+    setCreateOpen(false);
+    resetCreateForm();
+  };
+
+  const verifyCustomDomain = async () => {
+    const token = localStorage.getItem('access_token');
+    if (!token) return;
+    setBusy(true);
+    setError(null);
+    setCustomStep('verifying');
+    try {
+      const res = await fetch(`${apiBase}/hosting/domain/check`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ domain: createForm.domain.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.message || 'No se pudo verificar.');
+      setDnsCheck(data);
+      if (data.ready) {
+        // crear sitio inmediatamente
+        const createRes = await fetch(`${apiBase}/hosting/sites/custom-domain`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            name: createForm.name || createForm.domain,
+            domain: createForm.domain.trim(),
+          }),
+        });
+        const created = await createRes.json();
+        if (!createRes.ok) {
+          throw new Error(created?.message || 'No se pudo crear el sitio.');
+        }
+        await load();
+        closeCreate();
+        return;
+      }
+      setCustomStep('failed');
+    } catch (err: any) {
+      setError(err?.message ?? 'No se pudo verificar el dominio.');
+      setCustomStep('failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const createSite = async () => {
-    // ... existing ...
+    setError(null);
+    if (!createForm.name.trim()) {
+      setError('Indica un nombre para tu sitio.');
+      return;
+    }
+    if (createForm.mode === 'subdomain') {
+      const sub = createForm.subdomain.trim();
+      if (!sub || sub.length < 3) {
+        setError('El subdominio debe tener al menos 3 caracteres.');
+        return;
+      }
+      const token = localStorage.getItem('access_token');
+      if (!token) return;
+      setBusy(true);
+      try {
+        const res = await fetch(`${apiBase}/hosting/sites`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            name: createForm.name.trim(),
+            mode: 'subdomain',
+            subdomain: sub,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data?.message || 'No se pudo crear el sitio.');
+        await load();
+        closeCreate();
+      } catch (err: any) {
+        setError(err?.message ?? 'No se pudo crear el sitio.');
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+
+    // Custom domain: avanzamos al paso de records.
+    const domain = createForm.domain.trim().toLowerCase();
+    if (!/^[a-z0-9.-]+\.[a-z]{2,}$/.test(domain)) {
+      setError('Indica un dominio valido (ej. mimarca.com).');
+      return;
+    }
+    setCreateForm((f) => ({ ...f, domain }));
+    setCustomStep('records');
+  };
+
+  const copyDnsValue = (value: string, key: string) => {
+    navigator.clipboard.writeText(value).then(() => {
+      setCopiedDns(key);
+      setTimeout(() => setCopiedDns(null), 1500);
+    });
   };
 
   const installWordPress = async () => {
@@ -472,6 +600,86 @@ export default function HostingDashboardPage() {
       setError(err?.message ?? 'No se pudo instalar WordPress.');
       setWpBusy(false);
       setWpProgress(0);
+    }
+  };
+
+  const fetchEmailStatuses = async (sites: Array<{ id: number; domain: string }>) => {
+    const token = localStorage.getItem('access_token');
+    if (!token || !sites.length) return;
+    try {
+      const results = await Promise.all(
+        sites.map((s) =>
+          fetch(`${apiBase}/hosting/sites/${s.id}/email-status`, {
+            headers: { Authorization: `Bearer ${token}` },
+          })
+            .then((r) => (r.ok ? r.json() : null))
+            .catch(() => null),
+        ),
+      );
+      const map: Record<number, any> = {};
+      sites.forEach((s, i) => {
+        if (results[i]) {
+          map[s.id] = {
+            isCustomDomain: results[i].isCustomDomain,
+            activated: results[i].activated,
+          };
+        }
+      });
+      setEmailStatuses(map);
+    } catch {
+      // silent
+    }
+  };
+
+  const openEmailActivate = (site: { id: number; domain: string }) => {
+    setEmailActivateSite(site);
+    setEmailActivateStep('intro');
+    setEmailDns(null);
+    setEmailVerify(null);
+  };
+
+  const runEmailActivate = async () => {
+    if (!emailActivateSite) return;
+    const token = localStorage.getItem('access_token');
+    if (!token) return;
+    setEmailActivateStep('activating');
+    try {
+      const res = await fetch(`${apiBase}/hosting/sites/${emailActivateSite.id}/email/activate`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.message || 'No se pudo activar.');
+      setEmailDns(data);
+      setEmailActivateStep('records');
+    } catch (err: any) {
+      setError(err?.message ?? 'No se pudo activar.');
+      setEmailActivateStep('intro');
+    }
+  };
+
+  const runEmailVerify = async () => {
+    if (!emailActivateSite) return;
+    const token = localStorage.getItem('access_token');
+    if (!token) return;
+    setEmailActivateStep('verifying');
+    try {
+      const res = await fetch(`${apiBase}/hosting/sites/${emailActivateSite.id}/email/verify`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.message || 'No se pudo verificar.');
+      setEmailVerify(data);
+      if (data.allPassed) {
+        setEmailActivateStep('success');
+        await fetchEmailStatuses(data?.sites ?? []);
+      } else {
+        setEmailActivateStep('failed');
+      }
+    } catch (err: any) {
+      setError(err?.message ?? 'No se pudo verificar.');
+      setEmailActivateStep('failed');
     }
   };
 
@@ -778,66 +986,218 @@ export default function HostingDashboardPage() {
                       </>
                     ) : (
                       <>
-                        <DialogHeader>
-                          <DialogTitle>Crear nuevo sitio</DialogTitle>
-                          <DialogDescription>Usa un subdominio de PLIA o tu propio dominio.</DialogDescription>
-                        </DialogHeader>
-                        <div className="grid gap-4 py-2">
-                          <Input
-                            value={createForm.name}
-                            onChange={(e) => setCreateForm((prev) => ({ ...prev, name: e.target.value }))}
-                            placeholder="Nombre del sitio"
-                          />
-                          <div className="grid gap-3 md:grid-cols-2">
-                            <button
-                              type="button"
-                              className={cn(
-                                'rounded-2xl border px-4 py-4 text-left transition',
-                                createForm.mode === 'subdomain' ? 'border-cta bg-cta/10' : 'border-border bg-white hover:bg-muted'
-                              )}
-                              onClick={() => setCreateForm((prev) => ({ ...prev, mode: 'subdomain' }))}
-                            >
-                              <p className="font-semibold text-sm">Subdominio PLIA</p>
-                              <p className="mt-1 text-xs text-muted-foreground">Ideal para salir rapido</p>
-                            </button>
-                            <button
-                              type="button"
-                              className={cn(
-                                'rounded-2xl border px-4 py-4 text-left transition',
-                                createForm.mode === 'custom' ? 'border-cta bg-cta/10' : 'border-border bg-white hover:bg-muted'
-                              )}
-                              onClick={() => setCreateForm((prev) => ({ ...prev, mode: 'custom' }))}
-                            >
-                              <p className="font-semibold text-sm">Dominio propio</p>
-                              <p className="mt-1 text-xs text-muted-foreground">Para marcas ya publicadas</p>
-                            </button>
-                          </div>
-                          {createForm.mode === 'subdomain' ? (
-                            <div className="flex items-center rounded-xl border border-input bg-background px-3">
-                              <input
-                                value={createForm.subdomain}
-                                onChange={(e) => setCreateForm((prev) => ({ ...prev, subdomain: e.target.value }))}
-                                className="h-11 flex-1 bg-transparent outline-none text-sm"
-                                placeholder="mi-negocio"
+                        {customStep === 'form' && (
+                          <>
+                            <DialogHeader>
+                              <DialogTitle>Crear nuevo sitio</DialogTitle>
+                              <DialogDescription>Usa un subdominio de PLIA o tu propio dominio.</DialogDescription>
+                            </DialogHeader>
+                            <div className="grid gap-4 py-2">
+                              <Input
+                                value={createForm.name}
+                                onChange={(e) => setCreateForm((prev) => ({ ...prev, name: e.target.value }))}
+                                placeholder="Nombre del sitio"
                               />
-                              <span className="text-sm text-muted-foreground">.{domainBase}</span>
+                              <div className="grid gap-3 md:grid-cols-2">
+                                <button
+                                  type="button"
+                                  className={cn(
+                                    'rounded-2xl border px-4 py-4 text-left transition',
+                                    createForm.mode === 'subdomain' ? 'border-cta bg-cta/10' : 'border-border bg-white hover:bg-muted'
+                                  )}
+                                  onClick={() => setCreateForm((prev) => ({ ...prev, mode: 'subdomain' }))}
+                                >
+                                  <p className="font-semibold text-sm">Subdominio PLIA</p>
+                                  <p className="mt-1 text-xs text-muted-foreground">Ideal para salir rapido</p>
+                                </button>
+                                <button
+                                  type="button"
+                                  className={cn(
+                                    'rounded-2xl border px-4 py-4 text-left transition',
+                                    createForm.mode === 'custom' ? 'border-cta bg-cta/10' : 'border-border bg-white hover:bg-muted'
+                                  )}
+                                  onClick={() => setCreateForm((prev) => ({ ...prev, mode: 'custom' }))}
+                                >
+                                  <p className="font-semibold text-sm">Dominio propio</p>
+                                  <p className="mt-1 text-xs text-muted-foreground">Para marcas ya publicadas</p>
+                                </button>
+                              </div>
+                              {createForm.mode === 'subdomain' ? (
+                                <div className="flex items-center rounded-xl border border-input bg-background px-3">
+                                  <input
+                                    value={createForm.subdomain}
+                                    onChange={(e) => setCreateForm((prev) => ({ ...prev, subdomain: e.target.value }))}
+                                    className="h-11 flex-1 bg-transparent outline-none text-sm"
+                                    placeholder="mi-negocio"
+                                  />
+                                  <span className="text-sm text-muted-foreground">.{domainBase}</span>
+                                </div>
+                              ) : (
+                                <Input
+                                  value={createForm.domain}
+                                  onChange={(e) => setCreateForm((prev) => ({ ...prev, domain: e.target.value }))}
+                                  placeholder="midominio.com"
+                                />
+                              )}
                             </div>
-                          ) : (
-                            <Input
-                              value={createForm.domain}
-                              onChange={(e) => setCreateForm((prev) => ({ ...prev, domain: e.target.value }))}
-                              placeholder="midominio.com"
-                            />
-                          )}
-                        </div>
-                        <DialogFooter>
-                          <Button variant="outline" onClick={() => setCreateOpen(false)}>
-                            Cancelar
-                          </Button>
-                          <Button variant="cta" onClick={createSite} disabled={busy}>
-                            {busy ? 'Creando...' : 'Crear sitio'}
-                          </Button>
-                        </DialogFooter>
+                            <DialogFooter>
+                              <Button variant="outline" onClick={closeCreate}>
+                                Cancelar
+                              </Button>
+                              <Button variant="cta" onClick={createSite} disabled={busy}>
+                                {busy
+                                  ? 'Creando...'
+                                  : createForm.mode === 'custom'
+                                    ? 'Siguiente'
+                                    : 'Crear sitio'}
+                              </Button>
+                            </DialogFooter>
+                          </>
+                        )}
+
+                        {customStep === 'records' && (
+                          <>
+                            <DialogHeader>
+                              <DialogTitle>Apunta {createForm.domain} a PLIA</DialogTitle>
+                              <DialogDescription>
+                                Ve a la zona DNS de tu proveedor y agrega estos 2 registros.
+                              </DialogDescription>
+                            </DialogHeader>
+                            <div className="space-y-4 py-2">
+                              <div className="rounded-2xl border border-border bg-muted/20 overflow-hidden">
+                                <div className="grid grid-cols-[60px_80px_1fr_60px] text-[10px] uppercase font-bold tracking-wider text-muted-foreground bg-muted/40 px-3 py-2 border-b border-border">
+                                  <div>Tipo</div>
+                                  <div>Nombre</div>
+                                  <div>Valor</div>
+                                  <div className="text-right">Accion</div>
+                                </div>
+                                {[
+                                  { type: 'A', name: '@', value: SERVER_IP, key: 'apex' },
+                                  { type: 'A', name: 'www', value: SERVER_IP, key: 'www' },
+                                ].map((rec) => (
+                                  <div key={rec.key} className="grid grid-cols-[60px_80px_1fr_60px] items-center px-3 py-3 border-b border-border last:border-b-0 text-sm">
+                                    <div className="font-mono font-bold text-foreground">{rec.type}</div>
+                                    <div className="font-mono text-foreground">{rec.name}</div>
+                                    <div className="font-mono text-foreground text-xs truncate">{rec.value}</div>
+                                    <div className="text-right">
+                                      <button
+                                        type="button"
+                                        className="text-xs text-cta-foreground hover:underline"
+                                        onClick={() => copyDnsValue(rec.value, rec.key)}
+                                      >
+                                        {copiedDns === rec.key ? (
+                                          <Check className="h-3.5 w-3.5 inline" />
+                                        ) : (
+                                          <Copy className="h-3.5 w-3.5 inline" />
+                                        )}
+                                      </button>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+
+                              <div className="rounded-xl border border-border overflow-hidden divide-y divide-border">
+                                {[
+                                  { id: 'yachay', label: '¿Compraste tu dominio en Yachay?', steps: ['Ingresa a clientes.yachay.cloud y entra a tu dominio.', 'Ve a la pestana "DNS" o "Zona DNS".', 'Crea los 2 registros A de arriba apuntando a la IP.'] },
+                                  { id: 'godaddy', label: '¿En GoDaddy?', steps: ['Entra a tu cuenta y abre "Mis productos".', 'En tu dominio, haz clic en "DNS".', 'Anade los 2 registros A.'] },
+                                  { id: 'namecheap', label: '¿En Namecheap?', steps: ['Entra a "Domain List" y haz clic en "Manage".', 'Ve a "Advanced DNS" y agrega los 2 registros A.'] },
+                                  { id: 'cloudflare', label: '¿En Cloudflare?', steps: ['En el panel de tu dominio ve a "DNS > Records".', 'Agrega los 2 registros A.', 'IMPORTANTE: desactiva el proxy (nube naranja → gris) para que SSL se emita correctamente.'] },
+                                  { id: 'otro', label: '¿En otro proveedor?', steps: ['Busca "Zona DNS" o "DNS Management" en tu panel.', 'Crea registros tipo A para @ y www con la IP de PLIA.'] },
+                                ].map((guide) => (
+                                  <div key={guide.id}>
+                                    <button
+                                      type="button"
+                                      className="w-full px-4 py-3 text-left text-sm font-medium text-foreground hover:bg-muted/30 flex items-center justify-between"
+                                      onClick={() => setDnsGuideOpen(dnsGuideOpen === guide.id ? null : guide.id)}
+                                    >
+                                      {guide.label}
+                                      <ChevronRight className={cn('h-4 w-4 transition-transform', dnsGuideOpen === guide.id && 'rotate-90')} />
+                                    </button>
+                                    {dnsGuideOpen === guide.id && (
+                                      <div className="px-4 pb-3 text-[12px] text-muted-foreground">
+                                        <ol className="space-y-1 list-decimal list-inside">
+                                          {guide.steps.map((s, i) => <li key={i}>{s}</li>)}
+                                        </ol>
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+
+                              <p className="text-[11px] text-muted-foreground text-center">
+                                Los cambios DNS pueden tardar entre 5 minutos y 24 horas en propagarse.
+                              </p>
+                            </div>
+                            <DialogFooter>
+                              <Button variant="outline" onClick={() => setCustomStep('form')}>
+                                Atras
+                              </Button>
+                              <Button variant="cta" onClick={verifyCustomDomain} disabled={busy}>
+                                Ya lo configure, verificar
+                              </Button>
+                            </DialogFooter>
+                          </>
+                        )}
+
+                        {customStep === 'verifying' && (
+                          <>
+                            <DialogHeader>
+                              <DialogTitle>Verificando {createForm.domain}...</DialogTitle>
+                              <DialogDescription>
+                                Estamos comprobando que tu DNS apunte a nuestro servidor.
+                              </DialogDescription>
+                            </DialogHeader>
+                            <div className="py-10 flex items-center justify-center">
+                              <div className="h-12 w-12 rounded-full border-4 border-cta border-t-transparent animate-spin" />
+                            </div>
+                          </>
+                        )}
+
+                        {customStep === 'failed' && (
+                          <>
+                            <DialogHeader>
+                              <DialogTitle>Aun no propaga</DialogTitle>
+                              <DialogDescription>
+                                Tu dominio todavia no apunta a nuestro servidor.
+                              </DialogDescription>
+                            </DialogHeader>
+                            <div className="space-y-3 py-2">
+                              {dnsCheck && (
+                                <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-4 text-xs space-y-2">
+                                  <div className="flex items-center justify-between">
+                                    <span className="font-bold">IP esperada</span>
+                                    <span className="font-mono">{dnsCheck.expectedIp}</span>
+                                  </div>
+                                  <div className="flex items-center justify-between">
+                                    <span>@ ({createForm.domain})</span>
+                                    <span className="font-mono">
+                                      {dnsCheck.apex.records.length ? dnsCheck.apex.records.join(', ') : 'sin registro'}
+                                      {' '}{dnsCheck.apex.ok ? '✅' : '❌'}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center justify-between">
+                                    <span>www.{createForm.domain}</span>
+                                    <span className="font-mono">
+                                      {dnsCheck.www.records.length ? dnsCheck.www.records.join(', ') : 'sin registro'}
+                                      {' '}{dnsCheck.www.ok ? '✅' : '⚠️'}
+                                    </span>
+                                  </div>
+                                </div>
+                              )}
+                              <p className="text-xs text-muted-foreground">
+                                Los cambios DNS pueden tardar de 5 minutos a 24 horas. Espera un poco y reintenta.
+                              </p>
+                            </div>
+                            <DialogFooter>
+                              <Button variant="outline" onClick={() => setCustomStep('records')}>
+                                Volver a los registros
+                              </Button>
+                              <Button variant="cta" onClick={verifyCustomDomain} disabled={busy}>
+                                Reintentar
+                              </Button>
+                            </DialogFooter>
+                          </>
+                        )}
                       </>
                     )}
                   </DialogContent>
@@ -903,6 +1263,189 @@ export default function HostingDashboardPage() {
                   Entendido
                 </Button>
               </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog
+            open={!!emailActivateSite}
+            onOpenChange={(open) => {
+              if (!open) {
+                setEmailActivateSite(null);
+                setEmailActivateStep('intro');
+                setEmailDns(null);
+                setEmailVerify(null);
+              }
+            }}
+          >
+            <DialogContent className="rounded-[28px] max-w-2xl">
+              {emailActivateStep === 'intro' && emailActivateSite && (
+                <>
+                  <DialogHeader>
+                    <DialogTitle>Activar correos en {emailActivateSite.domain}</DialogTitle>
+                    <DialogDescription>
+                      En tres pasos podras enviar y recibir correos como contacto@{emailActivateSite.domain}.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-3 py-2">
+                    <div className="rounded-2xl border border-border bg-muted/30 p-4 text-sm">
+                      <ol className="space-y-2 list-decimal list-inside">
+                        <li>Configuramos el servidor para tu dominio (lo hacemos nosotros).</li>
+                        <li>Te damos los registros DNS que debes copiar en tu proveedor.</li>
+                        <li>Verificamos que todo este correcto y listo.</li>
+                      </ol>
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => setEmailActivateSite(null)}>
+                      Cancelar
+                    </Button>
+                    <Button variant="cta" onClick={runEmailActivate}>
+                      Empezar
+                    </Button>
+                  </DialogFooter>
+                </>
+              )}
+
+              {emailActivateStep === 'activating' && (
+                <>
+                  <DialogHeader>
+                    <DialogTitle>Configurando servidor...</DialogTitle>
+                    <DialogDescription>
+                      Generando claves DKIM para tu dominio.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="py-10 flex items-center justify-center">
+                    <div className="h-12 w-12 rounded-full border-4 border-cta border-t-transparent animate-spin" />
+                  </div>
+                </>
+              )}
+
+              {emailActivateStep === 'records' && emailDns && emailActivateSite && (
+                <>
+                  <DialogHeader>
+                    <DialogTitle>Agrega estos registros en tu DNS</DialogTitle>
+                    <DialogDescription>
+                      En el panel DNS de tu proveedor, copia y pega cada valor.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-3 py-2">
+                    <div className="rounded-2xl border border-border overflow-hidden">
+                      <div className="grid grid-cols-[55px_140px_1fr_50px] text-[10px] uppercase font-bold tracking-wider text-muted-foreground bg-muted/40 px-3 py-2 border-b border-border">
+                        <div>Tipo</div>
+                        <div>Nombre</div>
+                        <div>Valor</div>
+                        <div></div>
+                      </div>
+                      {emailDns.records.map((r: any, i: number) => (
+                        <div key={i} className="grid grid-cols-[55px_140px_1fr_50px] items-center px-3 py-3 border-b border-border last:border-b-0 text-sm">
+                          <div className="font-mono font-bold text-foreground">{r.type}</div>
+                          <div className="font-mono text-foreground text-xs">{r.name}</div>
+                          <div className="font-mono text-foreground text-[11px] break-all">
+                            {r.priority ? `${r.value} (prio ${r.priority})` : r.value}
+                          </div>
+                          <div className="text-right">
+                            <button
+                              type="button"
+                              className="text-xs text-cta-foreground hover:underline"
+                              onClick={() => {
+                                navigator.clipboard.writeText(r.value);
+                                setEmailCopied(`r-${i}`);
+                                setTimeout(() => setEmailCopied(null), 1500);
+                              }}
+                            >
+                              {emailCopied === `r-${i}` ? <Check className="h-3.5 w-3.5 inline" /> : <Copy className="h-3.5 w-3.5 inline" />}
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      Los cambios DNS pueden tardar entre 5 minutos y 24 horas en propagarse.
+                    </p>
+                  </div>
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => setEmailActivateStep('intro')}>
+                      Atras
+                    </Button>
+                    <Button variant="cta" onClick={runEmailVerify}>
+                      Ya lo configure, verificar
+                    </Button>
+                  </DialogFooter>
+                </>
+              )}
+
+              {emailActivateStep === 'verifying' && (
+                <>
+                  <DialogHeader>
+                    <DialogTitle>Verificando registros DNS...</DialogTitle>
+                  </DialogHeader>
+                  <div className="py-10 flex items-center justify-center">
+                    <div className="h-12 w-12 rounded-full border-4 border-cta border-t-transparent animate-spin" />
+                  </div>
+                </>
+              )}
+
+              {emailActivateStep === 'failed' && emailVerify && (
+                <>
+                  <DialogHeader>
+                    <DialogTitle>Aun faltan registros</DialogTitle>
+                    <DialogDescription>
+                      Algunos registros no se ven todavia. Reintenta en unos minutos.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="rounded-2xl border border-amber-200 bg-amber-50/60 p-4 text-sm space-y-1.5">
+                    {[
+                      { k: 'mx', label: 'MX (servidor de correo)' },
+                      { k: 'mailA', label: 'A mail (apunta a nuestra IP)' },
+                      { k: 'spf', label: 'SPF (autoriza envios)' },
+                      { k: 'dkim', label: 'DKIM (firma digital)' },
+                      { k: 'dmarc', label: 'DMARC (politica)' },
+                    ].map((c) => (
+                      <div key={c.k} className="flex items-center justify-between">
+                        <span>{c.label}</span>
+                        <span>{emailVerify.checks[c.k] ? '✅' : '❌'}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => setEmailActivateStep('records')}>
+                      Volver a los registros
+                    </Button>
+                    <Button variant="cta" onClick={runEmailVerify}>
+                      Reintentar
+                    </Button>
+                  </DialogFooter>
+                </>
+              )}
+
+              {emailActivateStep === 'success' && emailActivateSite && (
+                <>
+                  <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2">
+                      <span className="h-7 w-7 rounded-full bg-emerald-100 flex items-center justify-center">
+                        <Check className="h-4 w-4 text-emerald-700" />
+                      </span>
+                      Correos activos
+                    </DialogTitle>
+                    <DialogDescription>
+                      Tu dominio {emailActivateSite.domain} ya esta listo para enviar y recibir correos.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <DialogFooter>
+                    <Button
+                      variant="cta"
+                      className="w-full rounded-xl"
+                      onClick={() => {
+                        setEmailActivateSite(null);
+                        setEmailActivateStep('intro');
+                        window.location.href = '/dashboard/hosting/emails';
+                      }}
+                    >
+                      Crear mi primer correo
+                    </Button>
+                  </DialogFooter>
+                </>
+              )}
             </DialogContent>
           </Dialog>
 
@@ -1256,7 +1799,17 @@ export default function HostingDashboardPage() {
                                     type="button"
                                     title="Backups"
                                     className="flex h-9 w-9 items-center justify-center rounded-full border border-border text-muted-foreground hover:bg-muted transition-colors"
-                                    onClick={() => setBackupsSite({ id: site.id, domain: site.domain })}
+                                    onClick={() => {
+                                      const isAgencia = (data?.plan.slug || '')
+                                        .toLowerCase()
+                                        .replace(/^hosting-/, '')
+                                        .split('-')[0] === 'agencia';
+                                      if (isAgencia) {
+                                        window.location.href = '/dashboard/hosting/backups';
+                                      } else {
+                                        setBackupsSite({ id: site.id, domain: site.domain });
+                                      }
+                                    }}
                                   >
                                     <HardDriveDownload className="h-4 w-4" />
                                   </button>
@@ -1295,6 +1848,24 @@ export default function HostingDashboardPage() {
                                   </Button>
                                 </div>
                               )}
+                              {sslActive &&
+                                emailStatuses[site.id]?.isCustomDomain &&
+                                !emailStatuses[site.id]?.activated && (
+                                  <div className="mt-3 rounded-xl border border-cta/30 bg-cta/5 px-3 py-2 flex items-center justify-between">
+                                    <p className="text-[11px] text-foreground leading-tight">
+                                      <Mail className="inline h-3 w-3 mr-1" />
+                                      ¿Quieres correos @{site.domain}?
+                                    </p>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="h-7 rounded-lg text-[11px] border-cta/40 hover:bg-cta/10"
+                                      onClick={() => openEmailActivate({ id: site.id, domain: site.domain })}
+                                    >
+                                      Activar
+                                    </Button>
+                                  </div>
+                                )}
                             </div>
                             <div className="bg-muted/30 px-5 py-3 border-t border-border flex items-center justify-between">
                               <Button variant="link" className="h-auto p-0 text-cta text-xs font-bold" asChild>

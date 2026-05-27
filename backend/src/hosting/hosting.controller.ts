@@ -8,10 +8,12 @@ import {
   ParseIntPipe,
   Post,
   Req,
+  Res,
   UploadedFiles,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import * as fs from 'fs';
@@ -154,6 +156,105 @@ export class HostingController {
     @Body() payload: any,
   ) {
     return this.hostingService.confirmUpgrade(req.user.id, payload, slug);
+  }
+
+  // ─── Dominio propio: verificacion DNS ────────────────────────────────
+
+  @UseGuards(JwtAuthGuard)
+  @Post('domain/check')
+  async checkDomain(@Req() req: any, @Body() body: { domain: string }) {
+    if (!body?.domain) throw new BadRequestException('Falta el campo domain.');
+    return this.hostingService.checkDomainDns(req.user.id, String(body.domain));
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('sites/custom-domain')
+  async createCustomDomainSite(
+    @Req() req: any,
+    @Body() body: { name: string; domain: string },
+  ) {
+    if (!body?.name || !body?.domain) {
+      throw new BadRequestException('Faltan campos requeridos: name, domain.');
+    }
+    return this.hostingService.createCustomDomainSite(req.user.id, {
+      name: String(body.name),
+      domain: String(body.domain),
+    });
+  }
+
+  // ─── Backups automaticos (solo Agencia) ──────────────────────────────
+
+  @UseGuards(JwtAuthGuard)
+  @Get('backups')
+  async listBackups(@Req() req: any) {
+    return this.hostingService.listBackups(req.user.id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('backups/:siteId/create-now')
+  async createBackupNow(
+    @Req() req: any,
+    @Param('siteId', ParseIntPipe) siteId: number,
+  ) {
+    return this.hostingService.createBackupNow(req.user.id, siteId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('backups/:siteId/download/:filename')
+  async downloadBackup(
+    @Req() req: any,
+    @Param('siteId', ParseIntPipe) siteId: number,
+    @Param('filename') filename: string,
+    @Res() res: Response,
+  ) {
+    const filepath = await this.hostingService.resolveBackupPath(
+      req.user.id,
+      siteId,
+      filename,
+    );
+    return res.download(filepath, filename);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('backups/:siteId/restore')
+  async restoreBackup(
+    @Req() req: any,
+    @Param('siteId', ParseIntPipe) siteId: number,
+    @Body() body: { filename: string; confirmDomain: string },
+  ) {
+    if (!body?.filename || !body?.confirmDomain) {
+      throw new BadRequestException('Faltan campos: filename, confirmDomain.');
+    }
+    return this.hostingService.restoreBackup(req.user.id, siteId, {
+      filename: String(body.filename),
+      confirmDomain: String(body.confirmDomain),
+    });
+  }
+
+  // ─── Activar emails para dominio propio ──────────────────────────────
+
+  @UseGuards(JwtAuthGuard)
+  @Get('sites/:id/email-status')
+  async emailStatus(@Req() req: any, @Param('id', ParseIntPipe) id: number) {
+    return this.hostingService.getEmailActivationStatus(req.user.id, id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('sites/:id/email/activate')
+  async activateEmail(@Req() req: any, @Param('id', ParseIntPipe) id: number) {
+    return this.hostingService.activateEmail(req.user.id, id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('sites/:id/email/dns')
+  async emailDns(@Req() req: any, @Param('id', ParseIntPipe) id: number) {
+    return this.hostingService.getEmailDnsRecords(req.user.id, id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('sites/:id/email/verify')
+  async verifyEmail(@Req() req: any, @Param('id', ParseIntPipe) id: number) {
+    return this.hostingService.verifyEmailDns(req.user.id, id);
   }
 
   // ─── Subdominios extra (Premium / Agencia) ────────────────────────────

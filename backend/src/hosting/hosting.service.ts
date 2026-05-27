@@ -9,6 +9,7 @@ import {
 import { addMonths, formatDistanceToNowStrict } from 'date-fns';
 import { HostingAccount, HostingAccountStatus, HostedSiteType, PlanServiceType, Prisma } from '@prisma/client';
 import { execFileSync } from 'child_process';
+import * as dns from 'dns';
 import * as fs from 'fs';
 import { dirname, join, resolve, sep } from 'path';
 
@@ -1337,6 +1338,538 @@ export class HostingService {
         `No se pudo instalar WordPress: ${error.message || 'error en CyberPanel'}`,
       );
     }
+  }
+
+  // ─── Dominio propio: verificacion DNS ────────────────────────────────
+
+  private get serverPublicIp() {
+    if (process.env.SERVER_PUBLIC_IP) return process.env.SERVER_PUBLIC_IP.trim();
+    // Extraer de CYBERPANEL_API_URL si es una IP
+    const raw = (process.env.CYBERPANEL_API_URL || '').replace(/^https?:\/\//, '').split(':')[0];
+    if (/^\d{1,3}(\.\d{1,3}){3}$/.test(raw)) return raw;
+    return '';
+  }
+
+  async checkDomainDns(userId: number, domain: string) {
+    if (!/^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(domain)) {
+      throw new BadRequestException('Dominio invalido.');
+    }
+    const expectedIp = this.serverPublicIp;
+    if (!expectedIp) {
+      throw new BadRequestException(
+        'No se configuro SERVER_PUBLIC_IP — no podemos verificar el DNS.',
+      );
+    }
+
+    // Evita reclamar un dominio ya en uso por otro proyecto / sitio.
+    await this.assertDomainAvailable(domain);
+
+    // Resolvemos @ y www en paralelo.
+    const resolve4 = (host: string) =>
+      new Promise<string[]>((res) => {
+        dns.resolve4(host, (err, addrs) => {
+          if (err) res([]);
+          else res(addrs || []);
+        });
+      });
+
+    const [apex, www] = await Promise.all([resolve4(domain), resolve4(`www.${domain}`)]);
+    const apexMatch = apex.includes(expectedIp);
+    const wwwMatch = www.includes(expectedIp);
+
+    return {
+      domain,
+      expectedIp,
+      apex: { records: apex, ok: apexMatch },
+      www: { records: www, ok: wwwMatch },
+      ready: apexMatch, // permitimos seguir si al menos @ resuelve correctamente
+      userId, // unused but echo for symmetry
+    };
+  }
+
+  async createCustomDomainSite(
+    userId: number,
+    dto: { name: string; domain: string },
+  ) {
+    const check = await this.checkDomainDns(userId, dto.domain);
+    if (!check.ready) {
+      throw new BadRequestException(
+        'Aun no vemos el DNS apuntando a nuestro servidor. Los cambios pueden tardar entre 5 minutos y 24 horas. Reintenta mas tarde.',
+      );
+    }
+    return this.createSite(userId, {
+      name: dto.name,
+      mode: 'custom',
+      domain: dto.domain,
+    } as any);
+  }
+
+  // ─── Backups (solo plan Agencia) ──────────────────────────────────────
+
+  private get backupsRoot() {
+    return process.env.HOSTING_BACKUPS_ROOT || '/home/backups';
+  }
+
+  private get backupsRetention() {
+    return Number(process.env.HOSTING_BACKUPS_RETENTION || 3);
+  }
+
+  private assertAgenciaPlan(planSlug: string | null | undefined) {
+    const slug = (planSlug || '').toLowerCase().replace(/^hosting-/, '').split('-')[0];
+    if (slug !== 'agencia') {
+      throw new BadRequestException(
+        'Los backups automaticos estan disponibles solo en el plan Agencia.',
+      );
+    }
+  }
+
+  private siteBackupsDir(domain: string) {
+    return join(this.backupsRoot, domain);
+  }
+
+  private listBackupFiles(domain: string): Array<{ filename: string; sizeMb: number; createdAt: string }> {
+    const dir = this.siteBackupsDir(domain);
+    if (!fs.existsSync(dir)) return [];
+    try {
+      const entries = fs.readdirSync(dir);
+      return entries
+        .filter((n) => n.endsWith('.tar.gz'))
+        .map((filename) => {
+          const stat = fs.statSync(join(dir, filename));
+          return {
+            filename,
+            sizeMb: Math.max(0, Math.round(stat.size / (1024 * 1024))),
+            createdAt: stat.mtime.toISOString(),
+          };
+        })
+        .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+    } catch (error: any) {
+      this.logger.warn(`listBackupFiles(${domain}) fallo: ${error?.message || error}`);
+      return [];
+    }
+  }
+
+  private rotateBackups(domain: string) {
+    const dir = this.siteBackupsDir(domain);
+    if (!fs.existsSync(dir)) return;
+    try {
+      const files = this.listBackupFiles(domain);
+      const excess = files.slice(this.backupsRetention);
+      for (const f of excess) {
+        try {
+          fs.rmSync(join(dir, f.filename), { force: true });
+        } catch {
+          /* ignore */
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  async createSiteBackupTar(domain: string, siteRootPath: string) {
+    const dir = this.siteBackupsDir(domain);
+    fs.mkdirSync(dir, { recursive: true });
+    const stamp = new Date()
+      .toISOString()
+      .replace(/[:T]/g, '-')
+      .replace(/\..*$/, '');
+    const filename = `${stamp}.tar.gz`;
+    const fullPath = join(dir, filename);
+
+    // /home/<domain>/public_html → tar relativo a /home/<domain>
+    const siteParent = dirname(siteRootPath);
+    const siteFolder = siteRootPath.split(sep).pop() || 'public_html';
+    execFileSync('tar', ['czf', fullPath, '-C', siteParent, siteFolder], {
+      timeout: 600000, // 10 min para sitios grandes
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    const stat = fs.statSync(fullPath);
+    this.rotateBackups(domain);
+    return {
+      filename,
+      sizeMb: Math.max(0, Math.round(stat.size / (1024 * 1024))),
+      createdAt: stat.mtime.toISOString(),
+    };
+  }
+
+  async listBackups(userId: number) {
+    await this.assertHostingSchemaReady();
+    const account = await this.getAccountOrThrow(userId);
+    this.assertAgenciaPlan(account.activeSubscription?.plan?.slug);
+    return {
+      retention: this.backupsRetention,
+      sites: account.sites.map((s) => ({
+        siteId: s.id,
+        domain: s.domain,
+        name: s.name,
+        backups: this.listBackupFiles(s.domain),
+      })),
+    };
+  }
+
+  async createBackupNow(userId: number, siteId: number) {
+    await this.assertHostingSchemaReady();
+    const account = await this.getAccountOrThrow(userId);
+    this.assertAgenciaPlan(account.activeSubscription?.plan?.slug);
+    const site = account.sites.find((s) => s.id === siteId);
+    if (!site) throw new NotFoundException('Sitio no encontrado.');
+
+    // Rate limit simple: 1 por hora
+    const existing = this.listBackupFiles(site.domain);
+    if (existing.length) {
+      const last = new Date(existing[0].createdAt).getTime();
+      if (Date.now() - last < 60 * 60 * 1000) {
+        throw new BadRequestException(
+          'Solo puedes crear un backup manual por hora. Espera un poco.',
+        );
+      }
+    }
+
+    try {
+      return await this.createSiteBackupTar(site.domain, site.rootPath);
+    } catch (error: any) {
+      throw new BadRequestException(
+        `No se pudo crear el backup: ${error?.message || 'error en tar'}`,
+      );
+    }
+  }
+
+  async resolveBackupPath(userId: number, siteId: number, filename: string): Promise<string> {
+    await this.assertHostingSchemaReady();
+    const account = await this.getAccountOrThrow(userId);
+    this.assertAgenciaPlan(account.activeSubscription?.plan?.slug);
+    const site = account.sites.find((s) => s.id === siteId);
+    if (!site) throw new NotFoundException('Sitio no encontrado.');
+    if (!/^[A-Za-z0-9_.-]+\.tar\.gz$/.test(filename)) {
+      throw new BadRequestException('Nombre de archivo invalido.');
+    }
+    const full = join(this.siteBackupsDir(site.domain), filename);
+    if (!fs.existsSync(full)) throw new NotFoundException('Backup no encontrado.');
+    return full;
+  }
+
+  async restoreBackup(
+    userId: number,
+    siteId: number,
+    dto: { filename: string; confirmDomain: string },
+  ) {
+    await this.assertHostingSchemaReady();
+    const account = await this.getAccountOrThrow(userId);
+    this.assertAgenciaPlan(account.activeSubscription?.plan?.slug);
+    const site = account.sites.find((s) => s.id === siteId);
+    if (!site) throw new NotFoundException('Sitio no encontrado.');
+
+    if ((dto.confirmDomain || '').trim().toLowerCase() !== site.domain.toLowerCase()) {
+      throw new BadRequestException(
+        'La confirmacion no coincide con el dominio. Escribelo exactamente.',
+      );
+    }
+
+    if (!/^[A-Za-z0-9_.-]+\.tar\.gz$/.test(dto.filename)) {
+      throw new BadRequestException('Nombre de archivo invalido.');
+    }
+
+    const tarPath = join(this.siteBackupsDir(site.domain), dto.filename);
+    if (!fs.existsSync(tarPath)) {
+      throw new NotFoundException('Backup no encontrado.');
+    }
+
+    // Extraemos sobre /home/<domain> (sobreescribe public_html)
+    const siteParent = dirname(site.rootPath);
+    try {
+      execFileSync('tar', ['xzf', tarPath, '-C', siteParent], {
+        timeout: 600000,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      const storageUsedMb = this.computeDirectorySizeMb(site.rootPath);
+      await this.prisma.hostedSite.update({
+        where: { id: site.id },
+        data: { storageUsedMb, lastDeployedAt: new Date() },
+      });
+      return { ok: true };
+    } catch (error: any) {
+      throw new BadRequestException(
+        `No se pudo restaurar el backup: ${error?.message || 'error al extraer'}`,
+      );
+    }
+  }
+
+  async runMonthlyBackupsForAgencia() {
+    this.logger.log('Cron mensual: iniciando backups para cuentas Agencia');
+    const accounts = await this.prisma.hostingAccount.findMany({
+      where: {
+        activeSubscription: {
+          status: 'ACTIVE',
+          plan: {
+            slug: { startsWith: 'hosting-agencia' },
+          },
+        },
+      },
+      include: {
+        activeSubscription: { include: { plan: true } },
+        sites: true,
+      },
+    });
+
+    let success = 0;
+    let failed = 0;
+    for (const acc of accounts) {
+      for (const site of acc.sites) {
+        try {
+          await this.createSiteBackupTar(site.domain, site.rootPath);
+          success += 1;
+        } catch (error: any) {
+          failed += 1;
+          this.logger.warn(
+            `Backup mensual fallo para ${site.domain}: ${error?.message || error}`,
+          );
+        }
+      }
+    }
+    this.logger.log(
+      `Cron mensual: backups completados. ok=${success} fail=${failed}`,
+    );
+    return { success, failed };
+  }
+
+  // ─── Activar emails para dominio propio (DKIM + DNS) ─────────────────
+
+  private buildDkimKeyPath(domain: string) {
+    return `/etc/opendkim/keys/${domain}/default.txt`;
+  }
+
+  private parseDkimPublicKey(rawTxt: string): string | null {
+    // Formato tipico de opendkim-genkey default.txt:
+    // default._domainkey IN TXT ( "v=DKIM1; k=rsa; p=..." "..." )
+    const quoted = [...rawTxt.matchAll(/"([^"]*)"/g)].map((m) => m[1]);
+    if (!quoted.length) return null;
+    const value = quoted.join('').replace(/\s+/g, '').trim();
+    if (!value.startsWith('v=DKIM1')) return null;
+    return value;
+  }
+
+  private getDkimPublicKey(domain: string): string | null {
+    try {
+      const path = this.buildDkimKeyPath(domain);
+      if (!fs.existsSync(path)) return null;
+      const raw = fs.readFileSync(path, 'utf8');
+      return this.parseDkimPublicKey(raw);
+    } catch {
+      return null;
+    }
+  }
+
+  private async ensureDkimForDomain(domain: string): Promise<string | null> {
+    let key = this.getDkimPublicKey(domain);
+    if (key) return key;
+
+    // Intento de generacion best-effort. Requiere opendkim-genkey y root.
+    const keyDir = `/etc/opendkim/keys/${domain}`;
+    try {
+      fs.mkdirSync(keyDir, { recursive: true });
+      execFileSync('opendkim-genkey', ['-s', 'default', '-d', domain, '-D', keyDir], {
+        timeout: 30000,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      try {
+        execFileSync('chown', ['-R', 'opendkim:opendkim', keyDir], { stdio: 'ignore' });
+      } catch {
+        /* ignore */
+      }
+      try {
+        execFileSync('chmod', ['600', `${keyDir}/default.private`], { stdio: 'ignore' });
+      } catch {
+        /* ignore */
+      }
+
+      const keyTablePath = '/etc/opendkim/KeyTable';
+      const signTablePath = '/etc/opendkim/SigningTable';
+      const trustedHostsPath = '/etc/opendkim/TrustedHosts';
+      const keyTableLine = `default._domainkey.${domain} ${domain}:default:${keyDir}/default.private`;
+      const signTableLine = `*@${domain} default._domainkey.${domain}`;
+      try {
+        const keyTable = fs.existsSync(keyTablePath) ? fs.readFileSync(keyTablePath, 'utf8') : '';
+        if (!keyTable.includes(keyTableLine)) {
+          fs.appendFileSync(keyTablePath, `\n${keyTableLine}\n`);
+        }
+      } catch {
+        /* ignore */
+      }
+      try {
+        const signTable = fs.existsSync(signTablePath) ? fs.readFileSync(signTablePath, 'utf8') : '';
+        if (!signTable.includes(signTableLine)) {
+          fs.appendFileSync(signTablePath, `\n${signTableLine}\n`);
+        }
+      } catch {
+        /* ignore */
+      }
+      try {
+        const trusted = fs.existsSync(trustedHostsPath) ? fs.readFileSync(trustedHostsPath, 'utf8') : '';
+        if (!trusted.includes(domain)) {
+          fs.appendFileSync(trustedHostsPath, `\n${domain}\n`);
+        }
+      } catch {
+        /* ignore */
+      }
+      try {
+        execFileSync('systemctl', ['reload', 'opendkim'], { timeout: 10000, stdio: 'ignore' });
+      } catch {
+        // si reload falla, lo seguimos intentando con restart
+        try {
+          execFileSync('systemctl', ['restart', 'opendkim'], { timeout: 10000, stdio: 'ignore' });
+        } catch {
+          /* ignore */
+        }
+      }
+      key = this.getDkimPublicKey(domain);
+    } catch (error: any) {
+      this.logger.warn(`ensureDkimForDomain(${domain}) fallo: ${error?.message || error}`);
+    }
+    return key;
+  }
+
+  private isCustomDomain(domain: string) {
+    return !domain.toLowerCase().endsWith(`.${this.baseDomain}`);
+  }
+
+  async getEmailActivationStatus(userId: number, siteId: number) {
+    await this.assertHostingSchemaReady();
+    const account = await this.getAccountOrThrow(userId);
+    const site = account.sites.find((s) => s.id === siteId);
+    if (!site) throw new NotFoundException('Sitio no encontrado.');
+
+    const metadata = site.metadata ? JSON.parse(site.metadata) : {};
+    const isCustom = this.isCustomDomain(site.domain);
+    const dkimKey = this.getDkimPublicKey(site.domain);
+
+    return {
+      domain: site.domain,
+      isCustomDomain: isCustom,
+      requiresActivation: isCustom, // los .plia.pe heredan del dominio raiz
+      activated: !!metadata.emailActivated && !!dkimKey,
+      dkimAvailable: !!dkimKey,
+    };
+  }
+
+  async activateEmail(userId: number, siteId: number) {
+    await this.assertHostingSchemaReady();
+    const account = await this.getAccountOrThrow(userId);
+    const site = account.sites.find((s) => s.id === siteId);
+    if (!site) throw new NotFoundException('Sitio no encontrado.');
+    if (!this.isCustomDomain(site.domain)) {
+      throw new BadRequestException(
+        'Los subdominios de plia.pe ya tienen emails activos por defecto.',
+      );
+    }
+
+    const dkim = await this.ensureDkimForDomain(site.domain);
+    if (!dkim) {
+      throw new BadRequestException(
+        'No se pudo generar el DKIM automaticamente. Soporte te ayudara a configurarlo.',
+      );
+    }
+
+    return this.getEmailDnsRecords(userId, siteId);
+  }
+
+  async getEmailDnsRecords(userId: number, siteId: number) {
+    await this.assertHostingSchemaReady();
+    const account = await this.getAccountOrThrow(userId);
+    const site = account.sites.find((s) => s.id === siteId);
+    if (!site) throw new NotFoundException('Sitio no encontrado.');
+
+    const dkim = this.getDkimPublicKey(site.domain);
+    const ip = this.serverPublicIp;
+
+    return {
+      domain: site.domain,
+      dkimAvailable: !!dkim,
+      records: [
+        { type: 'MX', name: '@', value: `mail.${site.domain}`, priority: 10 },
+        { type: 'A', name: 'mail', value: ip },
+        { type: 'TXT', name: '@', value: `v=spf1 ip4:${ip} ~all` },
+        ...(dkim
+          ? [{ type: 'TXT', name: 'default._domainkey', value: dkim }]
+          : []),
+        {
+          type: 'TXT',
+          name: '_dmarc',
+          value: 'v=DMARC1; p=none; rua=mailto:postmaster@plia.pe',
+        },
+      ],
+    };
+  }
+
+  async verifyEmailDns(userId: number, siteId: number) {
+    await this.assertHostingSchemaReady();
+    const account = await this.getAccountOrThrow(userId);
+    const site = account.sites.find((s) => s.id === siteId);
+    if (!site) throw new NotFoundException('Sitio no encontrado.');
+
+    const expectedDkim = this.getDkimPublicKey(site.domain);
+    const expectedIp = this.serverPublicIp;
+    const domain = site.domain;
+
+    const resolveTxt = (host: string) =>
+      new Promise<string[]>((res) => {
+        dns.resolveTxt(host, (err, records) => {
+          if (err) res([]);
+          else res(records.map((r) => r.join('')));
+        });
+      });
+    const resolveMx = (host: string) =>
+      new Promise<dns.MxRecord[]>((res) => {
+        dns.resolveMx(host, (err, records) => {
+          if (err) res([]);
+          else res(records || []);
+        });
+      });
+    const resolve4 = (host: string) =>
+      new Promise<string[]>((res) => {
+        dns.resolve4(host, (err, addrs) => {
+          if (err) res([]);
+          else res(addrs || []);
+        });
+      });
+
+    const [mxRecords, spfTxts, dkimTxts, dmarcTxts, mailA] = await Promise.all([
+      resolveMx(domain),
+      resolveTxt(domain),
+      resolveTxt(`default._domainkey.${domain}`),
+      resolveTxt(`_dmarc.${domain}`),
+      resolve4(`mail.${domain}`),
+    ]);
+
+    const checks = {
+      mx: mxRecords.some((r) => (r.exchange || '').toLowerCase().includes(`mail.${domain}`)),
+      mailA: mailA.includes(expectedIp),
+      spf: spfTxts.some((v) => v.includes('v=spf1') && v.includes(expectedIp)),
+      dkim:
+        !!expectedDkim &&
+        dkimTxts.some((v) => v.replace(/\s+/g, '') === expectedDkim.replace(/\s+/g, '')),
+      dmarc: dmarcTxts.some((v) => v.startsWith('v=DMARC1')),
+    };
+
+    const allPassed =
+      checks.mx && checks.mailA && checks.spf && checks.dkim && checks.dmarc;
+
+    if (allPassed) {
+      const meta = site.metadata ? JSON.parse(site.metadata) : {};
+      meta.emailActivated = true;
+      meta.emailActivatedAt = new Date().toISOString();
+      await this.prisma.hostedSite.update({
+        where: { id: site.id },
+        data: { metadata: JSON.stringify(meta) },
+      });
+    }
+
+    return {
+      domain,
+      checks,
+      allPassed,
+    };
   }
 
   // ─── Subdominios (solo Premium / Agencia) ─────────────────────────────

@@ -1122,20 +1122,26 @@ export class CyberpanelService {
       throw new BadRequestException('Dominio invalido.');
     }
 
+    // CyberPanel solo expone gestion de correos via su UI interna
+    // (/email/submitEmailCreation) que requiere sesion admin — los /api/*
+    // no incluyen este endpoint. Usamos getAuthCookie como en
+    // installWordPress.
+    const authContext = await this.getAuthCookie();
+    if (!authContext) {
+      throw new BadRequestException(
+        'No se pudo obtener sesion de CyberPanel para crear el correo.',
+      );
+    }
+
     const body: Record<string, any> = {
       domain: params.domain,
       username: localPart,
       password: params.password,
     };
 
-    if (process.env.CYBERPANEL_ADMIN_USER && process.env.CYBERPANEL_ADMIN_PASS) {
-      body.adminUser = process.env.CYBERPANEL_ADMIN_USER;
-      body.adminPass = process.env.CYBERPANEL_ADMIN_PASS;
-    }
-
-    // CyberPanel CloudAPI: /api/submitEmailCreation
-    const path = process.env.CYBERPANEL_API_CREATE_EMAIL_PATH || '/api/submitEmailCreation';
-    await this.request(path, body, 30000);
+    const path =
+      process.env.CYBERPANEL_API_CREATE_EMAIL_PATH || '/email/submitEmailCreation';
+    await this.request(path, body, 30000, authContext);
     return { email: `${localPart}@${params.domain}` };
   }
 
@@ -1261,14 +1267,16 @@ export class CyberpanelService {
     if (!/^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+$/.test(email)) {
       throw new BadRequestException('Email invalido.');
     }
-    const body: Record<string, any> = { email };
-    if (process.env.CYBERPANEL_ADMIN_USER && process.env.CYBERPANEL_ADMIN_PASS) {
-      body.adminUser = process.env.CYBERPANEL_ADMIN_USER;
-      body.adminPass = process.env.CYBERPANEL_ADMIN_PASS;
+    const authContext = await this.getAuthCookie();
+    if (!authContext) {
+      this.logger.warn(`deleteMailbox(${email}): sin sesion CyberPanel`);
+      return false;
     }
-    const path = process.env.CYBERPANEL_API_DELETE_EMAIL_PATH || '/api/submitEmailDeletion';
+    const body: Record<string, any> = { email };
+    const path =
+      process.env.CYBERPANEL_API_DELETE_EMAIL_PATH || '/email/submitEmailDeletion';
     try {
-      await this.request(path, body, 30000);
+      await this.request(path, body, 30000, authContext);
       return true;
     } catch (error: any) {
       this.logger.error(
