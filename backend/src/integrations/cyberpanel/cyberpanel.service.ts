@@ -1139,6 +1139,110 @@ export class CyberpanelService {
     return { email: `${localPart}@${params.domain}` };
   }
 
+  async createChildDomain(params: {
+    masterDomain: string;
+    subdomain: string; // ej. "blog"
+    websiteOwner: string;
+    ownerPassword: string;
+  }) {
+    const sub = (params.subdomain || '').trim().toLowerCase();
+    if (!/^[a-z0-9-]+$/.test(sub) || sub.length < 1 || sub.length > 30) {
+      throw new BadRequestException(
+        'El subdominio solo puede tener letras, numeros o guiones (max 30 caracteres).',
+      );
+    }
+    if (!/^[a-zA-Z0-9.-]+$/.test(params.masterDomain)) {
+      throw new BadRequestException('Dominio padre invalido.');
+    }
+    const fullDomain = `${sub}.${params.masterDomain}`;
+    const phpSelection = this.normalizePhpSelection(
+      process.env.CYBERPANEL_PHP_SELECTION || process.env.CYBERPANEL_PHP,
+    );
+    const body: Record<string, any> = {
+      masterDomain: params.masterDomain,
+      domain: fullDomain,
+      phpSelection,
+      ssl: 1,
+      dkimCheck: 0,
+      openBasedir: 0,
+      websiteOwner: params.websiteOwner,
+      ownerPassword: params.ownerPassword,
+    };
+    if (process.env.CYBERPANEL_ADMIN_USER && process.env.CYBERPANEL_ADMIN_PASS) {
+      body.adminUser = process.env.CYBERPANEL_ADMIN_USER;
+      body.adminPass = process.env.CYBERPANEL_ADMIN_PASS;
+    }
+    const path =
+      process.env.CYBERPANEL_API_CREATE_CHILD_DOMAIN_PATH ||
+      '/api/createChildDomain';
+    await this.request(path, body, 60000);
+    return { domain: fullDomain };
+  }
+
+  async deleteChildDomain(domain: string) {
+    if (!/^[a-zA-Z0-9.-]+$/.test(domain)) {
+      throw new BadRequestException('Dominio invalido.');
+    }
+    const body: Record<string, any> = { domainName: domain };
+    if (process.env.CYBERPANEL_ADMIN_USER && process.env.CYBERPANEL_ADMIN_PASS) {
+      body.adminUser = process.env.CYBERPANEL_ADMIN_USER;
+      body.adminPass = process.env.CYBERPANEL_ADMIN_PASS;
+    }
+    const path =
+      process.env.CYBERPANEL_API_DELETE_CHILD_DOMAIN_PATH ||
+      '/api/deleteChildDomain';
+    try {
+      await this.request(path, body, 60000);
+      return true;
+    } catch (error: any) {
+      this.logger.error(`deleteChildDomain(${domain}) fallo: ${error?.message || error}`);
+      return false;
+    }
+  }
+
+  async listChildDomainsForMaster(
+    masterDomain: string,
+  ): Promise<Array<{ domain: string; state?: string }>> {
+    if (!/^[a-zA-Z0-9.-]+$/.test(masterDomain)) return [];
+
+    const password = this.resolveCyberpanelDbPassword();
+    if (!password) return [];
+
+    const dbUser = process.env.CYBERPANEL_DB_USER || 'root';
+    const dbName = process.env.CYBERPANEL_DB_NAME || 'cyberpanel';
+    const sql =
+      `SELECT c.domain, c.state FROM websiteFunctions_childdomains c ` +
+      `JOIN websiteFunctions_websites w ON c.master_id = w.id ` +
+      `WHERE w.domain = '${masterDomain}'`;
+
+    try {
+      const output = execFileSync(
+        'mysql',
+        [`-u${dbUser}`, '-N', '-B', dbName, '-e', sql],
+        {
+          env: { ...process.env, MYSQL_PWD: password },
+          timeout: 10000,
+          encoding: 'utf8',
+          stdio: ['ignore', 'pipe', 'pipe'],
+        },
+      );
+      return output
+        .split('\n')
+        .map((l) => l.trim())
+        .filter(Boolean)
+        .map((line) => {
+          const cols = line.split('\t');
+          return { domain: cols[0]?.trim() || '', state: cols[1]?.trim() || undefined };
+        })
+        .filter((r) => r.domain);
+    } catch (error: any) {
+      this.logger.warn(
+        `listChildDomainsForMaster(${masterDomain}) fallo: ${error?.message || error}`,
+      );
+      return [];
+    }
+  }
+
   async issueSSL(domain: string) {
     if (!/^[a-zA-Z0-9.-]+$/.test(domain)) {
       throw new BadRequestException('Dominio invalido.');

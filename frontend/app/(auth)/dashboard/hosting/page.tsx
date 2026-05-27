@@ -35,6 +35,7 @@ import {
   Eye,
   EyeOff,
   ExternalLink,
+  Trash2,
 } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
@@ -148,6 +149,11 @@ export default function HostingDashboardPage() {
   const [backupsSite, setBackupsSite] = useState<{ id: number; domain: string } | null>(null);
   const [backupsShowPass, setBackupsShowPass] = useState(false);
   const [backupsCopied, setBackupsCopied] = useState<string | null>(null);
+  const [subdomainSite, setSubdomainSite] = useState<{ id: number; domain: string } | null>(null);
+  const [subdomainList, setSubdomainList] = useState<Array<{ domain: string; state: string }>>([]);
+  const [subdomainInput, setSubdomainInput] = useState('');
+  const [subdomainBusy, setSubdomainBusy] = useState(false);
+  const [subdomainLoading, setSubdomainLoading] = useState(false);
   const [manageMode, setManageMode] = useState<'choose' | 'upload' | 'wordpress' | 'wordpress_success' | 'upsell'>('choose');
   const [wpForm, setWpForm] = useState({
     blogTitle: '',
@@ -424,6 +430,10 @@ export default function HostingDashboardPage() {
   }, [data]);
 
   const currentSite = data?.sites.find((site) => site.id === manageSiteId) ?? null;
+  const subdomainsAllowed = useMemo(() => {
+    const slug = (data?.plan.slug || '').toLowerCase().replace(/^hosting-/, '').split('-')[0];
+    return slug === 'premium' || slug === 'agencia';
+  }, [data?.plan.slug]);
 
   const createSite = async () => {
     // ... existing ...
@@ -462,6 +472,77 @@ export default function HostingDashboardPage() {
       setError(err?.message ?? 'No se pudo instalar WordPress.');
       setWpBusy(false);
       setWpProgress(0);
+    }
+  };
+
+  const openSubdomains = async (site: { id: number; domain: string }) => {
+    setSubdomainSite(site);
+    setSubdomainInput('');
+    setSubdomainList([]);
+    setSubdomainLoading(true);
+    const token = localStorage.getItem('access_token');
+    if (!token) return;
+    try {
+      const res = await fetch(`${apiBase}/hosting/sites/${site.id}/subdomains`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setSubdomainList(data.subdomains || []);
+      }
+    } catch {
+      // silent
+    } finally {
+      setSubdomainLoading(false);
+    }
+  };
+
+  const createSubdomainAction = async () => {
+    if (!subdomainSite || !subdomainInput.trim()) return;
+    const token = localStorage.getItem('access_token');
+    if (!token) return;
+    setSubdomainBusy(true);
+    try {
+      const res = await fetch(`${apiBase}/hosting/sites/${subdomainSite.id}/subdomains`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ subdomain: subdomainInput.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.message || 'No se pudo crear el subdominio.');
+      setSubdomainInput('');
+      await openSubdomains(subdomainSite);
+    } catch (err: any) {
+      setError(err?.message ?? 'No se pudo crear el subdominio.');
+    } finally {
+      setSubdomainBusy(false);
+    }
+  };
+
+  const deleteSubdomainAction = async (fullDomain: string) => {
+    if (!subdomainSite) return;
+    const token = localStorage.getItem('access_token');
+    if (!token) return;
+    if (!confirm(`Eliminar ${fullDomain}? Esta accion no se puede deshacer.`)) return;
+    setSubdomainBusy(true);
+    try {
+      const res = await fetch(`${apiBase}/hosting/sites/${subdomainSite.id}/subdomains`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ domain: fullDomain }),
+      });
+      if (!res.ok) throw new Error((await res.text()) || 'No se pudo eliminar.');
+      await openSubdomains(subdomainSite);
+    } catch (err: any) {
+      setError(err?.message ?? 'No se pudo eliminar el subdominio.');
+    } finally {
+      setSubdomainBusy(false);
     }
   };
 
@@ -825,6 +906,94 @@ export default function HostingDashboardPage() {
             </DialogContent>
           </Dialog>
 
+          <Dialog open={!!subdomainSite} onOpenChange={(open) => !open && setSubdomainSite(null)}>
+            <DialogContent className="rounded-[28px] max-w-lg">
+              <DialogHeader>
+                <DialogTitle>Subdominios de {subdomainSite?.domain}</DialogTitle>
+                <DialogDescription>
+                  Crea subdominios como <code className="text-xs bg-muted px-1.5 py-0.5 rounded">blog.{subdomainSite?.domain}</code> con SSL automatico.
+                </DialogDescription>
+              </DialogHeader>
+              {subdomainSite && (
+                <div className="space-y-4 py-2">
+                  <div className="flex items-stretch gap-2">
+                    <div className="flex-1 flex items-center rounded-xl border border-input bg-background overflow-hidden">
+                      <input
+                        value={subdomainInput}
+                        onChange={(e) =>
+                          setSubdomainInput(
+                            e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''),
+                          )
+                        }
+                        className="h-11 flex-1 px-3 bg-transparent outline-none text-sm"
+                        placeholder="blog"
+                      />
+                      <span className="h-11 flex items-center px-3 text-sm text-muted-foreground bg-muted/30 border-l border-input">
+                        .{subdomainSite.domain}
+                      </span>
+                    </div>
+                    <Button
+                      variant="cta"
+                      className="h-11 rounded-xl"
+                      onClick={createSubdomainAction}
+                      disabled={subdomainBusy || !subdomainInput.trim()}
+                    >
+                      {subdomainBusy ? 'Creando...' : 'Crear'}
+                    </Button>
+                  </div>
+
+                  <div className="rounded-2xl border border-border overflow-hidden">
+                    {subdomainLoading ? (
+                      <div className="p-6 text-center text-sm text-muted-foreground">
+                        Cargando...
+                      </div>
+                    ) : subdomainList.length === 0 ? (
+                      <div className="p-8 text-center">
+                        <Globe className="h-8 w-8 mx-auto text-muted-foreground/40" />
+                        <p className="mt-3 text-sm text-muted-foreground">
+                          Aun no has creado subdominios.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="divide-y divide-border/60">
+                        {subdomainList.map((s) => (
+                          <div key={s.domain} className="px-4 py-3 flex items-center justify-between">
+                            <div>
+                              <p className="text-sm font-semibold text-foreground">{s.domain}</p>
+                              <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">
+                                {s.state}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Button variant="outline" size="sm" className="h-8 rounded-lg text-xs" asChild>
+                                <a href={`https://${s.domain}`} target="_blank" rel="noopener noreferrer">
+                                  <ExternalLink className="h-3 w-3 mr-1" /> Abrir
+                                </a>
+                              </Button>
+                              <button
+                                type="button"
+                                className="h-8 w-8 rounded-lg border border-border text-muted-foreground hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 transition-colors flex items-center justify-center"
+                                onClick={() => deleteSubdomainAction(s.domain)}
+                                disabled={subdomainBusy}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <p className="text-[11px] text-muted-foreground text-center">
+                    Para que los subdominios funcionen, tu dominio debe tener un registro DNS comodin
+                    (<code className="text-[10px] bg-muted px-1 py-0.5 rounded">* A {process.env.NEXT_PUBLIC_SERVER_IP || '142.171.227.112'}</code>) o un registro A por cada subdominio.
+                  </p>
+                </div>
+              )}
+            </DialogContent>
+          </Dialog>
+
           <Dialog open={!!backupsSite} onOpenChange={(open) => !open && setBackupsSite(null)}>
             <DialogContent className="rounded-[28px] max-w-lg">
               <DialogHeader>
@@ -1133,9 +1302,20 @@ export default function HostingDashboardPage() {
                                   Ver sitio <ChevronRight className="ml-1 h-3 w-3" />
                                 </Link>
                               </Button>
-                              <Button variant="ghost" className="h-auto p-0 text-muted-foreground text-xs font-medium" onClick={() => setManageSiteId(site.id)}>
-                                Administrar
-                              </Button>
+                              <div className="flex items-center gap-3">
+                                {subdomainsAllowed && (
+                                  <Button
+                                    variant="ghost"
+                                    className="h-auto p-0 text-muted-foreground text-xs font-medium"
+                                    onClick={() => openSubdomains({ id: site.id, domain: site.domain })}
+                                  >
+                                    Subdominios
+                                  </Button>
+                                )}
+                                <Button variant="ghost" className="h-auto p-0 text-muted-foreground text-xs font-medium" onClick={() => setManageSiteId(site.id)}>
+                                  Administrar
+                                </Button>
+                              </div>
                             </div>
                           </Card>
                         );

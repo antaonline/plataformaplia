@@ -1339,6 +1339,84 @@ export class HostingService {
     }
   }
 
+  // ─── Subdominios (solo Premium / Agencia) ─────────────────────────────
+
+  private assertSubdomainsAllowed(planSlug: string | null | undefined) {
+    const slug = (planSlug || '').toLowerCase().replace(/^hosting-/, '').split('-')[0];
+    if (slug !== 'premium' && slug !== 'agencia') {
+      throw new BadRequestException(
+        'Los subdominios extra estan disponibles solo en los planes Premium y Agencia.',
+      );
+    }
+  }
+
+  async listSubdomains(userId: number, siteId: number) {
+    await this.assertHostingSchemaReady();
+    const account = await this.getAccountOrThrow(userId);
+    this.assertSubdomainsAllowed(account.activeSubscription?.plan?.slug);
+    const site = account.sites.find((s) => s.id === siteId);
+    if (!site) throw new NotFoundException('Sitio no encontrado.');
+
+    const remote = await this.cyberpanelService.listChildDomainsForMaster(site.domain);
+    return {
+      masterDomain: site.domain,
+      subdomains: remote.map((r) => ({ domain: r.domain, state: r.state || 'Active' })),
+    };
+  }
+
+  async createSubdomain(
+    userId: number,
+    siteId: number,
+    dto: { subdomain: string },
+  ) {
+    await this.assertHostingSchemaReady();
+    const account = await this.getAccountOrThrow(userId);
+    this.assertSubdomainsAllowed(account.activeSubscription?.plan?.slug);
+    this.assertWritableAccount(account as any);
+
+    const site = account.sites.find((s) => s.id === siteId);
+    if (!site) throw new NotFoundException('Sitio no encontrado.');
+
+    const ownerPassword =
+      this.cyberpanelService.revealStoredPassword(account.encryptedPassword ?? undefined) ||
+      process.env.CYBERPANEL_EXISTING_USER_PASSWORD ||
+      '';
+    if (!ownerPassword) {
+      throw new BadRequestException(
+        'No se pudo recuperar la credencial tecnica del usuario de hosting.',
+      );
+    }
+
+    const result = await this.cyberpanelService.createChildDomain({
+      masterDomain: site.domain,
+      subdomain: dto.subdomain,
+      websiteOwner: account.cyberpanelUsername,
+      ownerPassword,
+    });
+
+    return { ok: true, domain: result.domain };
+  }
+
+  async deleteSubdomain(
+    userId: number,
+    siteId: number,
+    subdomainFullDomain: string,
+  ) {
+    await this.assertHostingSchemaReady();
+    const account = await this.getAccountOrThrow(userId);
+    this.assertSubdomainsAllowed(account.activeSubscription?.plan?.slug);
+
+    const site = account.sites.find((s) => s.id === siteId);
+    if (!site) throw new NotFoundException('Sitio no encontrado.');
+
+    if (!subdomainFullDomain.endsWith(`.${site.domain}`)) {
+      throw new BadRequestException('Subdominio no pertenece a este sitio.');
+    }
+
+    const ok = await this.cyberpanelService.deleteChildDomain(subdomainFullDomain);
+    return { ok };
+  }
+
   // ─── Mailboxes ────────────────────────────────────────────────────────
 
   /**

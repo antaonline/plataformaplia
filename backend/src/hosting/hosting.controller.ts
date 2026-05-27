@@ -156,6 +156,43 @@ export class HostingController {
     return this.hostingService.confirmUpgrade(req.user.id, payload, slug);
   }
 
+  // ─── Subdominios extra (Premium / Agencia) ────────────────────────────
+
+  @UseGuards(JwtAuthGuard)
+  @Get('sites/:id/subdomains')
+  async listSubdomains(
+    @Req() req: any,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.hostingService.listSubdomains(req.user.id, id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('sites/:id/subdomains')
+  async createSubdomain(
+    @Req() req: any,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { subdomain: string },
+  ) {
+    if (!body?.subdomain) {
+      throw new BadRequestException('Falta el campo subdomain.');
+    }
+    return this.hostingService.createSubdomain(req.user.id, id, {
+      subdomain: String(body.subdomain),
+    });
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Delete('sites/:id/subdomains')
+  async deleteSubdomain(
+    @Req() req: any,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { domain: string },
+  ) {
+    if (!body?.domain) throw new BadRequestException('Falta el campo domain.');
+    return this.hostingService.deleteSubdomain(req.user.id, id, String(body.domain));
+  }
+
   // ─── Mailboxes ────────────────────────────────────────────────────────
 
   @UseGuards(JwtAuthGuard)
