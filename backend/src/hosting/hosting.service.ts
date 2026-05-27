@@ -624,8 +624,96 @@ export class HostingService {
 
   async getDashboard(userId: number) {
     await this.assertHostingSchemaReady();
-    const account = await this.getAccountOrThrow(userId);
+    let account = await this.getAccountOrThrow(userId);
+    // Importar a HostedSite los sitios que el usuario haya creado manualmente
+    // en CyberPanel (mismo owner pl<id><slug>) y que aun no esten registrados
+    // en nuestra DB. Asi aparecen en "Tus sitios web" sin tocar el frontend.
+    if (account.cyberpanelUsername) {
+      const imported = await this.syncCyberpanelOwnedSites(account);
+      if (imported > 0) {
+        account = await this.getAccountOrThrow(userId);
+      }
+    }
     return this.buildDashboardPayload(account);
+  }
+
+  private async syncCyberpanelOwnedSites(
+    account: Awaited<ReturnType<HostingService['getAccountOrThrow']>>,
+  ): Promise<number> {
+    try {
+      const remoteSites = await this.cyberpanelService.listSitesForOwner(
+        account.cyberpanelUsername,
+      );
+      if (!remoteSites.length) return 0;
+
+      const knownDomains = new Set(account.sites.map((s) => s.domain.toLowerCase()));
+      const candidates = remoteSites.filter(
+        (s) => !knownDomains.has(s.domain.toLowerCase()),
+      );
+      if (!candidates.length) return 0;
+
+      let imported = 0;
+      for (const site of candidates) {
+        try {
+          // No reclamar dominios que pertenecen a un proyecto (flujo web-only):
+          // esos viven bajo Project y no en hostedSite.
+          const linkedProject = await this.prisma.project.findFirst({
+            where: {
+              onboardingData: { contains: `"publicDomain":"${site.domain}"` },
+            },
+            select: { id: true },
+          });
+          if (linkedProject) continue;
+
+          // No duplicar si ya existe (puede pertenecer a otra cuenta historica).
+          const existing = await this.prisma.hostedSite.findUnique({
+            where: { domain: site.domain },
+          });
+          if (existing) continue;
+
+          const isSubdomain = site.domain
+            .toLowerCase()
+            .endsWith(`.${this.baseDomain}`);
+          const rootPath = this.getSiteRoot(site.domain);
+
+          await this.prisma.hostedSite.create({
+            data: {
+              hostingAccountId: account.id,
+              name: site.domain,
+              domain: site.domain,
+              siteType: isSubdomain
+                ? HostedSiteType.SUBDOMAIN
+                : HostedSiteType.CUSTOM_DOMAIN,
+              status: 'ACTIVE',
+              sslStatus: isSubdomain ? 'ACTIVE' : 'PENDING',
+              rootPath,
+              publicUrl: `https://${site.domain}`,
+              metadata: JSON.stringify({
+                createdVia: 'cyberpanel-import',
+                importedAt: new Date().toISOString(),
+                remoteState: site.state || null,
+              }),
+            },
+          });
+          imported += 1;
+        } catch (err: any) {
+          this.logger.warn(
+            `No se pudo importar sitio CyberPanel ${site.domain} para userId=${account.userId}: ${err?.message || err}`,
+          );
+        }
+      }
+      if (imported > 0) {
+        this.logger.log(
+          `Sincronizados ${imported} sitio(s) de CyberPanel owner=${account.cyberpanelUsername}`,
+        );
+      }
+      return imported;
+    } catch (error: any) {
+      this.logger.warn(
+        `syncCyberpanelOwnedSites fallo para owner=${account.cyberpanelUsername}: ${error?.message || error}`,
+      );
+      return 0;
+    }
   }
 
   private cleanDirectoryPreserving(rootPath: string, preserve: string[] = []) {

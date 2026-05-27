@@ -894,6 +894,78 @@ export class CyberpanelService {
     return true;
   }
 
+  async listSitesForOwner(
+    ownerUsername: string,
+  ): Promise<Array<{ domain: string; admin: string; state?: string; adminEmail?: string }>> {
+    if (!ownerUsername) return [];
+    const authContext = await this.getAuthCookie();
+    if (!authContext) {
+      this.logger.warn(
+        `listSitesForOwner(${ownerUsername}): no se pudo obtener cookie de sesion CyberPanel`,
+      );
+      return [];
+    }
+
+    const url = `${this.baseUrl}/websites/fetchWebsites`;
+    try {
+      const res = await axios.post(
+        url,
+        { page: 1, recordsToShow: 1000 },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            Cookie: authContext.cookie,
+            'X-CSRFToken': authContext.csrfToken || '',
+            Referer: `${this.baseUrl}/`,
+          },
+          httpsAgent: this.httpsAgent,
+          timeout: 30000,
+        },
+      );
+
+      // fetchWebsites a veces devuelve la lista como `data` (array), otras
+      // veces como string JSON dentro de `data`. Cubrimos ambos casos.
+      let payload: any = res.data;
+      if (typeof payload === 'string') {
+        try {
+          payload = JSON.parse(payload);
+        } catch {
+          this.logger.warn(
+            `listSitesForOwner(${ownerUsername}): respuesta no parseable de ${url}`,
+          );
+          return [];
+        }
+      }
+
+      let rows: any = payload?.data ?? payload?.websites ?? [];
+      if (typeof rows === 'string') {
+        try {
+          rows = JSON.parse(rows);
+        } catch {
+          rows = [];
+        }
+      }
+      if (!Array.isArray(rows)) {
+        return [];
+      }
+
+      return rows
+        .filter((row: any) => row && typeof row === 'object')
+        .map((row: any) => ({
+          domain: (row.domain || row.domainName || '').trim(),
+          admin: (row.admin || row.adminUser || row.owner || '').trim(),
+          adminEmail: row.adminEmail || row.email || undefined,
+          state: row.state || row.status || undefined,
+        }))
+        .filter((row) => row.domain && row.admin === ownerUsername);
+    } catch (error: any) {
+      this.logger.warn(
+        `listSitesForOwner(${ownerUsername}) fallo en ${url}: ${error?.message || error}`,
+      );
+      return [];
+    }
+  }
+
   async changePackage(username: string, packageName: string) {
     const body: Record<string, any> = {
       websiteOwner: username,
