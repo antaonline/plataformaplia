@@ -1139,6 +1139,20 @@ export class CyberpanelService {
     return { email: `${localPart}@${params.domain}` };
   }
 
+  async issueSSL(domain: string) {
+    if (!/^[a-zA-Z0-9.-]+$/.test(domain)) {
+      throw new BadRequestException('Dominio invalido.');
+    }
+    const body: Record<string, any> = { domainName: domain };
+    if (process.env.CYBERPANEL_ADMIN_USER && process.env.CYBERPANEL_ADMIN_PASS) {
+      body.adminUser = process.env.CYBERPANEL_ADMIN_USER;
+      body.adminPass = process.env.CYBERPANEL_ADMIN_PASS;
+    }
+    const path = process.env.CYBERPANEL_API_ISSUE_SSL_PATH || '/api/issueSSL';
+    await this.request(path, body, 120000);
+    return true;
+  }
+
   async deleteMailbox(email: string) {
     if (!/^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+$/.test(email)) {
       throw new BadRequestException('Email invalido.');

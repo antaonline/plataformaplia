@@ -115,6 +115,12 @@ export class HostingController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Post('sites/:id/renew-ssl')
+  async renewSSL(@Req() req: any, @Param('id', ParseIntPipe) id: number) {
+    return this.hostingService.renewSiteSSL(req.user.id, id);
+  }
+
+  @UseGuards(JwtAuthGuard)
   @Post('sites/:id/install-wordpress')
   async installWordPress(
     @Req() req: any,

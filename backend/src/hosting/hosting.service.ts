@@ -1255,6 +1255,39 @@ export class HostingService {
     }
   }
 
+  async renewSiteSSL(userId: number, siteId: number) {
+    await this.assertHostingSchemaReady();
+    const site = await this.prisma.hostedSite.findUnique({
+      where: { id: siteId },
+      include: { hostingAccount: true },
+    });
+    if (!site || site.hostingAccount.userId !== userId) {
+      throw new NotFoundException('Sitio no encontrado.');
+    }
+
+    try {
+      await this.cyberpanelService.issueSSL(site.domain);
+      const sslActive = this.isSslActiveForDomain(site.domain);
+      const updated = await this.prisma.hostedSite.update({
+        where: { id: site.id },
+        data: { sslStatus: sslActive ? 'ACTIVE' : 'PENDING' },
+      });
+      return {
+        ok: true,
+        sslStatus: updated.sslStatus,
+        message: sslActive
+          ? 'SSL emitido correctamente.'
+          : 'Se solicito el SSL. Puede tardar unos minutos en activarse.',
+      };
+    } catch (error: any) {
+      this.logger.error(`renewSiteSSL fallo para ${site.domain}: ${error?.message || error}`);
+      throw new BadRequestException(
+        error?.message ||
+          'No se pudo emitir el certificado SSL. Verifica que el dominio apunte a este servidor.',
+      );
+    }
+  }
+
   async installWordPress(userId: number, siteId: number, dto: InstallWordPressDto) {
     await this.assertHostingSchemaReady();
     const site = await this.prisma.hostedSite.findUnique({

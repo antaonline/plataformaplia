@@ -9,6 +9,7 @@ import {
   BarChart3,
   Globe,
   HardDrive,
+  HardDriveDownload,
   Headphones,
   KeyRound,
   LayoutDashboard,
@@ -30,6 +31,7 @@ import {
   Monitor,
   Check,
   Clock,
+  Copy,
   Eye,
   EyeOff,
   ExternalLink,
@@ -142,6 +144,10 @@ export default function HostingDashboardPage() {
   const [useSavedCardUpgrade, setUseSavedCardUpgrade] = useState(true);
 
   const [manageSiteId, setManageSiteId] = useState<number | null>(null);
+  const [renewSslId, setRenewSslId] = useState<number | null>(null);
+  const [backupsSite, setBackupsSite] = useState<{ id: number; domain: string } | null>(null);
+  const [backupsShowPass, setBackupsShowPass] = useState(false);
+  const [backupsCopied, setBackupsCopied] = useState<string | null>(null);
   const [manageMode, setManageMode] = useState<'choose' | 'upload' | 'wordpress' | 'wordpress_success' | 'upsell'>('choose');
   const [wpForm, setWpForm] = useState({
     blogTitle: '',
@@ -459,6 +465,26 @@ export default function HostingDashboardPage() {
     }
   };
 
+  const renewSSL = async (siteId: number) => {
+    const token = localStorage.getItem('access_token');
+    if (!token) return;
+    setRenewSslId(siteId);
+    setError(null);
+    try {
+      const res = await fetch(`${apiBase}/hosting/sites/${siteId}/renew-ssl`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.message || 'No se pudo emitir el SSL.');
+      await load();
+    } catch (err: any) {
+      setError(err?.message ?? 'No se pudo emitir el SSL.');
+    } finally {
+      setRenewSslId(null);
+    }
+  };
+
   const uploadFolder = async (files: FileList | null) => {
     if (!files?.length || !manageSiteId) return;
     const token = localStorage.getItem('access_token');
@@ -619,66 +645,120 @@ export default function HostingDashboardPage() {
                     </Button>
                   </DialogTrigger>
                   <DialogContent className="max-w-xl rounded-[28px]">
-                    <DialogHeader>
-                      <DialogTitle>Crear nuevo sitio</DialogTitle>
-                      <DialogDescription>Usa un subdominio de PLIA o tu propio dominio.</DialogDescription>
-                    </DialogHeader>
-                    <div className="grid gap-4 py-2">
-                      <Input
-                        value={createForm.name}
-                        onChange={(e) => setCreateForm((prev) => ({ ...prev, name: e.target.value }))}
-                        placeholder="Nombre del sitio"
-                      />
-                      <div className="grid gap-3 md:grid-cols-2">
-                        <button
-                          type="button"
-                          className={cn(
-                            'rounded-2xl border px-4 py-4 text-left transition',
-                            createForm.mode === 'subdomain' ? 'border-cta bg-cta/10' : 'border-border bg-white hover:bg-muted'
-                          )}
-                          onClick={() => setCreateForm((prev) => ({ ...prev, mode: 'subdomain' }))}
-                        >
-                          <p className="font-semibold text-sm">Subdominio PLIA</p>
-                          <p className="mt-1 text-xs text-muted-foreground">Ideal para salir rapido</p>
-                        </button>
-                        <button
-                          type="button"
-                          className={cn(
-                            'rounded-2xl border px-4 py-4 text-left transition',
-                            createForm.mode === 'custom' ? 'border-cta bg-cta/10' : 'border-border bg-white hover:bg-muted'
-                          )}
-                          onClick={() => setCreateForm((prev) => ({ ...prev, mode: 'custom' }))}
-                        >
-                          <p className="font-semibold text-sm">Dominio propio</p>
-                          <p className="mt-1 text-xs text-muted-foreground">Para marcas ya publicadas</p>
-                        </button>
-                      </div>
-                      {createForm.mode === 'subdomain' ? (
-                        <div className="flex items-center rounded-xl border border-input bg-background px-3">
-                          <input
-                            value={createForm.subdomain}
-                            onChange={(e) => setCreateForm((prev) => ({ ...prev, subdomain: e.target.value }))}
-                            className="h-11 flex-1 bg-transparent outline-none text-sm"
-                            placeholder="mi-negocio"
-                          />
-                          <span className="text-sm text-muted-foreground">.{domainBase}</span>
+                    {data && data.usage.websites.used >= data.usage.websites.max ? (
+                      <>
+                        <DialogHeader>
+                          <DialogTitle>Has llegado al limite de tu plan</DialogTitle>
+                          <DialogDescription>
+                            Tu plan <strong>{data.plan.name}</strong> incluye {data.usage.websites.max} sitio{data.usage.websites.max === 1 ? '' : 's'}, y ya los estas usando todos.
+                          </DialogDescription>
+                        </DialogHeader>
+                        <div className="space-y-4 py-2">
+                          <div className="rounded-2xl border border-cta/30 bg-cta/5 p-5">
+                            <p className="text-xs font-bold uppercase tracking-widest text-cta-foreground/70">
+                              Sigue creciendo
+                            </p>
+                            <p className="mt-2 text-base font-bold text-foreground leading-snug">
+                              Mejora tu plan y crea mas sitios sin perder nada de lo que ya tienes.
+                            </p>
+                            <ul className="mt-4 space-y-2 text-xs text-muted-foreground">
+                              <li className="flex items-center gap-2">
+                                <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                                Pago prorrateado: solo la diferencia hasta tu renovacion.
+                              </li>
+                              <li className="flex items-center gap-2">
+                                <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                                Tus sitios actuales no se ven afectados.
+                              </li>
+                              <li className="flex items-center gap-2">
+                                <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                                Aumento de almacenamiento, correos y sitios.
+                              </li>
+                            </ul>
+                          </div>
+                          <Button
+                            variant="cta"
+                            className="w-full rounded-xl py-6 text-base font-bold"
+                            onClick={() => {
+                              setCreateOpen(false);
+                              setTab('plan');
+                            }}
+                          >
+                            Ver planes y mejorar
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            className="w-full text-xs text-muted-foreground"
+                            onClick={() => setCreateOpen(false)}
+                          >
+                            Quizas despues
+                          </Button>
                         </div>
-                      ) : (
-                        <Input
-                          value={createForm.domain}
-                          onChange={(e) => setCreateForm((prev) => ({ ...prev, domain: e.target.value }))}
-                          placeholder="midominio.com"
-                        />
-                      )}
-                    </div>
-                    <DialogFooter>
-                      <Button variant="outline" onClick={() => setCreateOpen(false)}>
-                        Cancelar
-                      </Button>
-                      <Button variant="cta" onClick={createSite} disabled={busy}>
-                        {busy ? 'Creando...' : 'Crear sitio'}
-                      </Button>
-                    </DialogFooter>
+                      </>
+                    ) : (
+                      <>
+                        <DialogHeader>
+                          <DialogTitle>Crear nuevo sitio</DialogTitle>
+                          <DialogDescription>Usa un subdominio de PLIA o tu propio dominio.</DialogDescription>
+                        </DialogHeader>
+                        <div className="grid gap-4 py-2">
+                          <Input
+                            value={createForm.name}
+                            onChange={(e) => setCreateForm((prev) => ({ ...prev, name: e.target.value }))}
+                            placeholder="Nombre del sitio"
+                          />
+                          <div className="grid gap-3 md:grid-cols-2">
+                            <button
+                              type="button"
+                              className={cn(
+                                'rounded-2xl border px-4 py-4 text-left transition',
+                                createForm.mode === 'subdomain' ? 'border-cta bg-cta/10' : 'border-border bg-white hover:bg-muted'
+                              )}
+                              onClick={() => setCreateForm((prev) => ({ ...prev, mode: 'subdomain' }))}
+                            >
+                              <p className="font-semibold text-sm">Subdominio PLIA</p>
+                              <p className="mt-1 text-xs text-muted-foreground">Ideal para salir rapido</p>
+                            </button>
+                            <button
+                              type="button"
+                              className={cn(
+                                'rounded-2xl border px-4 py-4 text-left transition',
+                                createForm.mode === 'custom' ? 'border-cta bg-cta/10' : 'border-border bg-white hover:bg-muted'
+                              )}
+                              onClick={() => setCreateForm((prev) => ({ ...prev, mode: 'custom' }))}
+                            >
+                              <p className="font-semibold text-sm">Dominio propio</p>
+                              <p className="mt-1 text-xs text-muted-foreground">Para marcas ya publicadas</p>
+                            </button>
+                          </div>
+                          {createForm.mode === 'subdomain' ? (
+                            <div className="flex items-center rounded-xl border border-input bg-background px-3">
+                              <input
+                                value={createForm.subdomain}
+                                onChange={(e) => setCreateForm((prev) => ({ ...prev, subdomain: e.target.value }))}
+                                className="h-11 flex-1 bg-transparent outline-none text-sm"
+                                placeholder="mi-negocio"
+                              />
+                              <span className="text-sm text-muted-foreground">.{domainBase}</span>
+                            </div>
+                          ) : (
+                            <Input
+                              value={createForm.domain}
+                              onChange={(e) => setCreateForm((prev) => ({ ...prev, domain: e.target.value }))}
+                              placeholder="midominio.com"
+                            />
+                          )}
+                        </div>
+                        <DialogFooter>
+                          <Button variant="outline" onClick={() => setCreateOpen(false)}>
+                            Cancelar
+                          </Button>
+                          <Button variant="cta" onClick={createSite} disabled={busy}>
+                            {busy ? 'Creando...' : 'Crear sitio'}
+                          </Button>
+                        </DialogFooter>
+                      </>
+                    )}
                   </DialogContent>
                 </Dialog>
               )}
@@ -742,6 +822,143 @@ export default function HostingDashboardPage() {
                   Entendido
                 </Button>
               </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={!!backupsSite} onOpenChange={(open) => !open && setBackupsSite(null)}>
+            <DialogContent className="rounded-[28px] max-w-lg">
+              <DialogHeader>
+                <DialogTitle>Backups de {backupsSite?.domain}</DialogTitle>
+                <DialogDescription>
+                  Tu plan permite crear copias de seguridad manualmente desde el panel tecnico.
+                </DialogDescription>
+              </DialogHeader>
+              {backupsSite && data && (
+                <div className="space-y-4 py-2">
+                  <div className="rounded-2xl border border-border bg-muted/30 p-4 space-y-3">
+                    <p className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground">
+                      Paso 1 · Tus credenciales del panel
+                    </p>
+                    <div>
+                      <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Usuario</p>
+                      <div className="mt-1 flex items-center justify-between gap-2">
+                        <p className="text-sm font-mono font-semibold text-foreground">
+                          {data.account.technicalAccess.username || 'admin'}
+                        </p>
+                        <button
+                          type="button"
+                          className="text-xs text-cta-foreground hover:underline flex items-center gap-1"
+                          onClick={() => {
+                            navigator.clipboard.writeText(
+                              data.account.technicalAccess.username || 'admin',
+                            );
+                            setBackupsCopied('user');
+                            setTimeout(() => setBackupsCopied(null), 1500);
+                          }}
+                        >
+                          {backupsCopied === 'user' ? (
+                            <><Check className="h-3 w-3" /> Copiado</>
+                          ) : (
+                            <><Copy className="h-3 w-3" /> Copiar</>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Contrasena</p>
+                      <div className="mt-1 flex items-center justify-between gap-2">
+                        <p className="text-sm font-mono font-semibold text-foreground">
+                          {backupsShowPass
+                            ? data.account.technicalAccess.password || '••••••••'
+                            : '••••••••••••'}
+                        </p>
+                        <div className="flex items-center gap-3">
+                          <button
+                            type="button"
+                            className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
+                            onClick={() => setBackupsShowPass((v) => !v)}
+                          >
+                            {backupsShowPass ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                            {backupsShowPass ? 'Ocultar' : 'Mostrar'}
+                          </button>
+                          <button
+                            type="button"
+                            className="text-xs text-cta-foreground hover:underline flex items-center gap-1"
+                            onClick={() => {
+                              if (data.account.technicalAccess.password) {
+                                navigator.clipboard.writeText(data.account.technicalAccess.password);
+                                setBackupsCopied('pass');
+                                setTimeout(() => setBackupsCopied(null), 1500);
+                              }
+                            }}
+                          >
+                            {backupsCopied === 'pass' ? (
+                              <><Check className="h-3 w-3" /> Copiado</>
+                            ) : (
+                              <><Copy className="h-3 w-3" /> Copiar</>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                    <Button
+                      variant="cta"
+                      className="w-full rounded-xl"
+                      onClick={() => {
+                        window.open(
+                          data.account.technicalAccess.panelUrl || 'https://142.171.227.112:8090/',
+                          '_blank',
+                          'noopener,noreferrer',
+                        );
+                      }}
+                    >
+                      <ExternalLink className="h-4 w-4 mr-2" /> Abrir CyberPanel
+                    </Button>
+                  </div>
+
+                  <div className="rounded-2xl border border-border bg-white p-4">
+                    <p className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground">
+                      Paso 2 · Crea tu backup
+                    </p>
+                    <ol className="mt-3 space-y-2 text-sm text-foreground">
+                      <li className="flex gap-2">
+                        <span className="font-bold text-cta-foreground">1.</span>
+                        Una vez dentro, en el menu lateral ve a <strong>Backup → Create Backup</strong>.
+                      </li>
+                      <li className="flex gap-2">
+                        <span className="font-bold text-cta-foreground">2.</span>
+                        Selecciona <strong>{backupsSite.domain}</strong> y haz clic en <strong>Create Backup</strong>.
+                      </li>
+                      <li className="flex gap-2">
+                        <span className="font-bold text-cta-foreground">3.</span>
+                        Cuando termine, podras descargar el archivo <code className="text-xs bg-muted px-1.5 py-0.5 rounded">.tar.gz</code> con todo tu sitio.
+                      </li>
+                    </ol>
+                  </div>
+
+                  {!(data.plan.slug || '').toLowerCase().includes('agencia') && (
+                    <div className="rounded-2xl bg-cta/5 border border-cta/20 p-4">
+                      <p className="text-xs font-bold text-foreground">
+                        ¿Quieres backups automaticos sin tocar nada?
+                      </p>
+                      <p className="mt-1 text-[11px] text-muted-foreground">
+                        El plan <strong>Agencia</strong> los crea cada mes automaticamente y te permite restaurar tu sitio con un solo clic.
+                      </p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="mt-3 rounded-lg text-xs"
+                        onClick={() => {
+                          setBackupsSite(null);
+                          setTab('plan');
+                        }}
+                      >
+                        Ver plan Agencia
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
             </DialogContent>
           </Dialog>
 
@@ -865,13 +1082,24 @@ export default function HostingDashboardPage() {
                                   </div>
                                   <p className="text-xs text-muted-foreground">{site.name}</p>
                                 </div>
-                                <button
-                                  type="button"
-                                  className="flex h-9 w-9 items-center justify-center rounded-full border border-border text-muted-foreground hover:bg-muted transition-colors"
-                                  onClick={() => setManageSiteId(site.id)}
-                                >
-                                  <Upload className="h-4 w-4" />
-                                </button>
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    title="Backups"
+                                    className="flex h-9 w-9 items-center justify-center rounded-full border border-border text-muted-foreground hover:bg-muted transition-colors"
+                                    onClick={() => setBackupsSite({ id: site.id, domain: site.domain })}
+                                  >
+                                    <HardDriveDownload className="h-4 w-4" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    title="Subir archivos"
+                                    className="flex h-9 w-9 items-center justify-center rounded-full border border-border text-muted-foreground hover:bg-muted transition-colors"
+                                    onClick={() => setManageSiteId(site.id)}
+                                  >
+                                    <Upload className="h-4 w-4" />
+                                  </button>
+                                </div>
                               </div>
 
                               <div className="mt-6 flex items-center justify-between text-[11px]">
@@ -882,6 +1110,22 @@ export default function HostingDashboardPage() {
                                 </div>
                                 <span className="text-muted-foreground">Creado {site.createdAgo}</span>
                               </div>
+                              {!sslActive && (
+                                <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50/60 px-3 py-2 flex items-center justify-between">
+                                  <p className="text-[11px] text-amber-800 leading-tight">
+                                    Tu sitio aun no tiene candado seguro (HTTPS).
+                                  </p>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-7 rounded-lg text-[11px] border-amber-300 hover:bg-amber-100"
+                                    disabled={renewSslId === site.id}
+                                    onClick={() => renewSSL(site.id)}
+                                  >
+                                    {renewSslId === site.id ? 'Emitiendo...' : 'Renovar SSL'}
+                                  </Button>
+                                </div>
+                              )}
                             </div>
                             <div className="bg-muted/30 px-5 py-3 border-t border-border flex items-center justify-between">
                               <Button variant="link" className="h-auto p-0 text-cta text-xs font-bold" asChild>
