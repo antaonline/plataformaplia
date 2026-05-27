@@ -1133,10 +1133,13 @@ export class CyberpanelService {
       );
     }
 
+    // CyberPanel renombra password->passwordByPass en /email/submitEmailCreation
+    // (al igual que en installWordpress). Mandamos ambos por compatibilidad.
     const body: Record<string, any> = {
       domain: params.domain,
       username: localPart,
       password: params.password,
+      passwordByPass: params.password,
     };
 
     const path =
