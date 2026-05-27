@@ -1796,7 +1796,7 @@ export class HostingService {
         {
           type: 'TXT',
           name: '_dmarc',
-          value: 'v=DMARC1; p=none; rua=mailto:postmaster@plia.pe',
+          value: `v=DMARC1; p=none; rua=mailto:postmaster@${site.domain}`,
         },
       ],
     };
