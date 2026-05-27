@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { addMonths, formatDistanceToNowStrict } from 'date-fns';
 import { HostingAccount, HostingAccountStatus, HostedSiteType, PlanServiceType, Prisma } from '@prisma/client';
+import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import { dirname, join, resolve, sep } from 'path';
 
@@ -634,6 +635,15 @@ export class HostingService {
         account = await this.getAccountOrThrow(userId);
       }
     }
+
+    // Refrescar storage real, estado SSL y app type leyendo el filesystem,
+    // para que las tarjetas del dashboard reflejen la realidad y no los
+    // valores congelados con que se importo cada sitio.
+    for (const site of account.sites) {
+      await this.refreshHostedSiteMetrics(site as any);
+    }
+    account = await this.getAccountOrThrow(userId);
+
     return this.buildDashboardPayload(account);
   }
 
@@ -742,22 +752,120 @@ export class HostingService {
       return 0;
     }
 
-    let totalBytes = 0;
-    const queue = [rootPath];
-
-    while (queue.length > 0) {
-      const current = queue.pop()!;
-      for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
-        const fullPath = join(current, entry.name);
-        if (entry.isDirectory()) {
-          queue.push(fullPath);
-        } else {
-          totalBytes += fs.statSync(fullPath).size;
-        }
+    // Preferimos `du -sb` (Linux) por velocidad: un solo proceso recorre
+    // todo, en vez de cientos de stat() desde Node (lento en WordPress).
+    try {
+      const out = execFileSync('du', ['-sb', rootPath], {
+        encoding: 'utf8',
+        timeout: 15000,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      const bytes = parseInt((out || '').split(/\s+/)[0], 10);
+      if (Number.isFinite(bytes)) {
+        return Math.max(0, Math.round(bytes / (1024 * 1024)));
       }
+    } catch {
+      // Caemos al fallback con fs.
     }
 
-    return Math.max(1, Math.ceil(totalBytes / (1024 * 1024)));
+    let totalBytes = 0;
+    const queue = [rootPath];
+    while (queue.length > 0) {
+      const current = queue.pop()!;
+      try {
+        for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+          const fullPath = join(current, entry.name);
+          if (entry.isDirectory()) {
+            queue.push(fullPath);
+          } else {
+            try {
+              totalBytes += fs.statSync(fullPath).size;
+            } catch {
+              /* archivo eliminado entre readdir y stat, ignore */
+            }
+          }
+        }
+      } catch {
+        /* permiso denegado o dir desaparecio, ignore */
+      }
+    }
+    return Math.max(0, Math.round(totalBytes / (1024 * 1024)));
+  }
+
+  private isSslActiveForDomain(domain: string): boolean {
+    // CyberPanel emite certificados Let's Encrypt aqui:
+    const candidates = [
+      `/etc/letsencrypt/live/${domain}/fullchain.pem`,
+      `/etc/letsencrypt/live/${domain}-0001/fullchain.pem`,
+    ];
+    return candidates.some((p) => {
+      try {
+        return fs.existsSync(p);
+      } catch {
+        return false;
+      }
+    });
+  }
+
+  private detectAppTypeForRoot(rootPath: string): 'EMPTY' | 'STATIC_UPLOAD' | 'WORDPRESS' {
+    try {
+      if (!fs.existsSync(rootPath)) return 'EMPTY';
+      // WordPress: wp-config.php o wp-config-sample.php + wp-includes/
+      if (
+        fs.existsSync(join(rootPath, 'wp-config.php')) ||
+        fs.existsSync(join(rootPath, 'wp-includes'))
+      ) {
+        return 'WORDPRESS';
+      }
+      const entries = fs.readdirSync(rootPath).filter((n) => !n.startsWith('.'));
+      if (!entries.length) return 'EMPTY';
+      // Si solo esta el placeholder de CyberPanel (index.html generico) lo
+      // tratamos igual como STATIC_UPLOAD; cualquier archivo "real" cuenta.
+      const meaningful = entries.filter(
+        (n) => !['logs', 'tmp', 'errors_logs'].includes(n.toLowerCase()),
+      );
+      return meaningful.length ? 'STATIC_UPLOAD' : 'EMPTY';
+    } catch {
+      return 'EMPTY';
+    }
+  }
+
+  private async refreshHostedSiteMetrics(site: {
+    id: number;
+    domain: string;
+    rootPath: string;
+    storageUsedMb: number;
+    sslStatus: string;
+    appType: string;
+    siteType: HostedSiteType;
+  }) {
+    try {
+      const storageUsedMb = this.computeDirectorySizeMb(site.rootPath);
+      const sslActive = this.isSslActiveForDomain(site.domain);
+      const sslStatus: 'ACTIVE' | 'PENDING' = sslActive ? 'ACTIVE' : 'PENDING';
+      const appType = this.detectAppTypeForRoot(site.rootPath);
+
+      if (
+        site.storageUsedMb === storageUsedMb &&
+        site.sslStatus === sslStatus &&
+        site.appType === appType
+      ) {
+        return; // nada que actualizar
+      }
+
+      await this.prisma.hostedSite.update({
+        where: { id: site.id },
+        data: {
+          storageUsedMb,
+          sslStatus,
+          appType,
+        },
+      });
+    } catch (error: any) {
+      this.logger.warn(
+        `refreshHostedSiteMetrics fallo para site=${site.domain}: ${error?.message || error}`,
+      );
+    }
   }
 
   private normalizeUploadPaths(relativePaths: string[]) {
