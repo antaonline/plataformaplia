@@ -641,8 +641,14 @@ export class HostingService {
     account: Awaited<ReturnType<HostingService['getAccountOrThrow']>>,
   ): Promise<number> {
     try {
+      this.logger.log(
+        `syncCyberpanelOwnedSites: buscando sitios para userId=${account.userId} cyberpanelUsername=${account.cyberpanelUsername} sitiosYaTracked=${account.sites.length}`,
+      );
       const remoteSites = await this.cyberpanelService.listSitesForOwner(
         account.cyberpanelUsername,
+      );
+      this.logger.log(
+        `syncCyberpanelOwnedSites: remoteSites=${remoteSites.length} dominios=[${remoteSites.map((s) => s.domain).join(',')}]`,
       );
       if (!remoteSites.length) return 0;
 

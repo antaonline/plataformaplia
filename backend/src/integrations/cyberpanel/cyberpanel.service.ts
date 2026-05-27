@@ -906,64 +906,131 @@ export class CyberpanelService {
       return [];
     }
 
-    const url = `${this.baseUrl}/websites/fetchWebsites`;
-    try {
-      const res = await axios.post(
-        url,
-        { page: 1, recordsToShow: 1000 },
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            Cookie: authContext.cookie,
-            'X-CSRFToken': authContext.csrfToken || '',
-            Referer: `${this.baseUrl}/`,
-          },
+    // Probamos varios endpoints porque cambian entre versiones de CyberPanel:
+    //  - /websites/fetchWebsites (interno, requiere session)
+    //  - /websites/fetchWebsitesPagination (interno paginado)
+    //  - /api/fetchWebsites (CloudAPI con basic auth)
+    const candidates: Array<{ url: string; body: Record<string, any>; useCookie: boolean }> = [
+      {
+        url: `${this.baseUrl}/websites/fetchWebsites`,
+        body: { page: 1, recordsToShow: 1000 },
+        useCookie: true,
+      },
+      {
+        url: `${this.baseUrl}/websites/fetchWebsitesPagination`,
+        body: { page: 1, recordsToShow: 1000 },
+        useCookie: true,
+      },
+      {
+        url: `${this.baseUrl}/api/fetchWebsites`,
+        body: (() => {
+          const b: Record<string, any> = { page: 1, recordsToShow: 1000 };
+          if (process.env.CYBERPANEL_ADMIN_USER && process.env.CYBERPANEL_ADMIN_PASS) {
+            b.adminUser = process.env.CYBERPANEL_ADMIN_USER;
+            b.adminPass = process.env.CYBERPANEL_ADMIN_PASS;
+          }
+          return b;
+        })(),
+        useCookie: false,
+      },
+    ];
+
+    for (const candidate of candidates) {
+      try {
+        const reqHeaders: Record<string, string> = { ...this.headers };
+        if (candidate.useCookie) {
+          reqHeaders['Cookie'] = authContext.cookie;
+          if (authContext.csrfToken) {
+            reqHeaders['X-CSRFToken'] = authContext.csrfToken;
+            reqHeaders['Referer'] = `${this.baseUrl}/`;
+          }
+        }
+
+        const res = await axios.post(candidate.url, candidate.body, {
+          headers: reqHeaders,
           httpsAgent: this.httpsAgent,
           timeout: 30000,
-        },
-      );
+        });
 
-      // fetchWebsites a veces devuelve la lista como `data` (array), otras
-      // veces como string JSON dentro de `data`. Cubrimos ambos casos.
-      let payload: any = res.data;
-      if (typeof payload === 'string') {
-        try {
-          payload = JSON.parse(payload);
-        } catch {
-          this.logger.warn(
-            `listSitesForOwner(${ownerUsername}): respuesta no parseable de ${url}`,
+        let payload: any = res.data;
+        const preview =
+          typeof payload === 'string'
+            ? payload.slice(0, 300)
+            : JSON.stringify(payload || {}).slice(0, 300);
+        this.logger.log(
+          `listSitesForOwner(${ownerUsername}) <- ${candidate.url} status=${res.status} bodyPreview=${preview}`,
+        );
+
+        if (typeof payload === 'string') {
+          try {
+            payload = JSON.parse(payload);
+          } catch {
+            continue;
+          }
+        }
+
+        let rows: any =
+          payload?.data ??
+          payload?.websites ??
+          payload?.websiteList ??
+          payload?.records ??
+          [];
+        if (typeof rows === 'string') {
+          try {
+            rows = JSON.parse(rows);
+          } catch {
+            rows = [];
+          }
+        }
+        if (!Array.isArray(rows) || rows.length === 0) {
+          this.logger.log(
+            `listSitesForOwner(${ownerUsername}): ${candidate.url} sin sitios, probando siguiente endpoint`,
           );
-          return [];
+          continue;
         }
-      }
 
-      let rows: any = payload?.data ?? payload?.websites ?? [];
-      if (typeof rows === 'string') {
-        try {
-          rows = JSON.parse(rows);
-        } catch {
-          rows = [];
-        }
-      }
-      if (!Array.isArray(rows)) {
-        return [];
-      }
+        const sampleKeys = Object.keys(rows[0] || {}).join(',');
+        const allOwners = Array.from(
+          new Set(
+            rows
+              .map((r: any) => r?.admin || r?.adminUser || r?.owner || r?.websiteOwner)
+              .filter(Boolean),
+          ),
+        );
+        this.logger.log(
+          `listSitesForOwner(${ownerUsername}): ${rows.length} total sitios, owners=[${allOwners.join('|')}], sampleKeys=${sampleKeys}`,
+        );
 
-      return rows
-        .filter((row: any) => row && typeof row === 'object')
-        .map((row: any) => ({
-          domain: (row.domain || row.domainName || '').trim(),
-          admin: (row.admin || row.adminUser || row.owner || '').trim(),
-          adminEmail: row.adminEmail || row.email || undefined,
-          state: row.state || row.status || undefined,
-        }))
-        .filter((row) => row.domain && row.admin === ownerUsername);
-    } catch (error: any) {
-      this.logger.warn(
-        `listSitesForOwner(${ownerUsername}) fallo en ${url}: ${error?.message || error}`,
-      );
-      return [];
+        const matched = rows
+          .filter((row: any) => row && typeof row === 'object')
+          .map((row: any) => ({
+            domain: (row.domain || row.domainName || '').toString().trim(),
+            admin: (row.admin || row.adminUser || row.owner || row.websiteOwner || '')
+              .toString()
+              .trim(),
+            adminEmail: row.adminEmail || row.email || undefined,
+            state: row.state || row.status || undefined,
+          }))
+          .filter((row) => row.domain && row.admin === ownerUsername);
+
+        this.logger.log(
+          `listSitesForOwner(${ownerUsername}): matched=${matched.length} dominios=[${matched.map((m) => m.domain).join(',')}]`,
+        );
+
+        return matched;
+      } catch (error: any) {
+        const status = error?.response?.status;
+        this.logger.warn(
+          `listSitesForOwner(${ownerUsername}) ${candidate.url} fallo status=${status}: ${error?.message || error}`,
+        );
+        // siguiente candidato
+      }
     }
+
+    this.logger.warn(
+      `listSitesForOwner(${ownerUsername}): ningun endpoint devolvio sitios`,
+    );
+    return [];
   }
 
   async changePackage(username: string, packageName: string) {
