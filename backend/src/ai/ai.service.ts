@@ -284,13 +284,123 @@ export class AiService {
     }
   }
 
+  /**
+   * Heuristica: ¿este prompt es de diseno grafico (mejor con IA) o de un
+   * sujeto fotografiable (mejor con Pexels)? Pexels solo sirve para fotos
+   * reales — para logos, iconos, ilustraciones o patrones abstractos
+   * Pexels no devuelve nada utilizable.
+   */
+  private promptIsGraphicDesign(prompt: string): boolean {
+    const p = (prompt || '').toLowerCase();
+    return /\b(logo|icon|symbol|illustration|illustrated|vector|graphic|pattern|abstract|render|3d render|minimalist design|infographic|mockup|wireframe)\b/.test(
+      p,
+    );
+  }
+
+  /**
+   * Busca en Pexels una foto relevante para este prompt. Devuelve el buffer
+   * de la imagen ya descargada (lista para optimizar a WebP igual que las
+   * de IA) o null si no encuentra match utilizable.
+   */
+  private async tryPexelsForPrompt(
+    prompt: { id: string; prompt: string; usage: string },
+  ): Promise<{ buffer: Buffer; sourceUrl: string } | null> {
+    const apiKey = process.env.PEXELS_API_KEY;
+    if (!apiKey) return null;
+    if (process.env.AI_USE_PEXELS_FIRST === 'false') return null;
+    if (this.promptIsGraphicDesign(prompt.prompt)) return null;
+
+    // Pexels indexa en ingles. El prompt ya viene en ingles desde plan().
+    // Reducimos a las 4-6 palabras clave principales para evitar 0 resultados.
+    const keywords = prompt.prompt
+      .replace(/[^\w\s-]/g, ' ')
+      .split(/\s+/)
+      .filter(Boolean)
+      .filter(
+        (w) =>
+          !/^(a|an|the|of|with|in|for|on|to|and|or|by|at|from)$/i.test(w),
+      )
+      .slice(0, 6)
+      .join(' ');
+    if (!keywords) return null;
+
+    try {
+      const res = await axios.get('https://api.pexels.com/v1/search', {
+        params: { query: keywords, per_page: 10, orientation: 'landscape' },
+        headers: { Authorization: apiKey },
+        timeout: 12000,
+      });
+      const photos: any[] = Array.isArray(res.data?.photos) ? res.data.photos : [];
+      if (photos.length < 3) {
+        this.logger.log(
+          `Pexels: pocos resultados (${photos.length}) para "${keywords}". Usaremos IA para id=${prompt.id}.`,
+        );
+        return null;
+      }
+      // Variamos la seleccion para que el mismo prompt en otro slot no traiga
+      // siempre la misma foto.
+      const picked = photos[Math.floor(Math.random() * Math.min(photos.length, 5))];
+      const downloadUrl: string =
+        picked?.src?.large2x ||
+        picked?.src?.large ||
+        picked?.src?.original ||
+        picked?.src?.medium;
+      if (!downloadUrl) return null;
+      const dl = await axios.get<ArrayBuffer>(downloadUrl, {
+        responseType: 'arraybuffer',
+        timeout: 30000,
+      });
+      this.logger.log(
+        `Pexels HIT id=${prompt.id} usage=${prompt.usage} kws="${keywords}" photo=${picked?.id}`,
+      );
+      return {
+        buffer: Buffer.from(dl.data),
+        sourceUrl: downloadUrl,
+      };
+    } catch (e: any) {
+      this.logger.warn(
+        `Pexels fallo para "${keywords}": ${e?.response?.status || e?.message || e}`,
+      );
+      return null;
+    }
+  }
+
+  /**
+   * Reescribe URLs de uploads guardadas con el host del frontend (plia.pe)
+   * al host del backend (api.plia.pe) donde realmente vive /uploads/. Esto
+   * arregla proyectos creados ANTES del fix del controller — sus imagenes
+   * en onboardingData.images apuntan a plia.pe/uploads que devuelve 404.
+   */
+  private normalizeUploadUrl(url: string): string {
+    if (!url || typeof url !== 'string') return url;
+    const apiBase =
+      (process.env.API_PUBLIC_URL || process.env.PREVIEW_PROXY_BASE || '').replace(/\/$/, '');
+    const appUrl = (process.env.APP_URL || '').replace(/\/$/, '');
+    if (apiBase && appUrl && apiBase !== appUrl && url.startsWith(`${appUrl}/uploads/`)) {
+      return url.replace(`${appUrl}/uploads/`, `${apiBase}/uploads/`);
+    }
+    return url;
+  }
+
   private async generateImages(prompts: Array<{ id: string; prompt: string; usage: string }>, plan: PlanType, mode: AiMode) {
     const limit = this.getImageLimit(plan, mode);
     const selected = prompts.slice(0, limit);
-    const images: Array<{ id: string; url: string; usage: string }> = [];
+    const images: Array<{ id: string; url: string; usage: string; source?: 'ai' | 'pexels' }> = [];
 
     const isGptImage = /^gpt-image/i.test(this.env.imageModel);
     for (const prompt of selected) {
+      // 1) Pexels primero: gratis, rapido, real. Solo si no es graphic-design.
+      const pex = await this.tryPexelsForPrompt(prompt);
+      if (pex) {
+        images.push({
+          id: prompt.id,
+          url: pex.buffer.toString('base64'),
+          usage: prompt.usage,
+          source: 'pexels',
+        });
+        continue;
+      }
+      // 2) Fallback: generar con IA.
       try {
         const url = `${this.env.baseUrl}/images/generations`;
         // Payload condicional: gpt-image-1 (actual) NO acepta response_format
@@ -319,7 +429,12 @@ export class AiService {
           continue;
         }
         const buffer = Buffer.from(b64, 'base64');
-        images.push({ id: prompt.id, url: buffer.toString('base64'), usage: prompt.usage });
+        images.push({
+          id: prompt.id,
+          url: buffer.toString('base64'),
+          usage: prompt.usage,
+          source: 'ai',
+        });
       } catch (error: any) {
         // Detalle completo del error para diagnosticar (HTTP status, body de
         // OpenAI con la causa real: key invalida, sin creditos, content
@@ -866,15 +981,17 @@ export class AiService {
     const planType = project.type as PlanType;
     const brief = this.buildUserPrompt(onboarding, planType);
     const clientImages: string[] = Array.isArray(onboarding.images)
-      ? onboarding.images.filter((x: any) => typeof x === 'string')
+      ? onboarding.images
+          .filter((x: any) => typeof x === 'string')
+          .map((u: string) => this.normalizeUploadUrl(u))
       : [];
     const clientLogo: string | undefined =
       typeof onboarding.logoUrl === 'string' && onboarding.logoUrl
-        ? onboarding.logoUrl
+        ? this.normalizeUploadUrl(onboarding.logoUrl)
         : undefined;
 
     this.logger.log(
-      `AI(claude-edit) start project=${projectId} pages=${htmlFiles.join(',')} note="${revisionNote.slice(0, 80)}"`,
+      `AI(claude-edit) start project=${projectId} pages=${htmlFiles.join(',')} note="${revisionNote.slice(0, 80)}" clientImages=${clientImages.length} hasLogo=${!!clientLogo}`,
     );
 
     let editedPages: Record<string, string>;
@@ -1008,18 +1125,25 @@ export class AiService {
         ? `${baseBrief}\n\n=== AJUSTE SOLICITADO POR EL CLIENTE (PRIORITARIO) ===\n${revisionNote!.trim()}\n\nAplica este cambio especifico SIN romper el resto del sitio. Mantén la misma paleta, tipografía y estructura general, solo modifica lo que el cliente está pidiendo.`
         : baseBrief;
       const clientImages: string[] = Array.isArray(onboarding.images)
-        ? onboarding.images.filter((x: any) => typeof x === 'string')
+        ? onboarding.images
+            .filter((x: any) => typeof x === 'string')
+            .map((u: string) => this.normalizeUploadUrl(u))
         : [];
       // El logo del cliente se pasa como recurso aparte para que la IA
       // lo identifique explicitamente y lo coloque en header/footer.
       const clientLogo: string | undefined =
         typeof onboarding.logoUrl === 'string' && onboarding.logoUrl
-          ? onboarding.logoUrl
+          ? this.normalizeUploadUrl(onboarding.logoUrl)
           : undefined;
       const currentDomain = onboarding?.publicDomain || null;
       this.logger.log(
-        `AI(claude-static) start project=${projectId} mode=${mode} domain=${currentDomain ?? 'preview-only'}`,
+        `AI(claude-static) start project=${projectId} mode=${mode} domain=${currentDomain ?? 'preview-only'} clientImages=${clientImages.length} hasLogo=${!!clientLogo}`,
       );
+      if (clientImages.length) {
+        this.logger.log(
+          `AI(claude-static) clientImageUrls: ${clientImages.slice(0, 3).join(' | ')}${clientImages.length > 3 ? ' ...' : ''}`,
+        );
+      }
 
       // 1. Plan (Claude ve las imagenes del cliente, multimodal).
       const sitePlan = await this.websiteGen.plan(brief, mode, clientImages, clientLogo);

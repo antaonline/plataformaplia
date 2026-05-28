@@ -135,7 +135,13 @@ export class ProjectsController {
       throw new BadRequestException('No se recibio ningun archivo.');
     }
 
+    // URL del BACKEND (donde /uploads/ realmente vive y se sirve). En produccion
+    // el frontend (APP_URL) NO sirve /uploads/ — eso lo expone el backend bajo
+    // PREVIEW_PROXY_BASE. Usar APP_URL aqui generaba URLs rotas (404), por lo
+    // que Claude no podia descargar las imagenes del cliente al regenerar.
     const appUrl =
+      (process.env.API_PUBLIC_URL && process.env.API_PUBLIC_URL.replace(/\/$/, '')) ||
+      (process.env.PREVIEW_PROXY_BASE && process.env.PREVIEW_PROXY_BASE.replace(/\/$/, '')) ||
       (process.env.APP_URL && process.env.APP_URL.replace(/\/$/, '')) ||
       `${req.protocol}://${req.get('host')}`;
 
@@ -178,7 +184,13 @@ export class ProjectsController {
       throw new BadRequestException('No se recibieron imagenes.');
     }
 
+    // URL del BACKEND (donde /uploads/ realmente vive y se sirve). En produccion
+    // el frontend (APP_URL) NO sirve /uploads/ — eso lo expone el backend bajo
+    // PREVIEW_PROXY_BASE. Usar APP_URL aqui generaba URLs rotas (404), por lo
+    // que Claude no podia descargar las imagenes del cliente al regenerar.
     const appUrl =
+      (process.env.API_PUBLIC_URL && process.env.API_PUBLIC_URL.replace(/\/$/, '')) ||
+      (process.env.PREVIEW_PROXY_BASE && process.env.PREVIEW_PROXY_BASE.replace(/\/$/, '')) ||
       (process.env.APP_URL && process.env.APP_URL.replace(/\/$/, '')) ||
       `${req.protocol}://${req.get('host')}`;
 
@@ -227,7 +239,13 @@ export class ProjectsController {
       throw new BadRequestException('Debes indicar el campo del documento.');
     }
 
+    // URL del BACKEND (donde /uploads/ realmente vive y se sirve). En produccion
+    // el frontend (APP_URL) NO sirve /uploads/ — eso lo expone el backend bajo
+    // PREVIEW_PROXY_BASE. Usar APP_URL aqui generaba URLs rotas (404), por lo
+    // que Claude no podia descargar las imagenes del cliente al regenerar.
     const appUrl =
+      (process.env.API_PUBLIC_URL && process.env.API_PUBLIC_URL.replace(/\/$/, '')) ||
+      (process.env.PREVIEW_PROXY_BASE && process.env.PREVIEW_PROXY_BASE.replace(/\/$/, '')) ||
       (process.env.APP_URL && process.env.APP_URL.replace(/\/$/, '')) ||
       `${req.protocol}://${req.get('host')}`;
 
