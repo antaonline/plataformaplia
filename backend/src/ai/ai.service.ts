@@ -995,7 +995,15 @@ export class AiService {
     );
 
     const apiBaseEdit = (process.env.PREVIEW_PROXY_BASE || 'http://localhost:3002').replace(/\/$/, '');
-    const formEndpointEdit = `${apiBaseEdit}/api/site-contact/${projectId}`;
+    const baseDomainEdit = (process.env.CYBERPANEL_DOMAIN_BASE || 'plia.pe').toLowerCase();
+    const domainEdit = (onboarding?.publicDomain || '').toLowerCase();
+    // Dominio propio -> form local PHP (autosuficiente).
+    // Subdominio .plia.pe -> form central api.plia.pe (como hoy).
+    const isCustomDomainEdit =
+      domainEdit && !domainEdit.endsWith(`.${baseDomainEdit}`) && domainEdit !== baseDomainEdit;
+    const formEndpointEdit = isCustomDomainEdit
+      ? '/_plia/contact.php'
+      : `${apiBaseEdit}/api/site-contact/${projectId}`;
     let editedPages: Record<string, string>;
     try {
       editedPages = await this.websiteGen.editPages(
@@ -1168,10 +1176,19 @@ export class AiService {
       });
 
       // 3. Render de paginas HTML estaticas (Tailwind CDN).
-      // Endpoint propio para los formularios de contacto generados por la IA.
-      // Reemplaza la dependencia de formsubmit.co u otros servicios externos.
+      // Endpoint del form de contacto:
+      //  - Dominio propio -> "/_plia/contact.php" (autosuficiente, PHP local
+      //    se deploya al publicar; mejor portabilidad si el cliente migra).
+      //  - Subdominio .plia.pe -> "https://api.plia.pe/api/site-contact/<id>"
+      //    (el sitio ya depende de PLIA en todo, asi que centralizado).
       const apiBase = (process.env.PREVIEW_PROXY_BASE || 'http://localhost:3002').replace(/\/$/, '');
-      const formEndpoint = `${apiBase}/api/site-contact/${projectId}`;
+      const baseDomain = (process.env.CYBERPANEL_DOMAIN_BASE || 'plia.pe').toLowerCase();
+      const domainForForm = (onboarding?.publicDomain || '').toLowerCase();
+      const isCustomDomain =
+        domainForForm && !domainForForm.endsWith(`.${baseDomain}`) && domainForForm !== baseDomain;
+      const formEndpoint = isCustomDomain
+        ? '/_plia/contact.php'
+        : `${apiBase}/api/site-contact/${projectId}`;
 
       const filesMap = await this.websiteGen.renderAll(
         sitePlan,

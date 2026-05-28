@@ -6,6 +6,7 @@ import { Prisma } from '@prisma/client';
 import { addDays, addHours } from 'date-fns';
 import { AiService } from '../ai/ai.service';
 import { enforceContactForms } from '../ai/contact-form-enforcer';
+import { buildLocalContactPhp, isCustomDomain } from '../ai/local-contact-php';
 import { CyberpanelService } from '../integrations/cyberpanel/cyberpanel.service';
 import { MailService } from '../mail/mail.service';
 import * as fs from 'fs';
@@ -771,6 +772,11 @@ var timer = setInterval(tick,1000);
         // + limpiar uploads/ para que el cliente tenga TODO en su hosting
         // y nuestro servidor no duplique el almacenamiento.
         this.migrateAssetsToHosting(id, targetDir);
+
+        // Si el sitio tiene DOMINIO PROPIO, depositar el handler PHP local
+        // para que el formulario sea 100% autosuficiente (form action ya
+        // viene apuntando a /_plia/contact.php desde la generacion).
+        this.deployLocalContactPhpIfCustomDomain(project, targetDir, currentData);
       } catch (err: any) {
         this.logger.error(`Error al copiar archivos a public_html para proyecto ${id}: ${err.message}`);
         throw new Error(`Fallo la copia fisica de archivos: ${err.message}`);
@@ -803,6 +809,62 @@ var timer = setInterval(tick,1000);
   }
 
   /**
+   * Deposita el handler PHP local de contacto en `<public_html>/_plia/contact.php`
+   * cuando el sitio tiene dominio propio. Para subdominios .plia.pe no hace
+   * nada porque esos siguen usando el endpoint central api.plia.pe.
+   */
+  private deployLocalContactPhpIfCustomDomain(
+    project: any,
+    targetDir: string,
+    onboarding: any,
+  ) {
+    try {
+      const domain = (onboarding?.publicDomain || '').toLowerCase();
+      const baseDomain = (process.env.CYBERPANEL_DOMAIN_BASE || 'plia.pe').toLowerCase();
+      if (!domain) return;
+      if (!isCustomDomain(domain, baseDomain)) return;
+
+      const recipientEmail =
+        onboarding?.contactEmail || project?.user?.email || '';
+      if (!recipientEmail) {
+        this.logger.warn(
+          `deployLocalContactPhp: sin recipientEmail para project=${project.id} domain=${domain}; salto`,
+        );
+        return;
+      }
+
+      const businessName = onboarding?.businessName || project?.name || domain;
+      const sourceUrl = onboarding?.publicUrl || `https://${domain}`;
+
+      const phpContent = buildLocalContactPhp({
+        recipientEmail,
+        businessName,
+        senderDomain: domain,
+        sourceUrl,
+      });
+
+      const dir = join(targetDir, '_plia');
+      fs.mkdirSync(dir, { recursive: true });
+      const filePath = join(dir, 'contact.php');
+      fs.writeFileSync(filePath, phpContent, 'utf-8');
+
+      // .htaccess para reforzar que el directorio no liste contenido y
+      // bloquear acceso a archivos potencialmente sensibles. Apache/LiteSpeed
+      // ambos lo respetan en CyberPanel.
+      const htaccess = `Options -Indexes\n<Files ~ "^\\.">\n  Require all denied\n</Files>\n`;
+      fs.writeFileSync(join(dir, '.htaccess'), htaccess, 'utf-8');
+
+      this.logger.log(
+        `deployLocalContactPhp: escrito ${filePath} para domain=${domain} recipient=${recipientEmail}`,
+      );
+    } catch (err: any) {
+      this.logger.warn(
+        `deployLocalContactPhp fallo para project=${project?.id}: ${err?.message || err}`,
+      );
+    }
+  }
+
+  /**
    * Retro-aplica enforceContactForms a TODOS los HTML del sitio publicado.
    * Lee /home/<dominio>/public_html, parchea cada .html, lo escribe de
    * vuelta. Util para arreglar sitios viejos donde la IA genero forms
@@ -812,11 +874,12 @@ var timer = setInterval(tick,1000);
   async fixContactFormForProject(projectId: number) {
     const project = await this.prisma.project.findUnique({
       where: { id: projectId },
+      include: { user: true },
     });
     if (!project) throw new NotFoundException('Project no encontrado.');
 
     const onboarding = JSON.parse((project.onboardingData as string) || '{}');
-    const domain = onboarding?.publicDomain;
+    const domain = (onboarding?.publicDomain || '').toLowerCase();
     if (!domain) {
       throw new BadRequestException(
         'El proyecto no esta publicado (sin publicDomain).',
@@ -831,8 +894,21 @@ var timer = setInterval(tick,1000);
       );
     }
 
-    const apiBase = (process.env.PREVIEW_PROXY_BASE || 'http://localhost:3002').replace(/\/$/, '');
-    const formEndpoint = `${apiBase}/api/site-contact/${projectId}`;
+    const baseDomain = (process.env.CYBERPANEL_DOMAIN_BASE || 'plia.pe').toLowerCase();
+    const customDomain = isCustomDomain(domain, baseDomain);
+
+    let formEndpoint: string;
+    let phpDeployed = false;
+    if (customDomain) {
+      // Dominio propio -> depositar PHP local + apuntar form ahi.
+      formEndpoint = '/_plia/contact.php';
+      this.deployLocalContactPhpIfCustomDomain(project, targetDir, onboarding);
+      phpDeployed = true;
+    } else {
+      // Subdominio .plia.pe -> form central api.plia.pe.
+      const apiBase = (process.env.PREVIEW_PROXY_BASE || 'http://localhost:3002').replace(/\/$/, '');
+      formEndpoint = `${apiBase}/api/site-contact/${projectId}`;
+    }
 
     const htmlFiles = fs
       .readdirSync(targetDir)
@@ -850,8 +926,10 @@ var timer = setInterval(tick,1000);
     return {
       ok: true,
       domain,
+      mode: customDomain ? 'local-php' : 'central-api',
       filesScanned: htmlFiles.length,
       filesUpdated: changed,
+      phpDeployed,
       formEndpoint,
     };
   }
