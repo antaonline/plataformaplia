@@ -5,6 +5,7 @@ import { ProjectStatus } from '@prisma/client';
 import { Prisma } from '@prisma/client';
 import { addDays, addHours } from 'date-fns';
 import { AiService } from '../ai/ai.service';
+import { enforceContactForms } from '../ai/contact-form-enforcer';
 import { CyberpanelService } from '../integrations/cyberpanel/cyberpanel.service';
 import { MailService } from '../mail/mail.service';
 import * as fs from 'fs';
@@ -809,7 +810,6 @@ var timer = setInterval(tick,1000);
    * con IA — es un fix textual local, casi instantaneo.
    */
   async fixContactFormForProject(projectId: number) {
-    const { enforceContactForms } = await import('../ai/contact-form-enforcer');
     const project = await this.prisma.project.findUnique({
       where: { id: projectId },
     });
