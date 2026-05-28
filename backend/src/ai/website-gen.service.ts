@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PROVIDERS, FallbackProvider } from '../experimental/iachat/generation/providers';
+import { enforceContactForms } from './contact-form-enforcer';
 
 export type WebMode = 'LANDING' | 'WEB';
 
@@ -230,7 +231,14 @@ SALIDA: devuelve SOLO el HTML completo de la pagina pedida. Sin explicaciones, s
           images: multimodalImages,
         },
       );
-      files[page.file] = this.stripFences(raw);
+      // Enforce contact form rules: aunque el system prompt lo dice,
+      // Claude a veces omite el action, honeypot, script de submit, o
+      // traduce los names a espanol. Este post-procesado garantiza que
+      // todo form de contacto generado va al endpoint correcto y envia.
+      files[page.file] = enforceContactForms(
+        this.stripFences(raw),
+        formEndpoint,
+      );
     }
     if (!files['index.html']) {
       const firstKey = Object.keys(files)[0];
@@ -258,6 +266,7 @@ SALIDA: devuelve SOLO el HTML completo de la pagina pedida. Sin explicaciones, s
     brief: string,
     clientImages: string[] = [],
     clientLogo?: string,
+    formEndpoint?: string,
   ): Promise<Record<string, string>> {
     const validClientImages = clientImages.filter((s) => /^https?:\/\//.test(s));
     const hasLogo = !!clientLogo && /^https?:\/\//.test(clientLogo);
@@ -315,6 +324,12 @@ Devuelve el HTML completo de la pagina con el cambio aplicado. Si esta solicitud
         edited[file] = html;
       } else {
         edited[file] = cleaned;
+      }
+      // Garantizar reglas de form aunque sea una edicion. Si el form ya
+      // estaba bien, no cambia nada (idempotente). Si Claude lo preservo
+      // pero estaba roto, este paso lo arregla.
+      if (formEndpoint) {
+        edited[file] = enforceContactForms(edited[file], formEndpoint);
       }
     }
     return edited;

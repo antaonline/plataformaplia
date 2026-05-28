@@ -801,6 +801,61 @@ var timer = setInterval(tick,1000);
     });
   }
 
+  /**
+   * Retro-aplica enforceContactForms a TODOS los HTML del sitio publicado.
+   * Lee /home/<dominio>/public_html, parchea cada .html, lo escribe de
+   * vuelta. Util para arreglar sitios viejos donde la IA genero forms
+   * rotos (sin action, sin handler, con names en espanol). No regenera
+   * con IA — es un fix textual local, casi instantaneo.
+   */
+  async fixContactFormForProject(projectId: number) {
+    const { enforceContactForms } = await import('../ai/contact-form-enforcer');
+    const project = await this.prisma.project.findUnique({
+      where: { id: projectId },
+    });
+    if (!project) throw new NotFoundException('Project no encontrado.');
+
+    const onboarding = JSON.parse((project.onboardingData as string) || '{}');
+    const domain = onboarding?.publicDomain;
+    if (!domain) {
+      throw new BadRequestException(
+        'El proyecto no esta publicado (sin publicDomain).',
+      );
+    }
+    const sitesRoot = process.env.CYBERPANEL_SITES_ROOT || '/home';
+    const publicDir = process.env.CYBERPANEL_PUBLIC_DIR || 'public_html';
+    const targetDir = `${sitesRoot}/${domain}/${publicDir}`;
+    if (!fs.existsSync(targetDir)) {
+      throw new BadRequestException(
+        `No existe el directorio publicado: ${targetDir}`,
+      );
+    }
+
+    const apiBase = (process.env.PREVIEW_PROXY_BASE || 'http://localhost:3002').replace(/\/$/, '');
+    const formEndpoint = `${apiBase}/api/site-contact/${projectId}`;
+
+    const htmlFiles = fs
+      .readdirSync(targetDir)
+      .filter((f) => /\.html$/i.test(f));
+    let changed = 0;
+    for (const f of htmlFiles) {
+      const full = `${targetDir}/${f}`;
+      const orig = fs.readFileSync(full, 'utf-8');
+      const fixed = enforceContactForms(orig, formEndpoint);
+      if (fixed !== orig) {
+        fs.writeFileSync(full, fixed, 'utf-8');
+        changed += 1;
+      }
+    }
+    return {
+      ok: true,
+      domain,
+      filesScanned: htmlFiles.length,
+      filesUpdated: changed,
+      formEndpoint,
+    };
+  }
+
   async configureDb(id: number, data: { dbName?: string; dbUser?: string; dbPassword?: string }) {
     const project = await this.prisma.project.findUnique({
       where: { id },

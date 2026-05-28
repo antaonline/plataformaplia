@@ -40,10 +40,31 @@ export class SiteContactService {
       return { ok: true, message: 'Recibido' };
     }
 
-    // 2) Validacion de los 3 campos minimos.
-    const name = String(body?.name || '').trim().slice(0, 200);
-    const email = String(body?.email || '').trim().slice(0, 320);
-    const message = String(body?.message || '').trim().slice(0, 5000);
+    // 2) Validacion de los 3 campos minimos. Aceptamos varios alias en
+    // espanol porque algunos sitios viejos (generados antes del enforcer)
+    // tienen los names en espanol (nombre, mensaje, etc.).
+    const pick = (...keys: string[]) => {
+      for (const k of keys) {
+        const v = body?.[k];
+        if (typeof v === 'string' && v.trim().length > 0) return v;
+      }
+      return '';
+    };
+    const name = String(
+      pick('name', 'nombre', 'nombres', 'nombre-completo', 'nombre_completo', 'fullname', 'full-name'),
+    )
+      .trim()
+      .slice(0, 200);
+    const email = String(
+      pick('email', 'correo', 'correo-electronico', 'correo_electronico', 'e-mail', 'mail'),
+    )
+      .trim()
+      .slice(0, 320);
+    const message = String(
+      pick('message', 'mensaje', 'comentario', 'comentarios', 'consulta', 'pregunta'),
+    )
+      .trim()
+      .slice(0, 5000);
 
     if (!name) {
       throw new BadRequestException('El nombre es requerido.');
@@ -76,7 +97,29 @@ export class SiteContactService {
 
     // 4) Recolectar TODOS los campos extra (el formulario puede tener
     //    telefono, fecha, asunto, etc. segun el rubro del cliente).
-    const reserved = new Set(['_honeypot', '_next', 'name', 'email', 'message']);
+    const reserved = new Set([
+      '_honeypot',
+      '_next',
+      'name',
+      'nombre',
+      'nombres',
+      'nombre-completo',
+      'nombre_completo',
+      'fullname',
+      'full-name',
+      'email',
+      'correo',
+      'correo-electronico',
+      'correo_electronico',
+      'e-mail',
+      'mail',
+      'message',
+      'mensaje',
+      'comentario',
+      'comentarios',
+      'consulta',
+      'pregunta',
+    ]);
     const customFields: Record<string, string> = {};
     for (const [k, v] of Object.entries(body || {})) {
       if (reserved.has(k)) continue;

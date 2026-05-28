@@ -48,4 +48,13 @@ export class AdminProjectsController {
   ) {
     return this.projectsService.configureDb(id, body);
   }
+
+  // Re-aplica enforceContactForms a TODOS los HTML del sitio publicado
+  // (lee public_html, parchea cada .html, escribe de vuelta). Para sitios
+  // viejos donde Claude genero forms rotos. No regenera nada via IA — es
+  // un fix puramente textual local.
+  @Post(':id/fix-contact-form')
+  fixContactForm(@Param('id', ParseIntPipe) id: number) {
+    return this.projectsService.fixContactFormForProject(id);
+  }
 }

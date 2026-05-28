@@ -994,6 +994,8 @@ export class AiService {
       `AI(claude-edit) start project=${projectId} pages=${htmlFiles.join(',')} note="${revisionNote.slice(0, 80)}" clientImages=${clientImages.length} hasLogo=${!!clientLogo}`,
     );
 
+    const apiBaseEdit = (process.env.PREVIEW_PROXY_BASE || 'http://localhost:3002').replace(/\/$/, '');
+    const formEndpointEdit = `${apiBaseEdit}/api/site-contact/${projectId}`;
     let editedPages: Record<string, string>;
     try {
       editedPages = await this.websiteGen.editPages(
@@ -1002,6 +1004,7 @@ export class AiService {
         brief,
         clientImages,
         clientLogo,
+        formEndpointEdit,
       );
     } catch (error: any) {
       this.logger.error(
