@@ -2016,14 +2016,20 @@ export class HostingService {
       }
     }
 
+    // Total real del plan = maxSites * mailboxesPerSite. CyberPanel
+    // solo enforza este total — no distribucion por sitio. Asi un
+    // cliente con 1 sitio puede usar TODOS los buzones ahi mismo.
+    const totalCap = account.maxSites * account.mailboxesPerSite;
     return {
       webmailUrl: this.cyberpanelService.getWebmailUrl(),
-      maxMailboxes: account.maxSites * account.mailboxesPerSite,
+      maxMailboxes: totalCap,
       sites: account.sites.map((site) => ({
         id: site.id,
         domain: site.domain,
         name: site.name,
-        mailboxesPerSite: account.mailboxesPerSite,
+        // Cada sitio expone el cap como "puede usar hasta TODO el cupo
+        // del plan en este sitio" — el UI lo lee para mostrar X/N.
+        mailboxesPerSite: totalCap,
         mailboxes: site.mailboxes.map((m) => ({
           id: m.id,
           email: m.email,
@@ -2047,10 +2053,17 @@ export class HostingService {
       throw new NotFoundException('Sitio no encontrado.');
     }
 
-    // Limite por sitio
-    if (site.mailboxes.length >= account.mailboxesPerSite) {
+    // Limite GLOBAL del plan (no por sitio): CyberPanel solo respeta el
+    // total. Asi un cliente con plan profesional (1 mailbox * 2 sitios = 2
+    // total) puede crear los 2 correos en el mismo sitio si quiere.
+    const totalCap = account.maxSites * account.mailboxesPerSite;
+    const totalUsed = account.sites.reduce(
+      (acc, s) => acc + s.mailboxes.length,
+      0,
+    );
+    if (totalUsed >= totalCap) {
       throw new BadRequestException(
-        `Ya alcanzaste el limite de ${account.mailboxesPerSite} cuentas de correo para ${site.domain}.`,
+        `Ya alcanzaste el limite de ${totalCap} cuenta(s) de correo de tu plan.`,
       );
     }
 
