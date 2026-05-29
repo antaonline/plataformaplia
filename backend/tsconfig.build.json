@@ -7,6 +7,8 @@
     "**/*spec.ts",
     "templates",
     "generated",
-    "uploads"
+    "uploads",
+    "scaffolds",
+    "workspaces"
   ]
 }

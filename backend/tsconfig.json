@@ -22,11 +22,16 @@
     "strictBindCallApply": false,
     "noFallthroughCasesInSwitch": false
   },
+  "include": [
+    "src/**/*.ts"
+  ],
   "exclude": [
     "node_modules",
     "dist",
     "templates",
     "generated",
-    "uploads"
+    "uploads",
+    "scaffolds",
+    "workspaces"
   ]
 }
