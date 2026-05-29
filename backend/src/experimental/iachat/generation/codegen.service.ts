@@ -28,6 +28,17 @@ export interface GenerateParams {
   aiRules: string;
   chatMode: string;
   existingFiles?: Record<string, string>;
+  /**
+   * Intent detectado por el analizador. Cuando viene con alta confianza
+   * y targetSection conocido, el codegen activa el FAST PATH y se salta
+   * la fase de PLAN (ahorrando ~30% de tokens) regenerando SOLO el
+   * archivo objetivo. Reduce drasticamente el costo por edit.
+   */
+  editIntent?: {
+    type: string;
+    confidence: number;
+    targetSection?: string;
+  };
 }
 
 @Injectable()
@@ -162,6 +173,88 @@ export class CodegenService {
     return plan;
   }
 
+  /**
+   * Intenta construir un plan SIN llamar al LLM, usando el intent
+   * detectado y el proyecto existente. Si tiene exito, evitamos la
+   * llamada de PLAN (~30% del costo del turn). Devuelve null si no
+   * se puede usar el fast path (intent ambiguo, proyecto nuevo, etc.)
+   */
+  private tryFastPathPlan(
+    params: GenerateParams,
+    hasExisting: boolean,
+  ): GenerationPlan | null {
+    if (!hasExisting || !params.existingFiles) return null;
+    const intent = params.editIntent;
+    if (!intent) return null;
+
+    // Solo activamos fast path para intents claros y especificos.
+    const surgicalIntents = [
+      'UPDATE_COMPONENT',
+      'UPDATE_STYLE',
+      'FIX_ISSUE',
+    ];
+    if (!surgicalIntents.includes(intent.type)) return null;
+    if (intent.confidence < 0.7) return null;
+    if (!intent.targetSection) return null;
+
+    // Buscar archivo del componente objetivo en los archivos existentes.
+    // Convencion: "hero" -> "Hero.tsx", "navbar" -> "Navbar.tsx", etc.
+    const sectionCapital = intent.targetSection
+      .charAt(0)
+      .toUpperCase() + intent.targetSection.slice(1);
+    const candidates = [
+      `src/components/sections/${sectionCapital}.tsx`,
+      `src/components/${sectionCapital}.tsx`,
+      `/components/sections/${sectionCapital}.tsx`,
+      `/components/${sectionCapital}.tsx`,
+    ];
+    const existingPaths = Object.keys(params.existingFiles);
+    const matchPath = candidates.find((c) => existingPaths.includes(c)) ||
+      existingPaths.find((p) =>
+        new RegExp(`/${sectionCapital}\\.(tsx|jsx)$`, 'i').test(p),
+      );
+    if (!matchPath) return null;
+
+    // Reusar design system del proyecto existente.
+    let ds: any = null;
+    try {
+      const dsRaw = params.existingFiles['/__design__.json'];
+      if (dsRaw) ds = JSON.parse(dsRaw);
+    } catch {
+      /* ignore */
+    }
+    if (!ds) {
+      ds = {
+        vibe: 'preservar estilo actual',
+        palette: {
+          primary: '#6366f1',
+          secondary: '#1e293b',
+          accent: '#f59e0b',
+          bg: '#0a0a0a',
+          surface: '#141414',
+          text: '#f8fafc',
+        },
+        fonts: { heading: 'Poppins', body: 'Inter' },
+        rules: ['Preservar look existente'],
+      };
+    }
+
+    return {
+      projectName: 'Edicion quirurgica',
+      thinking: `El usuario quiere modificar la seccion "${intent.targetSection}". Salto la fase de plan y voy directo a regenerar ${matchPath}.`,
+      response: `Voy a modificar ${matchPath} segun lo que pediste, sin tocar el resto del sitio.`,
+      steps: [`Localizar ${matchPath}`, 'Aplicar el cambio', 'Preservar diseno'],
+      designSystem: ds,
+      files: [
+        {
+          path: matchPath,
+          purpose: `Modificar segun la solicitud del usuario: ${intent.targetSection}`,
+        },
+      ],
+      dependencies: {},
+    };
+  }
+
   async generate(params: GenerateParams): Promise<GeneratedProject> {
     const userPlan = await this.credits.getPlanFor(params.userId);
     const hasExisting =
@@ -187,35 +280,49 @@ export class CodegenService {
       `Codegen plan=${userPlan.code} fase=${phase} planChain=[${planModels.join('>')}] fileChain=[${fileModels.join('>')}]`,
     );
 
-    // --- FASE 1: PLAN ---
-    const planSystem = buildPlanSystemPrompt(params.aiRules, hasExisting);
-    const planMessages: ChatMsg[] = [...params.history];
-    let planUser = params.userPrompt;
-    if (hasExisting) {
-      const summary = Object.keys(params.existingFiles!)
-        .map((p) => `- ${p}`)
-        .join('\n');
-      planUser += `\n\nArchivos existentes del proyecto:\n${summary}`;
-    }
-    planMessages.push({ role: 'user', content: planUser });
+    // --- FAST PATH: salto del PLAN para edits quirurgicos ---
+    // Si el analizador de intent dice con confianza alta "modificar Hero"
+    // o "cambiar colores", no llamamos al PLAN: sintetizamos uno minimo
+    // a partir del proyecto existente y regeneramos SOLO el archivo
+    // objetivo. Ahorra ~30% del costo del turn y reduce latencia.
+    const fastPathPlan = this.tryFastPathPlan(params, hasExisting);
+    let plan: GenerationPlan;
+    if (fastPathPlan) {
+      plan = fastPathPlan;
+      this.logger.log(
+        `Codegen FAST PATH activado: solo regenerar ${plan.files.map((f) => f.path).join(', ')} (intent=${params.editIntent?.type} target=${params.editIntent?.targetSection} conf=${params.editIntent?.confidence})`,
+      );
+    } else {
+      // --- FASE 1: PLAN ---
+      const planSystem = buildPlanSystemPrompt(params.aiRules, hasExisting);
+      const planMessages: ChatMsg[] = [...params.history];
+      let planUser = params.userPrompt;
+      if (hasExisting) {
+        const summary = Object.keys(params.existingFiles!)
+          .map((p) => `- ${p}`)
+          .join('\n');
+        planUser += `\n\nArchivos existentes del proyecto:\n${summary}`;
+      }
+      planMessages.push({ role: 'user', content: planUser });
 
-    const planRaw = await this.completeWithChain(
-      planModels,
-      planSystem,
-      planMessages,
-      {
-        json: true,
-        maxTokens: 4096,
-        temperature: 0.6,
-        onUsage,
-      },
-      'plan',
-    );
-    const parsed = this.parsePlan(planRaw);
-    if (!parsed) {
-      throw new Error('El plan de la IA no devolvio JSON valido');
+      const planRaw = await this.completeWithChain(
+        planModels,
+        planSystem,
+        planMessages,
+        {
+          json: true,
+          maxTokens: 4096,
+          temperature: 0.6,
+          onUsage,
+        },
+        'plan',
+      );
+      const parsed = this.parsePlan(planRaw);
+      if (!parsed) {
+        throw new Error('El plan de la IA no devolvio JSON valido');
+      }
+      plan = this.normalizePlan(parsed, hasExisting);
     }
-    const plan = this.normalizePlan(parsed, hasExisting);
 
     // EDICION: el design system del proyecto NUNCA se regenera. Reusamos el
     // existente para que tipografia/paleta no cambien al editar.

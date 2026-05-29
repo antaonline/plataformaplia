@@ -86,8 +86,11 @@ export const PLANS: Record<PlanCode, PlanConfig> = {
     planModels: FREE_PLAN_CHAIN,
     buildModels: FREE_BUILD_CHAIN,
     editModels: FREE_FLASH_CHAIN,
-    dailyCredits: 5,
-    monthlyCredits: 30,
+    // Bump del free tier: con FAST PATH (skip plan en edits quirurgicos)
+    // un turn de edicion cuesta ~0.3-0.6 creditos en lugar de 1+.
+    // Asi el usuario gratuito tiene margen real para iterar antes de pagar.
+    dailyCredits: 15,
+    monthlyCredits: 80,
   },
   PRESENCIA: {
     code: 'PRESENCIA',

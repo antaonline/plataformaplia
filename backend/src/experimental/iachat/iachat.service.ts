@@ -254,6 +254,14 @@ export class AiChatService {
         chatMode: activeMode,
         existingFiles:
           Object.keys(existingFiles).length > 0 ? existingFiles : undefined,
+        // FAST PATH: pasamos el intent al codegen para que pueda saltar
+        // la fase de PLAN cuando el cambio es claro y especifico (ej.
+        // "modificar Hero" / "cambiar colores"). Ahorra ~30% del costo.
+        editIntent: {
+          type: String(intent.type),
+          confidence: intent.confidence,
+          targetSection: intent.targetSection,
+        },
       });
 
       result.meta.intent = {
