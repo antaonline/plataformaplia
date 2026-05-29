@@ -78,17 +78,33 @@ async function depsSignature(projectPath: string): Promise<string> {
 
 const DEPS_STAMP = '.plia-deps';
 
-// Instalacion valida = binario de vite presente Y la firma de deps coincide
-// con la ultima instalada (si la IA agrego librerias, hay que reinstalar).
+// Instalacion valida = binario de vite presente. Con el nuevo scaffold
+// que symlinkea node_modules al maestro (scaffolds/plia-studio-base/
+// node_modules), la presencia de node_modules/vite implica que todas las
+// 60+ deps shadcn/Radix/router/query/forms/motion/recharts estan listas.
+// Si la IA declaro deps NUEVAS via __deps__.json, isInstallHealthy
+// devolvera false (signature distinta) y forzaremos un npm install local
+// para añadirlas (raro: la lista preinstalada cubre todo).
 async function isInstallHealthy(projectPath: string): Promise<boolean> {
   if (!(await directoryExists(join(projectPath, 'node_modules', 'vite')))) {
     return false;
   }
+  // Si node_modules es un symlink al maestro Y la firma actual coincide
+  // con la stampada, OK. Si no hay stamp, asumimos healthy (es la
+  // instalacion del scaffold maestro recien copiada — la stampamos para
+  // que la proxima vez sea instantaneo).
   try {
     const stamped = await fs.readFile(join(projectPath, DEPS_STAMP), 'utf8');
     return stamped.trim() === (await depsSignature(projectPath));
   } catch {
-    return false;
+    // Sin stamp pero con node_modules/vite -> es el scaffold maestro recien
+    // linkeado. Stampar y considerar healthy.
+    try {
+      await writeDepsStamp(projectPath);
+    } catch {
+      /* ignore */
+    }
+    return true;
   }
 }
 

@@ -1,216 +1,152 @@
 import * as fs from 'fs/promises';
 import { join, dirname } from 'path';
 
-async function writeIfMissing(filePath: string, contents: string) {
+/**
+ * Sprint 3 — Preview alineado con plia-studio-base.
+ *
+ * El preview en vivo (Vite dev server por proyecto) ahora usa EL MISMO
+ * scaffold que el publish: backend/scaffolds/plia-studio-base/. Asi todo
+ * lo que la IA genera (shadcn imports, react-router, react-query,
+ * framer-motion, recharts...) tiene sus deps disponibles y funciona en
+ * el preview tal cual va a funcionar al publicar.
+ *
+ * Requiere haber corrido UNA vez en el servidor:
+ *   cd backend/scaffolds/plia-studio-base && npm install
+ *
+ * Despues cada preview tarda <1s en init (solo copia + symlink), ya que
+ * todos comparten el mismo node_modules del scaffold maestro.
+ */
+
+const SCAFFOLD_DIR = () =>
+  join(process.cwd(), 'scaffolds', 'plia-studio-base');
+
+const EXCLUDE_FROM_COPY = new Set([
+  'node_modules',
+  'dist',
+  '.git',
+  'pnpm-lock.yaml',
+  'package-lock.json',
+  '.plia-deps',
+]);
+
+async function pathExists(p: string): Promise<boolean> {
   try {
-    await fs.access(filePath);
-    return;
+    await fs.access(p);
+    return true;
   } catch {
-    /* continue */
+    return false;
   }
-  await fs.mkdir(dirname(filePath), { recursive: true });
-  await fs.writeFile(filePath, contents, 'utf8');
 }
 
-// Escribe SOLO si el contenido cambio. Critico: reescribir vite.config.ts /
-// index.html con el mismo contenido igual hace que Vite reinicie el server
-// (mira mtime) y el preview se cae en cada sync. Comparar evita el loop.
 async function writeAlways(filePath: string, contents: string) {
+  // Solo escribe si el contenido cambio. Critico para no triggerear Vite
+  // HMR en cada sync con el mismo contenido.
   try {
     const current = await fs.readFile(filePath, 'utf8');
     if (current === contents) return;
   } catch {
-    /* no existe: se crea */
+    /* no existe */
   }
   await fs.mkdir(dirname(filePath), { recursive: true });
   await fs.writeFile(filePath, contents, 'utf8');
 }
 
-const PKG = {
-  name: 'plia-studio-preview',
-  private: true,
-  version: '0.0.0',
-  type: 'module',
-  scripts: {
-    dev: 'vite',
-  },
-  // Todo va en dependencies (no devDependencies) a proposito: el backend puede
-  // correr con NODE_ENV=production y npm omitiria las devDependencies, dejando
-  // sin instalar vite/tailwind. Aqui "produccion" es siempre un dev server.
-  dependencies: {
-    react: '^18.2.0',
-    'react-dom': '^18.2.0',
-    'framer-motion': '^11.0.0',
-    'lucide-react': '^0.400.0',
-    // Estandar de la industria para el helper cn(); el modelo los usa SIEMPRE.
-    clsx: '^2.1.1',
-    'tailwind-merge': '^2.5.4',
-    'class-variance-authority': '^0.7.0',
-    'html-to-image': '^1.11.11',
-    '@vitejs/plugin-react': '^4.3.1',
-    autoprefixer: '^10.4.19',
-    postcss: '^8.4.38',
-    tailwindcss: '^3.4.4',
-    typescript: '^5.4.5',
-    vite: '^5.3.1',
-  },
-};
-
-const VITE_CONFIG = `import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
-import path from 'path';
-
-export default defineConfig({
-  // base se inyecta via VITE_PROXY_BASE para que todos los paths de assets
-  // apunten al proxy del backend en lugar de a la raiz del dominio.
-  base: process.env.VITE_PROXY_BASE || '/',
-  plugins: [react()],
-  resolve: {
-    alias: { '@': path.resolve(process.cwd(), 'src') },
-  },
-  server: {
-    host: '127.0.0.1',
-    strictPort: true,
-    allowedHosts: true,
-    // HMR desactivado: el browser no puede hacer WebSocket a 127.0.0.1 directamente.
-    // El refresh se maneja via previewNonce en el Studio cuando hay ediciones.
-    hmr: false,
-  },
-  clearScreen: false,
-});
-`;
-
-const INDEX_HTML = `<!DOCTYPE html>
-<html lang="es">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>PLIA Studio Preview</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
-</html>
-`;
-
-const MAIN_TSX = `import React from 'react';
-import { createRoot } from 'react-dom/client';
-import './index.css';
-import * as Entry from './AppMain';
-
-const App: React.ComponentType =
-  (Entry as any).default ||
-  (Entry as any).AppMain ||
-  (Entry as any).App ||
-  (() => React.createElement('div', { style: { padding: 32, fontFamily: 'sans-serif' } }, 'No se encontro un componente exportado en AppMain.tsx'));
-
-createRoot(document.getElementById('root')!).render(
-  React.createElement(React.StrictMode, null, React.createElement(App)),
-);
-
-// Capturador de thumbnail: el Studio (parent) envia { type: 'PLIA_CAPTURE' }
-// y respondemos con la imagen del DOM (estilo Dyad). Cross-origin OK.
-window.addEventListener('message', async (e: MessageEvent) => {
-  if (!e.data || e.data.type !== 'PLIA_CAPTURE') return;
-  try {
-    const { toPng } = await import('html-to-image');
-    const target = (document.getElementById('root') as HTMLElement) || document.body;
-    const dataUrl = await toPng(target, {
-      cacheBust: true,
-      pixelRatio: 0.6,
-      backgroundColor:
-        getComputedStyle(document.body).backgroundColor || '#0a0a0a',
-      filter: (n: any) =>
-        !(n && n.tagName === 'IFRAME'),
-    });
-    window.parent.postMessage({ type: 'PLIA_SHOT', dataUrl }, '*');
-  } catch (err) {
-    window.parent.postMessage({ type: 'PLIA_SHOT_ERROR' }, '*');
+async function copyRecursive(src: string, dst: string): Promise<void> {
+  await fs.mkdir(dst, { recursive: true });
+  const entries = await fs.readdir(src, { withFileTypes: true });
+  for (const entry of entries) {
+    if (EXCLUDE_FROM_COPY.has(entry.name)) continue;
+    const s = join(src, entry.name);
+    const d = join(dst, entry.name);
+    if (entry.isDirectory()) {
+      await copyRecursive(s, d);
+    } else if (entry.isSymbolicLink()) {
+      try {
+        const real = await fs.realpath(s);
+        const st = await fs.stat(real);
+        if (st.isDirectory()) {
+          await copyRecursive(real, d);
+        } else {
+          await fs.copyFile(real, d);
+        }
+      } catch {
+        /* broken symlink */
+      }
+    } else {
+      // Solo copiar si no existe o difiere para no triggerear Vite HMR.
+      try {
+        const current = await fs.readFile(d, 'utf8');
+        const next = await fs.readFile(s, 'utf8');
+        if (current === next) continue;
+      } catch {
+        /* destino no existe o no es texto */
+      }
+      await fs.copyFile(s, d);
+    }
   }
-});
-`;
-
-const INDEX_CSS = `@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-html, body, #root { min-height: 100vh; margin: 0; }
-`;
-
-const TAILWIND_CONFIG = `/** @type {import('tailwindcss').Config} */
-export default {
-  content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
-  theme: { extend: {} },
-  plugins: [],
-};
-`;
-
-const POSTCSS_CONFIG = `export default {
-  plugins: { tailwindcss: {}, autoprefixer: {} },
-};
-`;
-
-const TSCONFIG = `{
-  "compilerOptions": {
-    "target": "ES2020",
-    "lib": ["ES2020", "DOM", "DOM.Iterable"],
-    "module": "ESNext",
-    "moduleResolution": "Bundler",
-    "jsx": "react-jsx",
-    "strict": false,
-    "skipLibCheck": true,
-    "esModuleInterop": true,
-    "allowJs": true,
-    "noEmit": true,
-    "baseUrl": ".",
-    "paths": { "@/*": ["src/*"] }
-  },
-  "include": ["src"]
 }
-`;
 
-const PLACEHOLDER_APPMAIN = `export default function AppMain() {
-  return (
-    <div style={{ display: 'flex', minHeight: '100vh', alignItems: 'center', justifyContent: 'center', fontFamily: 'sans-serif', color: '#64748b' }}>
-      Esperando codigo generado por la IA...
-    </div>
-  );
+async function ensureNodeModulesSymlink(projectPath: string): Promise<void> {
+  const master = join(SCAFFOLD_DIR(), 'node_modules');
+  const link = join(projectPath, 'node_modules');
+  if (await pathExists(link)) return;
+  if (!(await pathExists(master))) return;
+  try {
+    // junction en Windows (sin admin), symlink dir en POSIX.
+    const type = process.platform === 'win32' ? 'junction' : 'dir';
+    await fs.symlink(master, link, type as any);
+  } catch (err: any) {
+    // Si fallan los symlinks (filesystem raro), el caller hara npm install.
+  }
 }
-`;
 
 /**
- * Crea (idempotente) un proyecto Vite + React + Tailwind minimo en projectPath.
- * Equivalente al scaffoldBasicNextApp de Claudable, adaptado a los componentes
- * TSX sueltos que genera la IA de PLIA (entrada: src/AppMain.tsx).
+ * Crea (idempotente) el proyecto Vite + React + shadcn/ui en `projectPath`
+ * copiando desde el scaffold maestro `plia-studio-base/`.
  */
 export async function scaffoldViteApp(projectPath: string): Promise<void> {
-  await fs.mkdir(join(projectPath, 'src'), { recursive: true });
-
-  await writeAlways(join(projectPath, 'package.json'), `${JSON.stringify(PKG, null, 2)}\n`);
-  await writeAlways(join(projectPath, 'vite.config.ts'), VITE_CONFIG);
-  await writeAlways(join(projectPath, 'src', 'main.tsx'), MAIN_TSX);
-  await writeAlways(join(projectPath, 'postcss.config.js'), POSTCSS_CONFIG);
-  await writeAlways(join(projectPath, 'tsconfig.json'), TSCONFIG);
-  // index.html / tailwind.config.js / index.css los REESCRIBE applyDesignSystem
-  // con el design system. Aqui solo se crean si faltan (placeholder), para no
-  // pelearnos por el contenido y disparar reloads infinitos de Vite.
-  await writeIfMissing(join(projectPath, 'index.html'), INDEX_HTML);
-  await writeIfMissing(join(projectPath, 'tailwind.config.js'), TAILWIND_CONFIG);
-  await writeIfMissing(join(projectPath, 'src', 'index.css'), INDEX_CSS);
-  await writeIfMissing(join(projectPath, 'src', 'AppMain.tsx'), PLACEHOLDER_APPMAIN);
+  const master = SCAFFOLD_DIR();
+  if (!(await pathExists(master))) {
+    throw new Error(
+      `Scaffold maestro no encontrado en ${master}. Setup: cd backend/scaffolds/plia-studio-base && npm install`,
+    );
+  }
+  await fs.mkdir(projectPath, { recursive: true });
+  await copyRecursive(master, projectPath);
+  await ensureNodeModulesSymlink(projectPath);
 }
 
-// Lista blanca: nunca dejamos que la IA pise paquetes del core del scaffold.
+// ─── Lista blanca de deps que la IA NO puede pisar ────────────────────
 const PROTECTED_DEPS = new Set([
   'react',
   'react-dom',
+  'react-router-dom',
   'vite',
-  '@vitejs/plugin-react',
+  '@vitejs/plugin-react-swc',
   'tailwindcss',
   'postcss',
   'autoprefixer',
   'typescript',
+  '@tanstack/react-query',
+  'react-hook-form',
+  '@hookform/resolvers',
+  'zod',
+  'framer-motion',
+  'lucide-react',
+  'recharts',
+  'sonner',
+  'cmdk',
+  'next-themes',
+  'class-variance-authority',
+  'clsx',
+  'tailwind-merge',
+  'tailwindcss-animate',
+  'vaul',
+  'embla-carousel-react',
+  'date-fns',
+  'react-day-picker',
+  'input-otp',
+  'react-resizable-panels',
 ]);
 
 async function mergeDependencies(
@@ -233,18 +169,78 @@ async function mergeDependencies(
     return;
   }
   pkg.dependencies = pkg.dependencies || {};
+  let touched = false;
   for (const [name, version] of Object.entries(extra)) {
     if (PROTECTED_DEPS.has(name)) continue;
     if (typeof version !== 'string' || !version.trim()) continue;
-    // Solo nombres de paquete npm validos.
     if (!/^(@[a-z0-9-~][a-z0-9-._~]*\/)?[a-z0-9-~][a-z0-9-._~]*$/i.test(name)) {
       continue;
     }
     pkg.dependencies[name] = version;
+    touched = true;
   }
-  await writeAlways(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`);
+  if (touched) {
+    await writeAlways(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`);
+  }
 }
 
+/**
+ * Vuelca los archivos generados por la IA en el workspace.
+ * - Soporta paths con o sin prefijo `src/` (la IA usa `src/...` en Sprint 1+).
+ * - Bloquea path-traversal (../).
+ * - Protege archivos del scaffold (package.json, vite.config.ts, etc.).
+ * - Procesa entradas especiales `__deps__.json` (merge a package.json) y
+ *   `__design__.json` (sobreescribe colores en index.css via CSS variables).
+ */
+export async function writeGeneratedFiles(
+  projectPath: string,
+  files: Record<string, string>,
+): Promise<void> {
+  const entries = Object.entries(files || {}).filter(
+    ([, content]) => typeof content === 'string',
+  );
+
+  for (const [rawPath, content] of entries) {
+    let rel = rawPath
+      .replace(/^\.?\/+/, '')
+      .replace(/\\/g, '/')
+      .replace(/\/+/g, '/');
+
+    // Entradas especiales.
+    if (rel === '__deps__.json' || rel === 'package.dependencies.json') {
+      await mergeDependencies(projectPath, content);
+      continue;
+    }
+    if (rel === '__design__.json') {
+      await applyDesignSystem(projectPath, content);
+      continue;
+    }
+
+    // Auto-prefijar src/ si la IA mando un path sin prefijo (compat legacy:
+    // ej. "AppMain.tsx", "components/Hero.tsx" — codigo viejo pre-Sprint 1).
+    if (!/^(src|public)\//.test(rel)) {
+      rel = `src/${rel}`;
+    }
+
+    // Anti path-traversal y proteccion de configs/UI base.
+    const target = join(projectPath, rel);
+    if (!target.startsWith(projectPath)) continue;
+    if (/^src\/components\/ui\//.test(rel)) continue; // shadcn intocable
+    if (
+      rel === 'package.json' ||
+      rel === 'vite.config.ts' ||
+      rel === 'tsconfig.json' ||
+      rel === 'tailwind.config.ts' ||
+      rel === 'postcss.config.js'
+    ) {
+      continue;
+    }
+
+    await writeAlways(target, content);
+  }
+}
+
+// ─── Design system: inyecta colores como CSS variables en index.css ───
 function safeColor(v: any, fallback: string): string {
   if (typeof v !== 'string') return fallback;
   const s = v.trim();
@@ -253,22 +249,38 @@ function safeColor(v: any, fallback: string): string {
   return fallback;
 }
 
-function safeFont(v: any, fallback: string): string {
-  if (typeof v !== 'string') return fallback;
-  const s = v.trim().replace(/['"\\<>{}]/g, '');
-  return s.length > 0 && s.length < 40 ? s : fallback;
+function hexToHsl(hex: string): string {
+  // Convierte #RRGGBB a "H S% L%" (formato que Tailwind shadcn usa).
+  const m = hex.replace('#', '').match(/^([0-9a-f]{6})$/i);
+  if (!m) return '0 0% 50%';
+  const num = parseInt(m[1], 16);
+  let r = ((num >> 16) & 255) / 255;
+  let g = ((num >> 8) & 255) / 255;
+  let b = (num & 255) / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  let h = 0;
+  let s = 0;
+  const l = (max + min) / 2;
+  if (max !== min) {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    switch (max) {
+      case r:
+        h = (g - b) / d + (g < b ? 6 : 0);
+        break;
+      case g:
+        h = (b - r) / d + 2;
+        break;
+      case b:
+        h = (r - g) / d + 4;
+        break;
+    }
+    h *= 60;
+  }
+  return `${Math.round(h)} ${Math.round(s * 100)}% ${Math.round(l * 100)}%`;
 }
 
-function fontQuery(name: string): string {
-  return encodeURIComponent(name).replace(/%20/g, '+');
-}
-
-/**
- * Hornea el design system que decidio la IA en el proyecto: colores
- * semanticos en Tailwind (bg-primary, text-text, etc.), tipografias
- * via Google Fonts y variables CSS. Asi el output sale on-brand aunque
- * el modelo sea mas debil (se acaba el "todo blanco y negro generico").
- */
 async function applyDesignSystem(
   projectPath: string,
   rawJson: string,
@@ -290,144 +302,24 @@ async function applyDesignSystem(
     surface: safeColor(p.surface, '#141414'),
     text: safeColor(p.text, '#f8fafc'),
   };
-  const heading = safeFont(ds.fonts?.heading, 'Poppins');
-  const body = safeFont(ds.fonts?.body, 'Inter');
 
-  const tailwindConfig = `/** @type {import('tailwindcss').Config} */
-export default {
-  content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
-  theme: {
-    extend: {
-      colors: {
-        primary: '${palette.primary}',
-        secondary: '${palette.secondary}',
-        accent: '${palette.accent}',
-        bg: '${palette.bg}',
-        surface: '${palette.surface}',
-        text: '${palette.text}',
-      },
-      fontFamily: {
-        heading: ['${heading}', 'ui-sans-serif', 'system-ui', 'sans-serif'],
-        body: ['${body}', 'ui-sans-serif', 'system-ui', 'sans-serif'],
-      },
-    },
-  },
-  plugins: [],
-};
-`;
-  await writeAlways(join(projectPath, 'tailwind.config.js'), tailwindConfig);
-
-  const fontsHref = `https://fonts.googleapis.com/css2?family=${fontQuery(
-    heading,
-  )}:wght@400;500;600;700;800;900&family=${fontQuery(
-    body,
-  )}:wght@300;400;500;600;700&display=swap`;
-  const indexHtml = `<!DOCTYPE html>
-<html lang="es">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>PLIA Studio Preview</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="${fontsHref}" rel="stylesheet" />
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
-</html>
-`;
-  await writeAlways(join(projectPath, 'index.html'), indexHtml);
-
-  const indexCss = `@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-:root {
-  --color-primary: ${palette.primary};
-  --color-secondary: ${palette.secondary};
-  --color-accent: ${palette.accent};
-  --color-bg: ${palette.bg};
-  --color-surface: ${palette.surface};
-  --color-text: ${palette.text};
-}
-
-html, body, #root { min-height: 100vh; margin: 0; }
-body {
-  background-color: ${palette.bg};
-  color: ${palette.text};
-  font-family: '${body}', ui-sans-serif, system-ui, sans-serif;
-}
-h1, h2, h3, h4, h5, h6 { font-family: '${heading}', ui-sans-serif, system-ui, sans-serif; }
-`;
+  // index.css inyecta las CSS variables que usa shadcn/ui (background,
+  // foreground, primary, secondary, accent, card, etc.) con los colores
+  // del proyecto. shadcn las lee automaticamente.
+  const indexCss = `@tailwind base;\n@tailwind components;\n@tailwind utilities;\n\n@layer base {\n  :root {\n    --background: ${hexToHsl(palette.bg)};\n    --foreground: ${hexToHsl(palette.text)};\n    --card: ${hexToHsl(palette.surface)};\n    --card-foreground: ${hexToHsl(palette.text)};\n    --popover: ${hexToHsl(palette.surface)};\n    --popover-foreground: ${hexToHsl(palette.text)};\n    --primary: ${hexToHsl(palette.primary)};\n    --primary-foreground: ${hexToHsl(palette.text)};\n    --secondary: ${hexToHsl(palette.secondary)};\n    --secondary-foreground: ${hexToHsl(palette.text)};\n    --muted: ${hexToHsl(palette.surface)};\n    --muted-foreground: ${hexToHsl(palette.text)};\n    --accent: ${hexToHsl(palette.accent)};\n    --accent-foreground: ${hexToHsl(palette.text)};\n    --destructive: 0 84% 60%;\n    --destructive-foreground: 0 0% 100%;\n    --border: ${hexToHsl(palette.surface)};\n    --input: ${hexToHsl(palette.surface)};\n    --ring: ${hexToHsl(palette.primary)};\n    --radius: 0.5rem;\n  }\n}\n\nhtml, body, #root { min-height: 100vh; margin: 0; }\nbody { background-color: hsl(var(--background)); color: hsl(var(--foreground)); }\n`;
   await writeAlways(join(projectPath, 'src', 'index.css'), indexCss);
-}
 
-/**
- * Escribe los archivos generados por la IA dentro de <projectPath>/src.
- * Normaliza las rutas ("/AppMain.tsx" -> "src/AppMain.tsx") y garantiza
- * que exista un AppMain.tsx de entrada. Las entradas reservadas
- * "__deps__.json" y "__design__.json" se procesan aparte (no son fuente).
- */
-export async function writeGeneratedFiles(
-  projectPath: string,
-  files: Record<string, string>,
-): Promise<void> {
-  const srcDir = join(projectPath, 'src');
-  await fs.mkdir(srcDir, { recursive: true });
-
-  const entries = Object.entries(files || {}).filter(
-    ([, content]) => typeof content === 'string',
-  );
-
-  let hasAppMain = false;
-  const writtenTsx: string[] = [];
-
-  for (const [rawPath, content] of entries) {
-    let rel = rawPath.replace(/^\/+/, '').trim();
-
-    // Entrada reservada: dependencias declaradas por la IA. No es un archivo
-    // fuente; se fusiona en el package.json raiz (scaffold flexible).
-    if (rel === '__deps__.json' || rel === 'package.dependencies.json') {
-      await mergeDependencies(projectPath, content);
-      continue;
+  // Renombrar el viejo globals.css si la copia del scaffold lo dejo.
+  // (El scaffold trae src/globals.css; nuestro main.tsx lo importa.)
+  try {
+    const oldPath = join(projectPath, 'src', 'globals.css');
+    if (await pathExists(oldPath)) {
+      const content = await fs.readFile(oldPath, 'utf-8');
+      // Si el index.css es nuevo, reemplazamos globals.css por la version con design system.
+      await writeAlways(oldPath, indexCss);
+      void content;
     }
-
-    // Entrada reservada: design system. Se hornea en tailwind.config.js,
-    // index.html (Google Fonts) e index.css (variables/base).
-    if (rel === '__design__.json') {
-      await applyDesignSystem(projectPath, content);
-      continue;
-    }
-
-    if (!rel || rel === '/') rel = 'AppMain.tsx';
-
-    // Evitar escapar del directorio del proyecto.
-    const target = join(srcDir, rel);
-    if (!target.startsWith(srcDir)) continue;
-
-    // Fix determinista de rutas: un archivo en la raiz de src/ (ej.
-    // AppMain.tsx) que importe '../components|data|lib|hooks/...' escapa de
-    // src/ y rompe el build. Debe ser './...'. Solo aplica a archivos raiz.
-    let finalContent = content;
-    if (!rel.includes('/')) {
-      finalContent = finalContent.replace(
-        /((?:from\s+|import\(\s*|import\s+)['"`])\.\.\/(components|data|lib|hooks|context|utils|styles|assets)\//g,
-        '$1./$2/',
-      );
-    }
-
-    await writeAlways(target, finalContent);
-
-    if (/\.(tsx|jsx)$/i.test(rel)) writtenTsx.push(rel);
-    if (rel === 'AppMain.tsx') hasAppMain = true;
-  }
-
-  // Si la IA no genero AppMain.tsx pero hay otro componente, lo reexportamos.
-  if (!hasAppMain && writtenTsx.length > 0) {
-    const first = writtenTsx[0].replace(/\.(tsx|jsx)$/i, '');
-    const reexport = `import * as Mod from './${first}';\nconst App: any = (Mod as any).default || (Mod as any).AppMain || (Mod as any).App;\nexport default App;\n`;
-    await writeAlways(join(srcDir, 'AppMain.tsx'), reexport);
+  } catch {
+    /* ignore */
   }
 }
