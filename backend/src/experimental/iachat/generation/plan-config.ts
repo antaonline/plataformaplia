@@ -99,8 +99,9 @@ export const PLANS: Record<PlanCode, PlanConfig> = {
     planModels: PAID_BASIC_CHAIN,
     buildModels: PAID_BASIC_CHAIN,
     editModels: PAID_BASIC_CHAIN,
-    dailyCredits: 10,
-    monthlyCredits: 100,
+    // 1 proyecto serio + ~80 edits chicos/dia. ~2.5x el free.
+    dailyCredits: 40,
+    monthlyCredits: 250,
   },
   EMPRENDEDOR: {
     code: 'EMPRENDEDOR',
@@ -109,8 +110,9 @@ export const PLANS: Record<PlanCode, PlanConfig> = {
     planModels: PAID_FAST_CHAIN, // plan = barato
     buildModels: PAID_HIGH_BUILD, // web nueva = calidad alta
     editModels: PAID_FAST_CHAIN, // ediciones = baratas
-    dailyCredits: 15,
-    monthlyCredits: 150,
+    // Power user con varios proyectos en paralelo. ~2.5x Presencia.
+    dailyCredits: 100,
+    monthlyCredits: 600,
   },
   AGENCIA: {
     code: 'AGENCIA',
@@ -119,8 +121,9 @@ export const PLANS: Record<PlanCode, PlanConfig> = {
     planModels: PAID_FAST_CHAIN,
     buildModels: PAID_HIGH_BUILD,
     editModels: PAID_FAST_CHAIN,
-    dailyCredits: 20,
-    monthlyCredits: 400,
+    // Agencias con multiples clientes en paralelo. ~2.5x Emprendedor.
+    dailyCredits: 250,
+    monthlyCredits: 1500,
   },
 };
 
