@@ -71,8 +71,19 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 # Datos generados en runtime por el Studio iachat (no commitear: pesan
 # mucho y son derivados; el motor los recrea solo).
 /uploads/studio-live
+/uploads/studio-dist
+/uploads/studio
 /uploads/thumbnails
 /uploads/previews
+
+# Sprint 2: workspaces por proyecto del Studio iachat. Cada uno son
+# copias del scaffold con su src/ generado por la IA + symlink a
+# node_modules del scaffold. node_modules del scaffold tambien fuera.
+/workspaces
+/scaffolds/plia-studio-base/node_modules
+/scaffolds/plia-studio-base/dist
+/scaffolds/plia-studio-base/pnpm-lock.yaml
+/scaffolds/plia-studio-base/package-lock.json
 
 # Experimental Features
 # (desactivado: src/experimental contiene los modulos AiChat/Sandbox/Preview

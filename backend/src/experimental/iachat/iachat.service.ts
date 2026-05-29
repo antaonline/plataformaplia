@@ -13,6 +13,7 @@ import { analyzeEditIntent, EditType } from './prompts/intent-analyzer';
 import { CodegenService } from './generation/codegen.service';
 import { CreditService } from './generation/credit.service';
 import { ChatMsg } from './generation/codegen.types';
+import { WorkspaceService } from './workspace.service';
 
 export type ChatMode = 'build' | 'ask' | 'plan';
 
@@ -25,6 +26,7 @@ export class AiChatService {
     private aiService: AiService,
     private codegen: CodegenService,
     private credits: CreditService,
+    private workspace: WorkspaceService,
   ) {}
 
   /** Extrae el ultimo set de archivos generados a partir de los bloques [FILES]. */
@@ -308,27 +310,53 @@ export class AiChatService {
   }
 
   // ============================================================
-  // PUBLICAR PROYECTO
+  // PUBLICAR PROYECTO (Sprint 2)
+  //
+  // Flujo nuevo:
+  //  1. Garantiza que el workspace exista (clona el scaffold + symlink
+  //     a node_modules del scaffold maestro).
+  //  2. Escribe los archivos generados por la IA en workspaces/<id>/src/.
+  //  3. Corre `npm run build` (Vite emite a dist/ con paths relativos).
+  //  4. Copia el dist a uploads/studio-dist/<id>/ que Nest sirve estatico.
+  //  5. Guarda la URL publica en aiChat.previewUrl.
+  //
+  // Resultado: el cliente ve su SPA real funcionando en
+  //  https://api.plia.pe/uploads/studio-dist/<chatId>/index.html
   // ============================================================
   async publish(chatId: number, userId: number, files: Record<string, string>) {
-    const chat = await this.getChat(chatId, userId);
-    const studioRoot = join(process.cwd(), 'uploads', 'studio', String(chatId));
+    await this.getChat(chatId, userId);
 
-    if (fs.existsSync(studioRoot)) {
-      fs.rmSync(studioRoot, { recursive: true, force: true });
-    }
-    fs.mkdirSync(studioRoot, { recursive: true });
-
-    for (const [path, fileContent] of Object.entries(files)) {
-      const fullPath = join(studioRoot, path.startsWith('/') ? path.substring(1) : path);
-      const dir = join(fullPath, '..');
-      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-      fs.writeFileSync(fullPath, fileContent, 'utf-8');
+    if (!this.workspace.isScaffoldReady()) {
+      throw new NotFoundException(
+        'El motor PLIA Studio aun no esta listo en este servidor (falta npm install en scaffolds/plia-studio-base/). Contacta a soporte.',
+      );
     }
 
-    const appUrl = (process.env.APP_URL || 'http://localhost:3002').replace(/\/$/, '');
-    const previewUrl = `${appUrl}/uploads/studio/${chatId}/AppMain.tsx`;
+    // 1) Inicializar workspace (idempotente).
+    this.workspace.init(chatId);
 
+    // 2) Volcar los archivos generados por la IA.
+    // Filtrar metadata interna del iachat (__design__, __deps__, etc.).
+    const cleanFiles: Record<string, string> = {};
+    for (const [path, content] of Object.entries(files || {})) {
+      if (typeof content !== 'string') continue;
+      if (path.startsWith('/__') || path.startsWith('__')) continue;
+      cleanFiles[path] = content;
+    }
+    this.workspace.writeFiles(chatId, cleanFiles);
+
+    // 3) Build con Vite.
+    try {
+      this.workspace.build(chatId);
+    } catch (e: any) {
+      this.logger.error(`publish chat=${chatId} build fallo: ${e?.message || e}`);
+      throw e;
+    }
+
+    // 4) Deploy local (servimos via /uploads).
+    const previewUrl = this.workspace.deployLocal(chatId);
+
+    // 5) Persistir URL.
     await this.prisma.aiChat.update({
       where: { id: chatId },
       data: { previewUrl },
