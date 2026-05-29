@@ -92,9 +92,9 @@ export default function AiWebLandingPage() {
     {
       slug: "presencia",
       name: "Presencia",
-      price: "39",
+      price: "45",
       description: "Tu primera web profesional al mejor precio de Latam.",
-      credits: "10 créditos diarios (máx 100/mes)",
+      credits: "40 créditos diarios (máx 250/mes)",
       isPopular: true,
       features: [
         "1 Web Profesional (Landing)",
@@ -108,14 +108,14 @@ export default function AiWebLandingPage() {
     {
       slug: "emprendedor",
       name: "Emprendedor",
-      price: "79",
+      price: "99",
       description: "Potencia para negocios en crecimiento y expansión.",
-      credits: "15 créditos diarios (máx 150/mes)",
+      credits: "100 créditos diarios (máx 600/mes)",
       isPopular: false,
       features: [
         "3 Webs Profesionales",
         "3 Correos Corporativos",
-        "IA Avanzada (Claude 3.5 Sonnet)",
+        "IA Avanzada (Claude Sonnet)",
         "Edición manual de archivos",
         "Soporte por WhatsApp",
       ],
@@ -124,9 +124,9 @@ export default function AiWebLandingPage() {
     {
       slug: "agencia",
       name: "Agencia",
-      price: "199",
+      price: "169",
       description: "La oficina virtual para creadores y agencias.",
-      credits: "20 créditos diarios (máx 400/mes)",
+      credits: "250 créditos diarios (máx 1500/mes)",
       isPopular: false,
       features: [
         "15 Webs Profesionales",

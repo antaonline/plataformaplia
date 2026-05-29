@@ -15,26 +15,26 @@ const PLANS = [
   {
     code: 'PRESENCIA',
     name: 'Presencia',
-    price: 'S/ 39',
+    price: 'S/ 45',
     icon: Zap,
     highlight: true,
-    perks: ['10 créditos/día · 100/mes', 'Dominio .com propio', 'Sin sello PLIA'],
+    perks: ['40 créditos/día · 250/mes', 'Dominio .com propio', 'Sin sello PLIA'],
   },
   {
     code: 'EMPRENDEDOR',
     name: 'Emprendedor',
-    price: 'S/ 79',
+    price: 'S/ 99',
     icon: Rocket,
     highlight: false,
-    perks: ['15 créditos/día · 150/mes', 'IA Avanzada (Claude)', '3 webs profesionales'],
+    perks: ['100 créditos/día · 600/mes', 'IA Avanzada (Claude)', '3 webs profesionales'],
   },
   {
     code: 'AGENCIA',
     name: 'Agencia',
-    price: 'S/ 199',
+    price: 'S/ 169',
     icon: Building2,
     highlight: false,
-    perks: ['20 créditos/día · 400/mes', 'IA de máxima calidad', '15 webs · soporte 24/7'],
+    perks: ['250 créditos/día · 1500/mes', 'IA de máxima calidad', '15 webs · soporte 24/7'],
   },
 ];
 
