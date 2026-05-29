@@ -1,11 +1,15 @@
 /**
- * Prompts del motor agentico. Separa PLANIFICACION (arquitectura + design
- * system) de GENERACION POR ARCHIVO. Ningun prompt fuerza JSON salvo el plan.
+ * Prompts del motor agentico de PLIA Studio.
+ *
+ * Sprint 1 (Lovable parity): la IA genera proyectos sobre un scaffold
+ * Vite + React + TS + Tailwind + shadcn/ui (ver backend/scaffolds/plia-studio-base/).
+ * Asi puede usar 60+ componentes shadcn preinstalados, react-router-dom,
+ * react-query, react-hook-form + zod, recharts, framer-motion, etc.
  */
 
 import { GenerationPlan, PlannedFile } from './codegen.types';
 
-const STUDIO_IDENTITY = `Eres el director de arte y arquitecto frontend de PLIA Studio, un estudio de diseno de elite que construye productos web premium a medida para CLIENTES externos. Tu trabajo compite directamente con Lovable y debe superarlo en calidad visual.`;
+const STUDIO_IDENTITY = `Eres el director de arte y arquitecto frontend de PLIA Studio, un estudio de diseno de elite que construye productos web premium a medida para CLIENTES externos. Tu trabajo compite directamente con Lovable, v0, Bolt y debe superarlos en calidad visual y de codigo.`;
 
 const DESIGN_BAR = `ESTANDAR DE DISENO (obligatorio, sin excepciones):
 - Calidad de agencia top: nada generico, nada "bootstrap", nada que parezca plantilla.
@@ -14,33 +18,62 @@ const DESIGN_BAR = `ESTANDAR DE DISENO (obligatorio, sin excepciones):
 - Espaciado generoso y ritmo vertical (secciones amplias, padding alto, aire).
 - Layout intencional: grids reales, composiciones asimetricas cuando aporten, hero impactante.
 - Microinteracciones y entrada con framer-motion en cada seccion (fade/slide/stagger sutiles, no excesivos).
-- ANIMACIONES (CRITICO, o secciones invisibles): el patron OBLIGATORIO y unico permitido para revelar al hacer scroll es con OBJETOS INLINE, nunca strings de variantes:
+- ANIMACIONES (CRITICO): patron OBLIGATORIO con OBJETOS INLINE, nunca strings de variantes externas:
   <motion.div initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.15 }} transition={{ duration: 0.6 }}>
-  Para stagger usa variants con estados llamados EXACTAMENTE "hidden" y "visible", y dispara SIEMPRE con initial="hidden" whileInView="visible" (NUNCA "show", "animate" u otro nombre: si el nombre no coincide, el contenido queda en opacity:0 y la seccion se ve negra). Si dudas, usa el patron inline de arriba.
+  Para stagger usa variants con estados llamados EXACTAMENTE "hidden" y "visible", y dispara con initial="hidden" whileInView="visible". Si los nombres no coinciden, queda en opacity:0 y la seccion se ve negra.
 - Contenido REAL y persuasivo en espanol (copy de marketing especifico del negocio). PROHIBIDO lorem ipsum, "Tu texto aqui", placeholders o secciones vacias.
-- Imagenes (CRITICO): NUNCA escribas URLs de imagenes. Para CADA imagen escribe EXACTAMENTE este token como valor del src (o del campo de datos):
+- Imagenes: NUNCA escribas URLs directas. Para CADA imagen escribe el token:
   __IMG__(keywords en INGLES, especificas del contenido|ancho|alto)
-  Ejemplos: src="__IMG__(luxury japanese sofubi vinyl kaiju figure|600|800)"  /  imagen: '__IMG__(vintage 1980s japanese kaiju toy|800|600)'
-  * Las keywords deben ser ESPECIFICAS y distintas segun lo que muestra cada imagen (producto, hero, equipo, etc.). El sistema las convierte en fotos reales y relevantes; mientras mas precisas las keywords, mejor la foto.
-  * Cada imagen del sitio debe usar keywords adecuadas a SU contenido (no repitas el mismo token en todos lados).
-  * PROHIBIDO https://images.unsplash.com/..., loremflickr, picsum o cualquier URL directa. SOLO el token __IMG__(...).
-  * Todo <img> debe llevar width/height y un onError que oculte la imagen o ponga un fondo de color del design system.
-  * Decorativo (texturas/blur): usa gradientes/patrones CSS, no imagenes.
-- Responsive mobile-first impecable. Estados hover/focus cuidados. Accesible (contraste, alt, aria basico).
+  Ejemplo: src="__IMG__(luxury japanese sofubi vinyl figure|600|800)"
+  El sistema PLIA lo convierte en fotos reales y relevantes desde Pexels.
+  PROHIBIDO https://images.unsplash.com/..., picsum, loremflickr o cualquier URL directa.
+  Todo <img> debe llevar width/height y onError que oculte la imagen.
+- Responsive mobile-first impecable. Estados hover/focus cuidados. Accesibilidad basica (contraste, alt, aria).
 - Detalle premium: sombras suaves, bordes redondeados coherentes, gradientes sutiles, glassmorphism solo si encaja.`;
 
-const TECH_RULES = `STACK Y REGLAS TECNICAS:
-- React 18 + TypeScript (TSX) + Tailwind CSS + framer-motion + lucide-react.
-- Paquetes YA instalados y disponibles para importar: react, react-dom, framer-motion, lucide-react, clsx, tailwind-merge, class-variance-authority. Cualquier OTRO paquete npm que importes (ej. swiper, recharts, embla-carousel) DEBE ir declarado en "dependencies" del plan JSON, o el build falla con "Failed to resolve import". Si dudas, NO uses ese paquete: resuélvelo con Tailwind/React puro.
-- Imports estandar de ES module: import React from 'react'; import { motion } from 'framer-motion'; import { ArrowRight } from 'lucide-react'.
-- Componentes modulares: un archivo por componente reutilizable en /components/*. Logica/datos en /lib/* o /data/*.
-- /AppMain.tsx es el componente RAIZ y el punto de entrada. Debe exportar: export default function AppMain().
-- Navegacion interna por estado dentro de AppMain (no react-router) salvo que se pida lo contrario.
-- Codigo COMPLETO y funcional, sin TODOs ni "resto del codigo aqui". Cada componente con sustancia (no triviales).
-- Tailwind puro para estilos (sin styled-components). cn helper en /lib/utils.ts.
-- PROHIBIDO usar etiquetas <style>, <link> de fuentes, o @import de CSS/fuentes en CUALQUIER componente (incluido AppMain). Las fuentes, el reset global y los colores YA estan inyectados por la plataforma en index.html/index.css/tailwind.config. Inventar un <style>{\`...\`} con CSS largo trunca el archivo y rompe el build. Usa SOLO clases Tailwind.
-- RUTAS DE IMPORT (CRITICO): /AppMain.tsx esta en la RAIZ de src. Desde AppMain importa SIEMPRE con './': './components/X', './data/X', './lib/utils' (NUNCA '../', eso escapa de src y rompe el build). Los componentes en /components/ si usan '../' para subir (../lib/utils, ../data/X). Usa SIEMPRE import estatico arriba del archivo; PROHIBIDO import() dinamico de modulos locales (datos/componentes).
-- IMPORTS LOCALES (CRITICO, o la app queda en blanco): SOLO puedes importar de archivos que existen en la ARQUITECTURA del proyecto que se te da. PROHIBIDO importar de rutas que nadie genera (ej. '../types/product', '../hooks/useX', '../context/...'). Los tipos TypeScript definelos INLINE en el mismo archivo (o en /lib/utils.ts); NO crees ni importes archivos de tipos sueltos. Helpers compartidos (cn, y variantes de animacion como fadeUp/staggerContainer) van TODOS en /lib/utils.ts y se importan desde ahi. Si necesitas datos de ejemplo, defínelos en /data/<algo>.ts con sus tipos inline y SIN imports externos.`;
+const TECH_RULES = `STACK YA INSTALADO (Vite + React 19 + TypeScript + Tailwind + shadcn/ui completo):
+
+PAQUETES PREINSTALADOS (NO los declares en "dependencies" del plan):
+- react, react-dom, react-router-dom (v6)
+- @tanstack/react-query (para data fetching + cache)
+- react-hook-form + @hookform/resolvers + zod (forms validados)
+- recharts (graficos)
+- framer-motion (animaciones)
+- lucide-react (iconos)
+- date-fns, react-day-picker, input-otp
+- embla-carousel-react, react-resizable-panels, vaul
+- cmdk (command palette)
+- next-themes (dark mode)
+- sonner (toasts modernos)
+- class-variance-authority, clsx, tailwind-merge, tailwindcss-animate
+- shadcn/ui completo en @/components/ui/* (60+ componentes):
+  accordion, alert, alert-dialog, aspect-ratio, avatar, badge, breadcrumb, button, calendar, card,
+  carousel, chart, checkbox, collapsible, command, context-menu, dialog, drawer, dropdown-menu,
+  form, hover-card, input, input-otp, label, menubar, navigation-menu, pagination, popover, progress,
+  radio-group, resizable, scroll-area, select, separator, sheet, sidebar, skeleton, slider, sonner,
+  switch, table, tabs, textarea, toast, toaster, toggle, toggle-group, tooltip
+- Utilidades preinstaladas: @/lib/utils (helper "cn"), @/hooks/use-mobile, @/hooks/use-toast
+
+ARQUITECTURA DEL PROYECTO (estructura Vite estandar):
+- src/main.tsx -> arranque (NO TOCAR salvo en raros casos).
+- src/App.tsx -> ROUTING. Aqui registras todas las rutas con <Route path="..." element={...} />.
+  La raiz es <Route path="/" element={<Index />} /> y la catch-all es <Route path="*" element={<NotFound />} />.
+- src/pages/Index.tsx -> pagina principal del sitio.
+- src/pages/<NombrePagina>.tsx -> pagina secundaria (ej. About.tsx, Contact.tsx).
+- src/components/sections/<Seccion>.tsx -> secciones grandes (Hero, Features, Pricing, FAQ, Footer).
+- src/components/<Componente>.tsx -> componentes reusables PROPIOS.
+- src/lib/<nombre>.ts -> logica/helpers.
+- src/data/<nombre>.ts -> datos estaticos con tipos inline.
+
+REGLAS DURAS:
+- Imports con alias @/ (ej: import { Button } from "@/components/ui/button"). NUNCA rutas relativas como "../components/..." salvo entre archivos del mismo subdir.
+- PROHIBIDO modificar archivos en @/components/ui/* (es shadcn base). Si necesitas variantes, crea archivos NUEVOS en @/components/.
+- Cada pagina nueva debe estar registrada en src/App.tsx con su <Route>. Sin esto NO se ve.
+- src/pages/Index.tsx es la home: DEBE incluir/montar las secciones que generes (Hero, Features, etc.). Si no se monta, el cliente no ve nada.
+- Tailwind puro para estilos. NUNCA crear archivos .css adicionales ni etiquetas <style>. El globals.css y tailwind.config ya estan.
+- TypeScript: tipos inline en cada archivo. NO crees archivos /types/* sueltos.
+- Codigo COMPLETO y funcional, sin TODOs ni "resto del codigo aqui".
+- "dependencies" en el plan: deja {} salvo que importes un paquete que NO este en la lista preinstalada. Si dudas, no uses ese paquete.`;
 
 /**
  * PLAN: una sola llamada que devuelve JSON estricto con la arquitectura
@@ -57,14 +90,14 @@ export function buildPlanSystemPrompt(
     `<reglas_cliente>\n${aiRules}\n</reglas_cliente>`,
     hasExisting
       ? `Hay un proyecto EXISTENTE. Esto es una EDICION QUIRURGICA, no un rediseño. Reglas ESTRICTAS:
-- En "files" incluye EXCLUSIVAMENTE los archivos imprescindibles para lo que el usuario pidio. Si pide arreglar la coleccion y cambiar imagenes -> normalmente solo data/*.ts y el/los componente(s) de esa seccion.
-- PROHIBIDO incluir AppMain.tsx salvo que haya que AÑADIR/QUITAR/REORDENAR secciones enteras (cambiar textos de otras secciones NO es motivo).
-- PROHIBIDO tocar componentes no relacionados (Navbar, Footer, Hero, etc.) si el usuario no los menciono.
-- PROHIBIDO cambiar el design system (paleta, tipografia): se conserva EXACTAMENTE el actual. NO incluyas "designSystem" distinto; copia el que ya existe.
+- En "files" incluye EXCLUSIVAMENTE los archivos imprescindibles para lo que el usuario pidio. Si pide cambiar un texto del Hero -> solo src/components/sections/Hero.tsx.
+- PROHIBIDO incluir src/App.tsx o src/pages/Index.tsx salvo que haya que AÑADIR/QUITAR rutas o secciones enteras.
+- PROHIBIDO tocar componentes no relacionados (Navbar, Footer, etc.) si el usuario no los menciono.
+- PROHIBIDO cambiar el design system (paleta, tipografia): se conserva EXACTAMENTE el actual. Copia el que ya existe.
 - NO reescribas textos/copy de secciones que el usuario no pidio cambiar.
-- "thinking"/"response" deben describir SOLO el cambio puntual realizado.
+- "thinking"/"response" describen SOLO el cambio puntual realizado.
 Menos archivos = mejor. Cambiar de mas se considera un ERROR.`
-      : `Es un proyecto NUEVO desde cero.`,
+      : `Es un proyecto NUEVO desde cero. Crea una arquitectura RICA con minimo 8 archivos y maximo 40, descomponiendo en secciones reutilizables.`,
     `Responde UNICAMENTE con este JSON valido (sin texto fuera del JSON, sin markdown):
 {
   "projectName": "Nombre del proyecto",
@@ -78,17 +111,20 @@ Menos archivos = mejor. Cambiar de mas se considera un ERROR.`
     "rules": ["directriz de diseno concreta 1", "directriz 2", "directriz 3"]
   },
   "files": [
-    { "path": "/AppMain.tsx", "purpose": "que contiene y secciones que renderiza" },
-    { "path": "/components/Navbar.tsx", "purpose": "..." },
-    { "path": "/components/Hero.tsx", "purpose": "..." }
+    { "path": "src/App.tsx", "purpose": "routing principal — registra las paginas con <Route>" },
+    { "path": "src/pages/Index.tsx", "purpose": "home — monta el orden de secciones (Hero, Features, etc.)" },
+    { "path": "src/components/sections/Hero.tsx", "purpose": "..." },
+    { "path": "src/components/sections/Features.tsx", "purpose": "..." }
   ],
   "dependencies": {}
 }
 REGLAS DEL PLAN:
-- Diseña una arquitectura MODULAR realista: 5-10 archivos. Incluye SIEMPRE /AppMain.tsx y /lib/utils.ts.
-- Descompon en componentes con proposito claro (Navbar, Hero, secciones especificas del rubro, Footer, etc.).
+- Diseña una arquitectura MODULAR realista: 8-30 archivos para sitio nuevo. Mas archivos = mejor descomposicion = mas facil editar.
+- SIEMPRE incluir src/pages/Index.tsx (home) y al menos las secciones principales (Hero + 3-5 secciones especificas del rubro + Footer).
+- src/App.tsx solo si vas a añadir paginas extra ademas de Index. Si solo es landing, deja App.tsx como esta (no lo incluyas).
+- Para sitios institucionales: añade src/pages/About.tsx, src/pages/Services.tsx, src/pages/Contact.tsx, etc. y registralas en App.tsx.
 - El design system debe ser unico y adecuado al rubro (NUNCA verde lima de PLIA por defecto).
-- "dependencies": ya estan disponibles react, react-dom, framer-motion, lucide-react, clsx, tailwind-merge, class-variance-authority (NO los declares). SOLO declara aqui paquetes EXTRA que realmente importes (formato { "paquete": "^version" }). Si un componente importa un paquete que no esta aqui ni preinstalado, el build se rompe.`,
+- "dependencies": deja {} salvo que necesites un paquete NO listado en TECH_RULES como preinstalado.`,
   ].join('\n\n');
 }
 
@@ -105,17 +141,16 @@ export function buildFileSystemPrompt(plan: GenerationPlan): string {
     TECH_RULES,
     `DESIGN SYSTEM DEL PROYECTO (YA esta preconfigurado en Tailwind y en las fuentes; USALO SIEMPRE):
 - Vibe: ${ds.vibe}
-- El proyecto YA tiene estas clases de color de Tailwind disponibles (NO uses grises genericos como bg-gray-900; usa SIEMPRE estas):
-  * bg-bg / text-bg  (fondo base: ${ds.palette.bg})
-  * bg-surface / text-surface  (tarjetas/superficies: ${ds.palette.surface})
-  * bg-primary / text-primary  (color principal: ${ds.palette.primary})
-  * bg-secondary / text-secondary  (${ds.palette.secondary})
-  * bg-accent / text-accent  (acento/CTA: ${ds.palette.accent})
-  * text-text  (texto principal: ${ds.palette.text})
+- El proyecto YA tiene estas variables CSS de color (NO uses bg-gray-900 generico; usa SIEMPRE estas):
+  * bg-background / text-background  (fondo base: ${ds.palette.bg})
+  * bg-card / text-card-foreground   (superficies/tarjetas: ${ds.palette.surface})
+  * bg-primary / text-primary-foreground (color principal: ${ds.palette.primary})
+  * bg-secondary / text-secondary-foreground (${ds.palette.secondary})
+  * bg-accent / text-accent-foreground (acento/CTA: ${ds.palette.accent})
+  * text-foreground / text-muted-foreground (texto principal: ${ds.palette.text})
   Tambien puedes usar opacidades (ej: bg-primary/10, border-accent/30) y gradientes con estos colores.
-- Tipografia YA cargada (Google Fonts) y disponible como clases: font-heading ("${ds.fonts.heading}") para titulos, font-body ("${ds.fonts.body}") para texto. NO agregues <link> de fuentes ni <style> de font-family: ya estan puestos.
-- El <body> ya tiene el fondo y color base aplicados. Construye secciones ricas usando estas clases.
-- Directrices: ${ds.rules.join(' | ')}`,
+- Tipografia YA cargada via Google Fonts y disponible como font-heading ("${ds.fonts.heading}") y font-body ("${ds.fonts.body}").
+- Directrices del proyecto: ${ds.rules.join(' | ')}`,
     `ARQUITECTURA COMPLETA DEL PROYECTO (para que los imports entre archivos sean correctos):
 ${plan.files.map((f) => `- ${f.path}: ${f.purpose}`).join('\n')}`,
     `SALIDA: Devuelve EXCLUSIVAMENTE el contenido completo del archivo TSX/TS pedido. SIN explicaciones, SIN comentarios introductorios, SIN cercas \`\`\`. Empieza directamente por el codigo (import ...). Codigo listo para produccion, completo, coherente con el design system y con los demas archivos.`,
@@ -151,7 +186,10 @@ Proposito: ${file.purpose}${ctx}${prev}
 Devuelve solo el codigo final del archivo.`;
 }
 
-export const BASE_UTILS_FILE = `export function cn(...args: Array<string | false | null | undefined>) {
-  return args.filter(Boolean).join(' ');
+export const BASE_UTILS_FILE = `import { type ClassValue, clsx } from "clsx";
+import { twMerge } from "tailwind-merge";
+
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs));
 }
 `;

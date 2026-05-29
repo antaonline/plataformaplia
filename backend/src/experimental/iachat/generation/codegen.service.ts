@@ -16,7 +16,10 @@ import {
   buildPlanSystemPrompt,
 } from './prompts';
 
-const MAX_FILES = 12;
+// PLIA Studio (Sprint 1, Lovable parity): proyectos con scaffold Vite + shadcn/ui
+// permiten descomponer mucho mas — secciones individuales, paginas separadas,
+// data files. Lovable/Dyad generan 20-40 archivos por proyecto.
+const MAX_FILES = 40;
 
 export interface GenerateParams {
   userId: number;

@@ -39,7 +39,7 @@ const INTENT_PATTERNS: IntentPattern[] = [
       /nueva?\s+(?:sección|página|componente|funcionalidad|característica)/i,
     ],
     type: EditType.ADD_FEATURE,
-    contextHint: 'El usuario quiere añadir un nuevo elemento o funcionalidad. Genera el nuevo componente y actualiza AppMain para incluirlo.',
+    contextHint: 'El usuario quiere añadir un nuevo elemento o funcionalidad. Genera el nuevo componente en src/components/sections/ y actualiza src/pages/Index.tsx (o la pagina relevante) para montarlo. Si es una pagina nueva, registra la ruta en src/App.tsx.',
   },
 
   // --- ACTUALIZAR ESTILO ---
