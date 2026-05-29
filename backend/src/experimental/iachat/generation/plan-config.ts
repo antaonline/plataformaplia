@@ -43,35 +43,40 @@ const M = {
 };
 
 // ===== Cadenas reusables =====
+// IMPORTANTE: en Google AI solo existen estos modelos reales hoy:
+//   gemini-2.0-flash, gemini-2.0-flash-lite
+//   gemini-2.5-pro, gemini-2.5-flash, gemini-2.5-flash-lite
+// Los nombres "gemini-3-*", "gemini-3.5-*", "gemini-3.1-*" NO EXISTEN —
+// la API devuelve 404 silencioso o 429. Removidos del chain.
+// Tambien añadimos SIEMPRE Sonnet/Haiku al final como fallback duro: si
+// Google rate-limita todos los Gemini, Anthropic responde y la app no se
+// queda colgada.
 
-// Freemium: BUILD con calidad alta como pidio el usuario, con Flash 3.5 de
-// respaldo cuando 2.5 Pro se agota (1K RPD).
-const FREE_BUILD_CHAIN = ['gemini-2.5-pro', 'gemini-3.5-flash'];
+// Freemium: BUILD con calidad alta + fallback Claude Sonnet si Gemini cae.
+const FREE_BUILD_CHAIN = ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.0-flash', M.sonnet];
 
-// Freemium: EDIT con cadena larga de Flash variantes. Suma cuotas
-// (lite ilimitado en RPD) -> throughput practicamente sin limite.
+// Freemium: EDIT con cadena larga de Flash variantes para sumar cuotas
+// (cada modelo tiene su propio RPM/RPD) + Haiku como rescate.
 const FREE_FLASH_CHAIN = [
-  'gemini-3-flash',
-  'gemini-3.5-flash',
   'gemini-2.5-flash',
-  'gemini-3.1-flash-lite',
   'gemini-2.5-flash-lite',
   'gemini-2.0-flash',
+  'gemini-2.0-flash-lite',
+  M.haiku,
 ];
 
-// Plan ligero (architecting JSON) usa la misma cadena Flash.
+// Plan ligero (architecting JSON) usa la misma cadena Flash + Haiku rescate.
 const FREE_PLAN_CHAIN = FREE_FLASH_CHAIN;
 
-// Plan pagado basico: Gemini Flash con Claude Haiku de respaldo cuando
-// Google cae o limita.
-const PAID_BASIC_CHAIN = ['gemini-3.5-flash', 'gemini-3-flash', M.haiku];
+// Plan pagado basico: Gemini Flash con Haiku de respaldo.
+const PAID_BASIC_CHAIN = ['gemini-2.5-flash', 'gemini-2.0-flash', M.haiku];
 
-// Build de alta calidad para planes pagos: Gemini 3.1 Pro (mejor calidad
-// Google) -> Sonnet (calidad equivalente Anthropic) -> Gemini 2.5 Pro.
-const PAID_HIGH_BUILD = ['gemini-3.1-pro', M.sonnet, 'gemini-2.5-pro'];
+// Build de alta calidad para planes pagos: Sonnet primero (calidad max) ->
+// Gemini 2.5 Pro como respaldo si hay limite Anthropic.
+const PAID_HIGH_BUILD = [M.sonnet, 'gemini-2.5-pro', 'gemini-2.5-flash'];
 
 // Plan / Edit de planes pagos medianos/altos: Flash rapido + Haiku.
-const PAID_FAST_CHAIN = ['gemini-3.5-flash', M.haiku];
+const PAID_FAST_CHAIN = ['gemini-2.5-flash', M.haiku];
 
 export const PLANS: Record<PlanCode, PlanConfig> = {
   EXPLORADOR: {
