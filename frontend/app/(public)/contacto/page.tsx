@@ -49,6 +49,9 @@ const Contacto = () => {
     phone: "",
     business: "",
     message: "",
+    // Honeypot anti-spam: campo invisible. Si un bot lo llena, el
+    // backend lo detecta y descarta el mensaje. Humanos no lo ven.
+    website: "",
   });
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -69,11 +72,19 @@ const Contacto = () => {
       const text = await res.text();
       const data = text ? JSON.parse(text) : null;
       if (!res.ok) {
-        throw new Error(data?.message || "No se pudo enviar el mensaje.");
+        // Backend ValidationPipe devuelve message como ARRAY de strings.
+        // Lo formateamos para que el toast muestre algo legible.
+        const raw = data?.message;
+        const errMsg = Array.isArray(raw)
+          ? raw.join(' · ')
+          : typeof raw === 'string'
+            ? raw
+            : "No se pudo enviar el mensaje.";
+        throw new Error(errMsg);
       }
 
       toast({
-        title: "??Mensaje enviado!",
+        title: "¡Mensaje enviado!",
         description: "Nos pondremos en contacto contigo muy pronto.",
       });
 
@@ -83,6 +94,7 @@ const Contacto = () => {
         phone: "",
         business: "",
         message: "",
+        website: "",
       });
     } catch (err: any) {
       toast({
@@ -156,6 +168,8 @@ const Contacto = () => {
                         placeholder="Ej: María García"
                         value={formData.name}
                         onChange={handleChange}
+                        maxLength={120}
+                        autoComplete="name"
                         required
                       />
                     </div>
@@ -164,9 +178,13 @@ const Contacto = () => {
                       <Input
                         id="phone"
                         name="phone"
+                        type="tel"
                         placeholder="Ej: 999 999 999"
                         value={formData.phone}
                         onChange={handleChange}
+                        maxLength={40}
+                        pattern="[\d\s+()\-]{6,40}"
+                        autoComplete="tel"
                         required
                       />
                     </div>
@@ -181,6 +199,8 @@ const Contacto = () => {
                       placeholder="Ej: maria@gmail.com"
                       value={formData.email}
                       onChange={handleChange}
+                      maxLength={254}
+                      autoComplete="email"
                       required
                     />
                   </div>
@@ -193,6 +213,8 @@ const Contacto = () => {
                       placeholder="Ej: Pastelería Dulce María"
                       value={formData.business}
                       onChange={handleChange}
+                      maxLength={120}
+                      autoComplete="organization"
                     />
                   </div>
 
@@ -205,11 +227,41 @@ const Contacto = () => {
                       rows={4}
                       value={formData.message}
                       onChange={handleChange}
+                      maxLength={2000}
                       required
+                    />
+                    <p className="text-xs text-muted-foreground text-right">
+                      {formData.message.length}/2000
+                    </p>
+                  </div>
+
+                  {/* Honeypot anti-spam: invisible para humanos, visible
+                      para bots que llenan automáticamente todos los campos.
+                      Si llega con contenido, el backend descarta el envío. */}
+                  <div
+                    aria-hidden="true"
+                    style={{
+                      position: 'absolute',
+                      left: '-9999px',
+                      top: '-9999px',
+                      width: '1px',
+                      height: '1px',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    <label htmlFor="website">No llenar este campo</label>
+                    <input
+                      type="text"
+                      id="website"
+                      name="website"
+                      tabIndex={-1}
+                      autoComplete="off"
+                      value={formData.website}
+                      onChange={handleChange}
                     />
                   </div>
 
-                  <Button 
+                  <Button
                     variant="cta" 
                     size="lg" 
                     type="submit" 
