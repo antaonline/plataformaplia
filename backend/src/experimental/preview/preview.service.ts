@@ -196,7 +196,12 @@ export class PreviewService implements OnModuleDestroy {
         pp.status = 'installing';
         this.appendLog(pp, '[PLIA] Instalando dependencias (npm install)...');
         await new Promise<void>((resolve, reject) => {
-          const child = spawn(npmCommand, ['install', '--no-audit', '--no-fund'], {
+          // --legacy-peer-deps: el scaffold trae React 19 y algunas deps de
+          // shadcn aun declaran peer react ^16/17/18 (next-themes@0.3 etc).
+          // npm 7+ aborta el install salvo que le digamos que ignore peers
+          // viejos. Aceptable porque sabemos que React 19 es compatible en
+          // runtime con esas libs (las usa Lovable/Dyad en produccion).
+          const child = spawn(npmCommand, ['install', '--no-audit', '--no-fund', '--legacy-peer-deps'], {
             cwd: projectPath,
             env: devEnv(),
             shell: process.platform === 'win32',

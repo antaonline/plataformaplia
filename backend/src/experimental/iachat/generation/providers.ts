@@ -62,14 +62,27 @@ async function withRetry<T>(
         status === 500 ||
         e?.code === 'ECONNRESET' ||
         e?.code === 'ETIMEDOUT';
-      if (!retriable || attempt >= maxAttempts) throw e;
+      if (!retriable) throw e;
+
+      // 429 = rate limit por minuto / por dia. Reintentar el MISMO modelo
+      // 3 veces con backoff exponencial gasta 12+ segundos antes de pasar
+      // al siguiente modelo del chain (que tiene su propia cuota). Para
+      // 429 cortamos en 1 reintento rapido y dejamos que el FallbackProvider
+      // rote al siguiente modelo. Para 503/500/ECONN si seguimos hasta
+      // maxAttempts porque suelen ser hipo de red.
+      const isQuota = status === 429;
+      const effectiveMax = isQuota ? 2 : maxAttempts;
+      if (attempt >= effectiveMax) throw e;
+
       const retryAfter = Number(e?.response?.headers?.['retry-after']);
       const base = Number.isFinite(retryAfter) && retryAfter > 0
-        ? retryAfter * 1000
-        : Math.min(1500 * 2 ** (attempt - 1), 20_000);
-      const wait = base + Math.floor(Math.random() * 800);
+        ? Math.min(retryAfter * 1000, 3000)
+        : isQuota
+          ? 800 // 429: pausa minima, luego saltamos al fallback
+          : Math.min(1500 * 2 ** (attempt - 1), 20_000);
+      const wait = base + Math.floor(Math.random() * 400);
       logger.warn(
-        `${label}: ${status || e?.code || 'error'} -> reintento ${attempt}/${maxAttempts - 1} en ${wait}ms`,
+        `${label}: ${status || e?.code || 'error'} -> reintento ${attempt}/${effectiveMax - 1} en ${wait}ms`,
       );
       await sleep(wait);
     }
