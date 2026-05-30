@@ -28,6 +28,27 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Toaster } from '@/components/ui/toaster';
 
+// Mapea los estados internos de la pagina (Build/Ask/Plan/working/searching/idle)
+// a los estados que ThinkingEngine entiende (thinking/planning/coding/...).
+// Sin esto, TypeScript rechaza pasar agentState directamente al componente.
+function mapToThinkingState(
+  s: AgentState | 'idle' | 'working' | 'searching' | 'Build' | 'Ask' | 'Plan',
+): AgentState {
+  switch (s) {
+    case 'idle':
+    case 'Build':
+    case 'Ask':
+    case 'Plan':
+      return 'thinking';
+    case 'working':
+      return 'coding';
+    case 'searching':
+      return 'debugging';
+    default:
+      return s;
+  }
+}
+
 export default function projectPage() {
   const { id } = useParams();
   const router = useRouter();
@@ -56,7 +77,12 @@ export default function projectPage() {
   const [runtimeError, setRuntimeError] = useState<string | null>(null);
   const [isInspectMode, setIsInspectMode] = useState(false);
   const [selectedElement, setSelectedElement] = useState<any>(null);
-  const [agentState, setAgentState] = useState<'idle' | 'planning' | 'working' | 'searching' | 'Build' | 'Ask' | 'Plan'>('Build');
+  // Unimos los estados propios de esta pagina (Build/Ask/Plan/working/searching/idle)
+  // con los estados del ThinkingEngine (coding/rendering/done/...) para que setAgentState
+  // acepte cualquiera sin que `next build` se queje por type mismatch.
+  const [agentState, setAgentState] = useState<
+    AgentState | 'idle' | 'working' | 'searching' | 'Build' | 'Ask' | 'Plan'
+  >('Build');
   const [isModeMenuOpen, setIsModeMenuOpen] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(384);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -810,7 +836,7 @@ export default function projectPage() {
       setCurrentTask("");
       setCompletedTasks([]);
     } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast.error('Error', { description: err.message });
       setAgentState("idle");
     } finally {
       setIsLoading(false);
@@ -834,9 +860,11 @@ export default function projectPage() {
       });
       if (!res.ok) throw new Error('Error al publicar');
       const data = await res.json();
-      toast({ title: "¡Proyecto Publicado!", description: `Tu web está lista en: ${data.previewUrl}` });
+      toast.success('¡Proyecto Publicado!', {
+        description: `Tu web está lista en: ${data.previewUrl}`,
+      });
     } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast.error('Error', { description: err.message });
     } finally {
       setIsLoading(false);
       setAgentState("idle");
@@ -1223,7 +1251,11 @@ export default function projectPage() {
               {isLoading && (
                 <div className="space-y-4 animate-pulse">
                   <div className="bg-white border border-slate-100 rounded-2xl p-4 space-y-3 shadow-sm">
-                    <ThinkingEngine state={agentState} completedTasks={completedTasks} currentTask={currentTask} />
+                    <ThinkingEngine
+                      state={mapToThinkingState(agentState)}
+                      completedTasks={completedTasks}
+                      currentTask={currentTask}
+                    />
                   </div>
                     <div ref={messagesEndRef} />
                 </div>
