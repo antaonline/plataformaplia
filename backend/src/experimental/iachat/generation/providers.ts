@@ -329,6 +329,53 @@ const openai = new OpenAiProvider();
 
 export const PROVIDERS = { claude, gemini, openai };
 
+// ─── Circuit breaker por proveedor ───────────────────────────────────
+// Si un provider dispara 429 (rate limit / cuota) repetidamente, dejamos
+// de intentarlo durante un periodo de gracia para no malgastar latencia.
+// El chain entonces salta directo al siguiente provider disponible.
+// Se resetea solo cuando expira el cooldown.
+interface BreakerState {
+  failures: number;
+  cooledUntil: number; // epoch ms; 0 si esta sano
+}
+const BREAKER_THRESHOLD = 3; // 3 x 429 seguidos -> abrir
+const BREAKER_COOLDOWN_MS = 60_000; // 60s sin intentar ese provider
+const breakers: Record<string, BreakerState> = {};
+
+function isProviderCooled(id: string): boolean {
+  const b = breakers[id];
+  if (!b) return false;
+  if (b.cooledUntil > Date.now()) return true;
+  if (b.cooledUntil !== 0 && b.cooledUntil <= Date.now()) {
+    // Cooldown expiro; reseteamos para dar otra oportunidad.
+    breakers[id] = { failures: 0, cooledUntil: 0 };
+  }
+  return false;
+}
+
+function noteProviderFailure(id: string, status: number | undefined): void {
+  if (status !== 429) return; // solo cuotas; 503/500 son transitorios
+  const b = breakers[id] || { failures: 0, cooledUntil: 0 };
+  b.failures += 1;
+  if (b.failures >= BREAKER_THRESHOLD && b.cooledUntil === 0) {
+    b.cooledUntil = Date.now() + BREAKER_COOLDOWN_MS;
+    logger.warn(
+      `[breaker] ${id} abierto (${b.failures} x 429 seguidos). Saltando ${BREAKER_COOLDOWN_MS / 1000}s.`,
+    );
+  }
+  breakers[id] = b;
+}
+
+function noteProviderSuccess(id: string): void {
+  if (breakers[id]?.failures) {
+    breakers[id] = { failures: 0, cooledUntil: 0 };
+  }
+}
+
+export function getBreakerSnapshot() {
+  return JSON.parse(JSON.stringify(breakers));
+}
+
 /**
  * Dado un nombre de modelo, retorna el provider que sabe llamarlo. Permite
  * cadenas de fallback que mezclen Google + Anthropic + OpenAI sin tener que
@@ -344,8 +391,31 @@ export function resolveProviderForModel(model: string): CodegenProvider {
 }
 
 /**
+ * Indica si un provider esta en cooldown por circuit breaker. El codegen
+ * lo usa para saltar todos los modelos de ese provider en el chain.
+ */
+export function isProviderOpen(providerId: string): boolean {
+  return isProviderCooled(providerId);
+}
+
+/**
+ * Notifica resultado de UNA llamada al breaker. El codegen llama esto tras
+ * cada intento de completeWithChain para que el breaker se entere de los
+ * 429 sin tener que envolver cada provider.
+ */
+export function recordProviderResult(
+  providerId: string,
+  ok: boolean,
+  status?: number,
+): void {
+  if (ok) noteProviderSuccess(providerId);
+  else noteProviderFailure(providerId, status);
+}
+
+/**
  * Provider con fallback automatico: intenta el preferido y si lanza error
- * o no esta disponible, cae al siguiente disponible.
+ * o no esta disponible, cae al siguiente disponible. Respeta el circuit
+ * breaker para no malgastar tiempo en providers en cooldown.
  */
 export class FallbackProvider implements CodegenProvider {
   readonly id: string;
@@ -365,18 +435,26 @@ export class FallbackProvider implements CodegenProvider {
     let lastErr: unknown;
     for (const p of this.chain) {
       if (!p.isAvailable()) continue;
+      if (isProviderCooled(p.id)) {
+        logger.warn(`[breaker] skip ${p.id} (en cooldown)`);
+        continue;
+      }
       try {
         const out = await p.complete(system, messages, opts);
-        if (out && out.trim().length > 0) return out;
+        if (out && out.trim().length > 0) {
+          noteProviderSuccess(p.id);
+          return out;
+        }
         lastErr = new Error(`${p.id} devolvio respuesta vacia`);
       } catch (e: any) {
         lastErr = e;
-        const status = e?.response?.status || '';
+        const status = e?.response?.status;
+        noteProviderFailure(p.id, status);
         const body = e?.response?.data
           ? JSON.stringify(e.response.data).slice(0, 600)
           : e?.message || String(e);
         logger.warn(
-          `Provider ${p.id} fallo (${status}). Detalle: ${body}`,
+          `Provider ${p.id} fallo (${status || ''}). Detalle: ${body}`,
         );
       }
     }

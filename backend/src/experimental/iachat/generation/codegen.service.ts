@@ -6,7 +6,11 @@ import {
   GenerationPlan,
   PlannedFile,
 } from './codegen.types';
-import { resolveProviderForModel } from './providers';
+import {
+  isProviderOpen,
+  recordProviderResult,
+  resolveProviderForModel,
+} from './providers';
 import { CreditService } from './credit.service';
 import { resolveImages } from './image-resolver';
 import {
@@ -73,9 +77,19 @@ export class CodegenService {
         );
         continue;
       }
+      // Circuit breaker: si el provider ya recibio N x 429 seguidos en los
+      // ultimos 60s, NO desperdiciamos ~1s pegandole de nuevo. Saltamos
+      // directo al siguiente modelo (que probablemente es otro provider).
+      if (isProviderOpen(provider.id)) {
+        this.logger.warn(
+          `[chain ${phase}] skip ${model}: provider ${provider.id} en cooldown (breaker abierto)`,
+        );
+        continue;
+      }
       try {
         const out = await provider.complete(system, messages, { ...opts, model });
         if (out && out.trim().length > 0) {
+          recordProviderResult(provider.id, true);
           if (i > 0) {
             this.logger.log(
               `[chain ${phase}] ok con ${model} (provider=${provider.id}) tras ${i} fallback(s)`,
@@ -87,9 +101,11 @@ export class CodegenService {
         this.logger.warn(`[chain ${phase}] ${model} devolvio vacio -> siguiente`);
       } catch (e: any) {
         lastErr = e;
-        const status = e?.response?.status || e?.code || 'err';
+        const status = e?.response?.status;
+        recordProviderResult(provider.id, false, status);
+        const tag = status || e?.code || 'err';
         this.logger.warn(
-          `[chain ${phase}] ${model} (provider=${provider.id}) fallo ${status} -> siguiente`,
+          `[chain ${phase}] ${model} (provider=${provider.id}) fallo ${tag} -> siguiente`,
         );
       }
     }
