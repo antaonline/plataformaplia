@@ -58,7 +58,6 @@ async function main() {
         password: hash,
         name,
         role: 'ADMIN' as any,
-        emailVerified: true as any,
       },
     });
     console.log('\n=========================================');
