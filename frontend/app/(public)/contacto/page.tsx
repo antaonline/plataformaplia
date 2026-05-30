@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { SectionHeader } from "@/components/shared/SectionHeader";
 import { AnimatedSection } from "@/components/shared/AnimatedSection";
 import { Button } from "@/components/ui/button";
@@ -8,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { MessageCircle, Mail, Phone, MapPin, Clock, Send } from "lucide-react";
+import { CheckCircle2, MessageCircle, Mail, Phone, MapPin, Clock, Send } from "lucide-react";
 
 const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3002";
 const apiBase = apiUrl.endsWith("/api") ? apiUrl : `${apiUrl}/api`;
@@ -43,6 +44,11 @@ const contactMethods = [
 const Contacto = () => {
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // Cuando el envío es exitoso, mostramos la pantalla de confirmación
+  // animada en lugar del formulario. Si el usuario clickea "Enviar otro
+  // mensaje", volvemos al form vacío.
+  const [isSent, setIsSent] = useState(false);
+  const [sentClientName, setSentClientName] = useState('');
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -83,10 +89,10 @@ const Contacto = () => {
         throw new Error(errMsg);
       }
 
-      toast({
-        title: "¡Mensaje enviado!",
-        description: "Nos pondremos en contacto contigo muy pronto.",
-      });
+      // Guardamos el nombre antes de limpiar el form para personalizar el
+      // mensaje de éxito.
+      setSentClientName(formData.name.split(' ')[0] || '');
+      setIsSent(true);
 
       setFormData({
         name: "",
@@ -152,7 +158,129 @@ const Contacto = () => {
           <div className="grid lg:grid-cols-2 gap-12 max-w-5xl mx-auto">
             {/* Form */}
             <AnimatedSection>
-              <div className="bg-white rounded-2xl border border-border shadow-card p-8">
+              <div className="bg-white rounded-2xl border border-border shadow-card p-8 relative overflow-hidden min-h-[560px]">
+                <AnimatePresence mode="wait">
+                {isSent ? (
+                  // ─── Pantalla de éxito animada ───
+                  <motion.div
+                    key="success"
+                    initial={{ opacity: 0, scale: 0.92 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.92 }}
+                    transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
+                    className="absolute inset-0 flex flex-col items-center justify-center text-center p-8"
+                  >
+                    {/* Halo de fondo expansivo */}
+                    <motion.div
+                      initial={{ scale: 0, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      transition={{ delay: 0.1, duration: 0.6, ease: 'easeOut' }}
+                      className="absolute inset-0 flex items-center justify-center pointer-events-none"
+                    >
+                      <div className="w-72 h-72 rounded-full bg-cta/10 blur-3xl" />
+                    </motion.div>
+
+                    {/* Check con bounce */}
+                    <motion.div
+                      initial={{ scale: 0, rotate: -30 }}
+                      animate={{ scale: 1, rotate: 0 }}
+                      transition={{
+                        type: 'spring',
+                        stiffness: 220,
+                        damping: 14,
+                        delay: 0.15,
+                      }}
+                      className="relative w-24 h-24 rounded-full bg-cta flex items-center justify-center mb-6 shadow-[0_0_40px_rgba(191,255,0,0.4)]"
+                    >
+                      <CheckCircle2 className="w-12 h-12 text-foreground" strokeWidth={2.5} />
+                      {/* Ondas expansivas decorativas */}
+                      {[0, 1].map((i) => (
+                        <motion.span
+                          key={i}
+                          initial={{ scale: 1, opacity: 0.5 }}
+                          animate={{ scale: 2, opacity: 0 }}
+                          transition={{
+                            duration: 1.8,
+                            delay: 0.4 + i * 0.4,
+                            repeat: Infinity,
+                            repeatDelay: 0.6,
+                            ease: 'easeOut',
+                          }}
+                          className="absolute inset-0 rounded-full border-2 border-cta"
+                        />
+                      ))}
+                    </motion.div>
+
+                    <motion.h2
+                      initial={{ opacity: 0, y: 12 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.35, duration: 0.5 }}
+                      className="relative text-2xl md:text-3xl font-bold text-foreground mb-3"
+                    >
+                      {sentClientName
+                        ? `¡Gracias, ${sentClientName}!`
+                        : '¡Mensaje recibido!'}
+                    </motion.h2>
+
+                    <motion.p
+                      initial={{ opacity: 0, y: 12 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.45, duration: 0.5 }}
+                      className="relative text-muted-foreground mb-2 max-w-sm"
+                    >
+                      Tu mensaje llegó correctamente. Nuestro equipo lo
+                      revisará y te contactaremos en{' '}
+                      <span className="font-semibold text-foreground">menos de 24 horas</span>.
+                    </motion.p>
+
+                    <motion.p
+                      initial={{ opacity: 0, y: 12 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.55, duration: 0.5 }}
+                      className="relative text-sm text-muted-foreground/80 mb-8"
+                    >
+                      💡 Tip: si necesitas respuesta más rápida, escríbenos
+                      por <span className="font-semibold">WhatsApp</span>.
+                    </motion.p>
+
+                    <motion.div
+                      initial={{ opacity: 0, y: 12 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.65, duration: 0.5 }}
+                      className="relative flex flex-col sm:flex-row gap-3 w-full max-w-sm"
+                    >
+                      <Button
+                        variant="cta"
+                        asChild
+                        className="flex-1"
+                      >
+                        <a
+                          href="https://wa.me/51958617185?text=Hola%20%F0%9F%91%8B%20acabo%20de%20enviar%20un%20mensaje%20por%20la%20web."
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          <MessageCircle className="w-4 h-4" />
+                          WhatsApp
+                        </a>
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => setIsSent(false)}
+                        className="flex-1"
+                      >
+                        Enviar otro mensaje
+                      </Button>
+                    </motion.div>
+                  </motion.div>
+                ) : (
+                  // ─── Formulario ───
+                  <motion.div
+                    key="form"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.3 }}
+                  >
                 <h2 className="text-2xl font-bold text-foreground mb-2">Envíanos un mensaje</h2>
                 <p className="text-muted-foreground mb-6">
                   Completa el formulario y te responderemos en menos de 24 horas.
@@ -278,6 +406,9 @@ const Contacto = () => {
                     )}
                   </Button>
                 </form>
+                  </motion.div>
+                )}
+                </AnimatePresence>
               </div>
             </AnimatedSection>
 
