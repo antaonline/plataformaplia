@@ -130,6 +130,49 @@ export class CodegenService {
     throw lastErr || new Error(`Cadena ${phase} agotada sin respuesta`);
   }
 
+  /**
+   * Genera un archivo "stub" valido para los archivos que la cadena no logro
+   * generar (todos los modelos cayeron). Garantiza que el preview Vite
+   * renderice sin pantalla negra: cada import roto se resuelve a un placeholder.
+   *
+   * - data/*.ts -> export const <name> = []
+   * - components/*.tsx / sections/*.tsx -> componente placeholder visible
+   * - hooks/*.ts y otros -> export {} (modulo vacio que satisface el import)
+   *
+   * Cada stub lleva un comentario claro indicando al usuario que pida
+   * regenerar ese archivo.
+   */
+  private buildStubFile(path: string, purpose: string): string {
+    const rel = path.replace(/^\.?\//, '');
+    const isTsx = /\.tsx$/i.test(rel);
+    const isTs = /\.ts$/i.test(rel) && !isTsx;
+    const header = `// AUTO-GENERATED STUB\n// La IA no logro generar este archivo (provider cap-eado).\n// Para regenerarlo, di en el chat: "regenera ${rel}"\n// Proposito original: ${purpose.replace(/\n/g, ' ')}\n\n`;
+
+    // Archivos de datos: exportar arreglo vacio + default. El nombre del
+    // export se deriva del filename (data/services.ts -> services).
+    if (isTs && /\/data\//.test(rel)) {
+      const name = (rel.match(/\/data\/([^./]+)\./) || [, 'data'])[1];
+      const safeName = name.replace(/[^a-zA-Z0-9_$]/g, '_');
+      return `${header}export const ${safeName}: any[] = [];\nexport default ${safeName};\n`;
+    }
+
+    // Componentes / paginas TSX: placeholder visible para que el resto del
+    // sitio renderice sin tirar el preview.
+    if (isTsx) {
+      const comp = (rel.match(/\/([^./]+)\.tsx$/) || [, 'Component'])[1];
+      const safeComp = comp.replace(/[^a-zA-Z0-9_$]/g, '');
+      return `${header}const ${safeComp} = () => (\n  <div className="p-8 text-center border border-dashed border-muted-foreground/30 rounded-2xl bg-muted/20 my-4">\n    <p className="text-sm text-muted-foreground font-medium">\n      Esta seccion (${safeComp}) se generara en el proximo turn.\n    </p>\n    <p className="text-xs text-muted-foreground/70 mt-1">\n      Pidele al asistente: "regenera ${rel}"\n    </p>\n  </div>\n);\n\nexport default ${safeComp};\nexport { ${safeComp} };\n`;
+    }
+
+    // .ts genericos (hooks, lib, utils): modulo vacio que satisface cualquier import.
+    if (isTs) {
+      return `${header}export {};\n`;
+    }
+
+    // Otros (css, json, md): no escribimos stub.
+    return '';
+  }
+
   private stripCodeFences(s: string): string {
     let out = s.trim();
     // Quita ```lang ... ``` envolvente si el modelo lo agrega.
@@ -470,6 +513,17 @@ export class CodegenService {
           .map((f) => f.path)
           .join(', ')}`,
       );
+      // Stubs para que Vite no tire "Failed to resolve import" en el preview:
+      // generamos un archivo minimo valido por cada uno que fallo. El sitio
+      // renderiza con placeholders en lugar de pantalla negra, y el usuario
+      // puede pedir regenerar archivos especificos desde el chat.
+      for (const fail of failedFiles) {
+        const planEntry = plan.files.find((f) => f.path === fail.path);
+        files[fail.path] = this.buildStubFile(
+          fail.path,
+          planEntry?.purpose || 'pendiente',
+        );
+      }
     }
 
     // Index (home) al final: conoce todos los componentes ya generados y
