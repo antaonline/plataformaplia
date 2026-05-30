@@ -196,11 +196,15 @@ export async function writeGeneratedFiles(
   projectPath: string,
   files: Record<string, string>,
 ): Promise<void> {
-  const entries = Object.entries(files || {}).filter(
-    ([, content]) => typeof content === 'string',
-  );
+  // Primero normalizamos paths y filtramos archivos especiales. Construimos
+  // un mapa { relPath -> content } para luego analizar imports/exports
+  // CRUZADOS entre los archivos (sin esto, un componente que solo tiene
+  // `export default Foo` mata el preview cuando otra pagina lo importa como
+  // `import { Foo } from "..."` — bug clasico de la IA).
+  const normalized: Array<{ rel: string; content: string }> = [];
+  for (const [rawPath, content] of Object.entries(files || {})) {
+    if (typeof content !== 'string') continue;
 
-  for (const [rawPath, content] of entries) {
     let rel = rawPath
       .replace(/^\.?\/+/, '')
       .replace(/\\/g, '/')
@@ -231,6 +235,14 @@ export async function writeGeneratedFiles(
       rel = `src/${rel}`;
     }
 
+    normalized.push({ rel, content });
+  }
+
+  // Normalizar exports cruzados: si A.tsx solo exporta default pero B.tsx
+  // lo importa como named (o viceversa), agregamos el shim faltante.
+  const fixed = normalizeCrossExports(normalized);
+
+  for (const { rel, content } of fixed) {
     // Anti path-traversal y proteccion de configs/UI base.
     const target = join(projectPath, rel);
     if (!target.startsWith(projectPath)) continue;
@@ -247,6 +259,137 @@ export async function writeGeneratedFiles(
 
     await writeAlways(target, content);
   }
+}
+
+// ─── Normalizador de exports cruzados ─────────────────────────────────
+// La IA mezcla "export default X" en un archivo con "import { X } from ..."
+// en otro. Si no arreglamos eso, Vite tira:
+//   SyntaxError: The requested module '/X.tsx' does not provide an export
+//   named 'X'
+// y la pantalla queda en blanco.
+//
+// Algoritmo:
+// 1) Por cada archivo tsx/ts, extraer:
+//    - default export name (si tiene)
+//    - named exports
+// 2) Por cada archivo, leer imports de OTROS archivos del proyecto (@/...).
+//    - Detectar si se usa default import o named import.
+// 3) Si A importa { Foo } de "./B" pero B solo tiene `export default Foo`
+//    -> agregar `export { Foo };` al final de B.
+// 4) Si A importa Bar de "./B" pero B solo tiene `export const Bar = ...`
+//    -> agregar `export default Bar;` al final de B.
+function normalizeCrossExports(
+  files: Array<{ rel: string; content: string }>,
+): Array<{ rel: string; content: string }> {
+  // Index para lookup por path-resuelto (ej. "components/sections/Footer").
+  const byKey: Record<string, { rel: string; content: string; idx: number }> = {};
+  files.forEach((f, idx) => {
+    // key: relativo a src/ y sin extension. ej. components/sections/Footer
+    const key = f.rel
+      .replace(/^src\//, '')
+      .replace(/\.(tsx|ts|jsx|js)$/i, '');
+    byKey[key] = { rel: f.rel, content: f.content, idx };
+  });
+
+  // Tracking de exports REQUERIDOS por terceros: para cada archivo,
+  // que nombres necesitan estar exportados como default y/o named.
+  const neededDefault: Record<number, string> = {}; // idx -> name esperado
+  const neededNamed: Record<number, Set<string>> = {};
+
+  const importRe =
+    /import\s+(?:(\w+)\s*(?:,\s*\{([^}]+)\})?|\{([^}]+)\})\s+from\s+["']@\/([^"']+)["']/g;
+
+  for (const f of files) {
+    let m: RegExpExecArray | null;
+    importRe.lastIndex = 0;
+    while ((m = importRe.exec(f.content)) !== null) {
+      const defImport = m[1];
+      const namedFromMixed = m[2];
+      const namedOnly = m[3];
+      const target = m[4];
+
+      // Resolver el target: probar con y sin extension, y con /index.
+      const candidates = [
+        target,
+        `${target}/index`,
+      ];
+      let hit: { rel: string; content: string; idx: number } | undefined;
+      for (const c of candidates) {
+        if (byKey[c]) {
+          hit = byKey[c];
+          break;
+        }
+      }
+      if (!hit) continue;
+
+      if (defImport) {
+        neededDefault[hit.idx] = defImport;
+      }
+      const namedList = (namedFromMixed || namedOnly || '')
+        .split(',')
+        .map((s) => s.trim().split(/\s+as\s+/)[0].trim())
+        .filter(Boolean);
+      if (namedList.length) {
+        if (!neededNamed[hit.idx]) neededNamed[hit.idx] = new Set();
+        for (const n of namedList) neededNamed[hit.idx].add(n);
+      }
+    }
+  }
+
+  // Detectar lo que CADA archivo ya exporta y agregar shims si falta.
+  return files.map((f, idx) => {
+    let content = f.content;
+    const hasDefault = /export\s+default\s+/.test(content);
+    const defaultName = (() => {
+      const m =
+        content.match(/export\s+default\s+function\s+(\w+)/) ||
+        content.match(/export\s+default\s+class\s+(\w+)/) ||
+        content.match(/export\s+default\s+(\w+)\s*;?\s*$/m);
+      return m ? m[1] : null;
+    })();
+
+    const namedExports = new Set<string>();
+    const namedReDecl = /export\s+(?:const|let|var|function|class|interface|type|enum)\s+(\w+)/g;
+    let mm: RegExpExecArray | null;
+    while ((mm = namedReDecl.exec(content)) !== null) {
+      namedExports.add(mm[1]);
+    }
+    const namedReGroup = /export\s*\{\s*([^}]+)\s*\}/g;
+    while ((mm = namedReGroup.exec(content)) !== null) {
+      mm[1]
+        .split(',')
+        .map((s) => s.trim().split(/\s+as\s+/).pop()!.trim())
+        .filter(Boolean)
+        .forEach((n) => namedExports.add(n));
+    }
+
+    const additions: string[] = [];
+
+    // Si alguien lo importa como default pero no tiene default:
+    if (!hasDefault && neededDefault[idx]) {
+      const want = neededDefault[idx];
+      if (namedExports.has(want)) {
+        additions.push(`export default ${want};`);
+      }
+    }
+
+    // Si alguien lo importa como named pero solo tiene default:
+    if (neededNamed[idx]) {
+      const want = neededNamed[idx];
+      for (const n of want) {
+        if (namedExports.has(n)) continue; // ya exportado
+        // Si el default tiene ese mismo nombre, re-exportamos.
+        if (defaultName === n) {
+          additions.push(`export { ${n} };`);
+        }
+      }
+    }
+
+    if (additions.length) {
+      content = `${content.trimEnd()}\n\n// auto-shim: exports normalizados para imports cruzados\n${additions.join('\n')}\n`;
+    }
+    return { rel: f.rel, content };
+  });
 }
 
 // ─── Design system: inyecta colores como CSS variables en index.css ───
