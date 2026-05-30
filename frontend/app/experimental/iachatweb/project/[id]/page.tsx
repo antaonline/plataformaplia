@@ -903,13 +903,40 @@ export default function projectPage() {
           </div>
 
           {previewUrl && (() => {
-            const routeKeys = Object.keys(pages).filter(
-              (k) =>
-                k.startsWith('/') &&
-                k !== '/' &&
-                !/\.(tsx|ts|jsx|js|css|json|md|svg|png|jpg)$/i.test(k),
-            );
-            const routes = ['/', ...routeKeys];
+            // Las rutas reales del proyecto vienen del src/App.tsx generado
+            // por la IA, que tiene <Route path="/..." element={...} />. Las
+            // extraemos con regex. Como fallback, derivamos de los archivos
+            // en src/pages/*.tsx (Index -> /, About -> /about, etc.).
+            const findApp = () => {
+              const candidates = ['src/App.tsx', '/src/App.tsx', 'App.tsx', '/App.tsx'];
+              for (const c of candidates) if (pages[c]) return pages[c];
+              return '';
+            };
+            const appTsx = findApp();
+            let declared: string[] = [];
+            if (appTsx) {
+              const matches = Array.from(
+                appTsx.matchAll(/<Route\s+[^>]*path=["']([^"']+)["']/g),
+              );
+              declared = matches
+                .map((m) => m[1])
+                .filter((r) => r && r !== '*' && !r.includes(':'));
+            }
+            // Si no encontramos rutas en App.tsx, derivamos de los pages.
+            if (declared.length === 0) {
+              declared = Object.keys(pages)
+                .map((k) => k.replace(/^\/+/, ''))
+                .filter((k) => /^src\/pages\/[A-Z][\w-]*\.tsx$/.test(k))
+                .map((k) => {
+                  const name = k.match(/\/([A-Z][\w-]*)\.tsx$/)?.[1] || '';
+                  if (!name || name === 'Index') return '/';
+                  if (name === 'NotFound') return '';
+                  return '/' + name.charAt(0).toLowerCase() + name.slice(1);
+                })
+                .filter(Boolean);
+            }
+            const dedup = Array.from(new Set(declared));
+            const routes = dedup.includes('/') ? dedup : ['/', ...dedup];
             const goToRoute = (r: string) => {
               setPreviewRoute(r);
               setNavOpen(false);
@@ -980,7 +1007,7 @@ export default function projectPage() {
                           )}
                         </button>
                       ))}
-                      {routeKeys.length === 0 && (
+                      {routes.length <= 1 && (
                         <p className="text-[10px] text-slate-400 px-3 py-1.5 italic">
                           Web de una sola página (sin rutas internas)
                         </p>
