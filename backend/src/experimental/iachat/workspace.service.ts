@@ -122,6 +122,12 @@ export class WorkspaceService {
         continue;
       }
 
+      // COMPAT legacy Sprint 0: AppMain.tsx -> src/pages/Index.tsx (lo que
+      // el App.tsx del scaffold actual realmente importa).
+      if (/^(src\/)?AppMain\.tsx$/i.test(rel)) {
+        rel = 'src/pages/Index.tsx';
+      }
+
       // Solo permitir src/ y public/ (proteger package.json/configs).
       if (!/^(src|public)\//.test(rel)) {
         this.logger.warn(`writeFiles skip fuera de src/public: ${rawPath}`);

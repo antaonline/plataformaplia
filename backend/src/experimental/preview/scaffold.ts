@@ -216,6 +216,15 @@ export async function writeGeneratedFiles(
       continue;
     }
 
+    // COMPAT (proyectos legacy Sprint 0): el modelo viejo emitia AppMain.tsx
+    // como entry point del scaffold Babel-CDN. El scaffold Vite actual carga
+    // src/pages/Index.tsx (lo importa App.tsx). Sin este rename, los chats
+    // ya creados antes de Sprint 3 muestran pantalla blanca porque AppMain
+    // queda generado pero nadie lo importa.
+    if (/^(src\/)?AppMain\.tsx$/i.test(rel)) {
+      rel = 'src/pages/Index.tsx';
+    }
+
     // Auto-prefijar src/ si la IA mando un path sin prefijo (compat legacy:
     // ej. "AppMain.tsx", "components/Hero.tsx" — codigo viejo pre-Sprint 1).
     if (!/^(src|public)\//.test(rel)) {
