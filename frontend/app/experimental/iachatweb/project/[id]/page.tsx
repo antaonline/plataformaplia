@@ -77,7 +77,9 @@ export default function projectPage() {
   const [previewRoute, setPreviewRoute] = useState('/');
   const [previewNonce, setPreviewNonce] = useState(0);
   const prevStatusRef = useRef<string>('');
-  const [showExplorer, setShowExplorer] = useState(false);
+  // showExplorer: el viejo sidebar lateral "Explorador" se eliminó (lo
+  // reemplaza el FileExplorer integrado al modo CODE del panel derecho,
+  // que es mejor: muestra el contenido del archivo, no solo nombres).
   const [chatMode, setChatMode] = useState<'build' | 'ask' | 'plan'>('build');
   const [showAiRules, setShowAiRules] = useState(false);
   const [aiRules, setAiRules] = useState<string>('');
@@ -917,7 +919,7 @@ export default function projectPage() {
               }
             };
             return (
-              <div className="absolute left-1/2 -translate-x-1/2 w-[34%] min-w-[300px] max-w-[520px]">
+              <div className="absolute left-1/2 -translate-x-1/2 w-[24%] min-w-[220px] max-w-[380px]">
                 <div className="flex items-center gap-1 bg-slate-100 rounded-xl h-9 pl-3 pr-1.5 border border-slate-200">
                   <Globe className="h-4 w-4 text-slate-400 shrink-0" />
                   <button
@@ -1308,18 +1310,6 @@ export default function projectPage() {
                 <Sidebar className="h-5 w-5 text-slate-400 group-hover:text-indigo-500" />
               </button>
             )}
-            <div className="absolute top-4 left-16 z-10 flex gap-2">
-               <Button
-                 variant="ghost"
-                 size="icon"
-                 onClick={() => setShowExplorer(!showExplorer)}
-                 className="bg-white/80 backdrop-blur-md shadow-sm border rounded-xl"
-                 title="Mostrar/ocultar explorador de archivos"
-               >
-                 <History className={cn("h-4 w-4 transition-all", showExplorer ? "text-indigo-500 rotate-180" : "text-slate-400")} />
-               </Button>
-            </div>
-            
             <div className={cn("bg-white shadow-2xl rounded-3xl overflow-hidden flex-1 relative transition-all duration-500", rightPaneMode === 'code' ? 'w-full' : viewport === 'desktop' ? "w-full" : viewport === 'tablet' ? "w-[768px]" : "w-[375px]")}>
                {rightPaneMode === 'code' ? (
                  <FileExplorer
@@ -1424,37 +1414,10 @@ export default function projectPage() {
         </AnimatePresence>
       </main>
 
-      <AnimatePresence>
-        {showExplorer && (
-          <motion.aside 
-            initial={{ width: 0, opacity: 0 }}
-            animate={{ width: 260, opacity: 1 }}
-            exit={{ width: 0, opacity: 0 }}
-            className="border-l bg-white flex flex-col overflow-hidden"
-          >
-            <div className="p-4 border-b flex items-center justify-between bg-slate-50">
-               <div className="flex items-center gap-2">
-                  <Globe className="h-4 w-4 text-slate-400" />
-                  <span className="text-xs font-black uppercase tracking-widest">Explorador</span>
-               </div>
-               <button onClick={() => setShowExplorer(false)} className="text-slate-400 hover:text-slate-600"><X className="h-4 w-4" /></button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-2 space-y-1 scrollbar-none">
-               {Object.keys(pages).map(p => (
-                 <button 
-                   key={p} 
-                   onClick={() => setCurrentPath(p)}
-                   className={cn("w-full text-left px-3 py-2 rounded-lg text-xs flex items-center gap-2 transition-all", currentPath === p ? "bg-indigo-50 text-indigo-700 font-bold" : "text-slate-500 hover:bg-slate-50")}
-                 >
-                   <div className={cn("h-1.5 w-1.5 rounded-full", currentPath === p ? "bg-indigo-500" : "bg-slate-200")} />
-                   {p.startsWith('/') ? p.substring(1) || 'index.html' : p}
-                 </button>
-               ))}
-            </div>
-          </motion.aside>
-        )}
-      </AnimatePresence>
-      <AnimatePresence>
+      {/* Sidebar lateral "Explorador" eliminado: ahora se usa el botón CODE
+          del top bar, que abre el FileExplorer integrado en el panel central
+          con preview del contenido del archivo. */}
+<AnimatePresence>
         {isHistoryOpen && (
           <motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} className="fixed inset-0 z-[100] bg-white">
             <div className="flex h-full flex-col">

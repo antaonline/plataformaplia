@@ -147,14 +147,41 @@ export class CodegenService {
 
     let files: PlannedFile[] = Array.isArray(plan.files) ? plan.files : [];
     files = files.filter((f) => f && typeof f.path === 'string');
-    // Garantiza utils y AppMain.
-    if (!files.some((f) => f.path.replace(/^\//, '') === 'lib/utils.ts')) {
-      files.push({ path: '/lib/utils.ts', purpose: 'helper cn() de clases' });
+
+    // COMPAT: si el modelo emite el legacy AppMain.tsx (formato del scaffold
+    // Babel-CDN viejo), lo renombramos a src/pages/Index.tsx para que el
+    // App.tsx del scaffold actual lo cargue. Sin esto: pantalla blanca.
+    files = files.map((f) => {
+      const norm = f.path.replace(/^\.?\/+/, '');
+      if (/^(src\/)?AppMain\.tsx$/i.test(norm)) {
+        return {
+          ...f,
+          path: 'src/pages/Index.tsx',
+          purpose:
+            f.purpose ||
+            'Pagina principal (home) que monta el orden de secciones',
+        };
+      }
+      return f;
+    });
+
+    // Garantiza /lib/utils.ts (cn helper).
+    if (!files.some((f) => /(^|\/)lib\/utils\.ts$/.test(f.path))) {
+      files.push({ path: 'src/lib/utils.ts', purpose: 'helper cn() de clases' });
     }
-    if (!hasExisting && !files.some((f) => /AppMain\.tsx$/.test(f.path))) {
+
+    // Garantiza src/pages/Index.tsx — es el ENTRY de la home. El App.tsx del
+    // scaffold ya tiene <Route path="/" element={<Index />} />; si el modelo
+    // no genera Index.tsx, el preview muestra el placeholder "Tu proyecto va
+    // aqui" → parece pantalla blanca. Lo forzamos siempre en proyectos nuevos.
+    if (
+      !hasExisting &&
+      !files.some((f) => /(^|\/)pages\/Index\.tsx$/.test(f.path))
+    ) {
       files.unshift({
-        path: '/AppMain.tsx',
-        purpose: 'Componente raiz que compone todas las secciones',
+        path: 'src/pages/Index.tsx',
+        purpose:
+          'Pagina principal (home) — monta el orden de secciones (Hero, ...) y conecta los componentes generados',
       });
     }
     plan.files = files.slice(0, MAX_FILES);
@@ -348,15 +375,18 @@ export class CodegenService {
     const fileSystem = buildFileSystemPrompt(plan);
     const files: Record<string, string> = {};
 
-    const isUtils = (p: string) => p.replace(/^\//, '') === 'lib/utils.ts';
-    const isAppMain = (p: string) => /AppMain\.tsx$/.test(p);
+    const isUtils = (p: string) => /(^|\/)lib\/utils\.ts$/.test(p);
+    // ENTRY = src/pages/Index.tsx (lo que importa el App.tsx del scaffold).
+    // Lo generamos al final para que conozca a TODOS los componentes ya
+    // generados y pueda armar el orden correcto de secciones e imports.
+    const isEntry = (p: string) => /(^|\/)pages\/Index\.tsx$/.test(p);
 
     // NOTA: lib/utils.ts lo genera el modelo como cualquier otro archivo.
     // Antes lo sobrescribiamos con solo cn() y se perdian helpers que el
     // modelo pone ahi (fadeUp, staggerContainer, ...) e importan los
     // componentes -> exports faltantes -> pantalla en blanco.
-    const componentFiles = plan.files.filter((f) => !isAppMain(f.path));
-    const appMainFile = plan.files.find((f) => isAppMain(f.path));
+    const componentFiles = plan.files.filter((f) => !isEntry(f.path));
+    const entryFile = plan.files.find((f) => isEntry(f.path));
 
     // Componentes con concurrencia limitada (2 a la vez) para no reventar
     // los limites de tasa del proveedor (sobre todo Gemini free).
@@ -388,13 +418,14 @@ export class CodegenService {
       ),
     );
 
-    // AppMain al final: conoce todos los componentes ya generados.
-    if (appMainFile) {
+    // Index (home) al final: conoce todos los componentes ya generados y
+    // arma el orden correcto de secciones/imports.
+    if (entryFile) {
       const user = buildFileUserPrompt(
-        appMainFile,
+        entryFile,
         params.userPrompt,
         files,
-        params.existingFiles?.[appMainFile.path],
+        params.existingFiles?.[entryFile.path],
       );
       const code = await this.completeWithChain(
         fileModels,
@@ -403,7 +434,7 @@ export class CodegenService {
         { maxTokens: 16000, temperature: 0.7, onUsage },
         phase,
       );
-      files[appMainFile.path] = this.stripCodeFences(code);
+      files[entryFile.path] = this.stripCodeFences(code);
     }
 
     // El modelo NUNCA debe regenerar estos (los controla la plataforma).
@@ -452,10 +483,15 @@ export class CodegenService {
       };
     }
 
-    // CREACION: proyecto completo.
+    // CREACION: proyecto completo. La home (src/pages/Index.tsx) es lo que
+    // el App.tsx del scaffold carga: sin ese archivo el preview se ve blanco.
     const finalFiles: Record<string, string> = { ...files };
-    if (!Object.keys(finalFiles).some((p) => /AppMain\.tsx$/.test(p))) {
-      throw new Error('La generacion no produjo /AppMain.tsx');
+    if (
+      !Object.keys(finalFiles).some((p) =>
+        /(^|\/)pages\/Index\.tsx$/.test(p),
+      )
+    ) {
+      throw new Error('La generacion no produjo src/pages/Index.tsx (home)');
     }
     finalFiles['/__design__.json'] =
       preservedDesignJson ?? JSON.stringify(plan.designSystem);
