@@ -45,7 +45,12 @@ export default function AiStudioLoginPage() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [step, setStep] = useState<'email' | 'password' | 'google-suggest'>('email');
+  const [step, setStep] = useState<'email' | 'password' | 'google-suggest' | '2fa'>('email');
+  // Estado para el flujo 2FA: el backend te exige codigo cuando login
+  // viene desde un device nuevo (fingerprint distinto). Aqui guardamos
+  // el userId que devuelve el primer call y el codigo de 6 digitos.
+  const [twoFactorUserId, setTwoFactorUserId] = useState<number | null>(null);
+  const [twoFactorCode, setTwoFactorCode] = useState('');
 
   const handleContinue = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -80,6 +85,19 @@ export default function AiStudioLoginPage() {
         throw new Error(data?.message || 'Credenciales incorrectas');
       }
 
+      // 2FA: si el backend detecta dispositivo nuevo (fingerprint
+      // distinto) responde con requires2FA + userId y manda codigo
+      // por correo. Pasamos al step de verificacion.
+      if (data?.requires2FA && data?.userId) {
+        setTwoFactorUserId(Number(data.userId));
+        setStep('2fa');
+        toast({
+          title: "Verifica tu identidad",
+          description: "Te enviamos un codigo de 6 digitos a tu correo.",
+        });
+        return;
+      }
+
       if (data.access_token) {
         localStorage.setItem('access_token', data.access_token);
       }
@@ -99,6 +117,44 @@ export default function AiStudioLoginPage() {
         title: "Error",
         description: err.message,
         variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerify2FA = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!twoFactorUserId || !twoFactorCode.trim()) return;
+    setLoading(true);
+    try {
+      const res = await fetch(`${apiBase}/auth/verify-2fa`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: twoFactorUserId,
+          code: twoFactorCode.trim(),
+          fingerprint: typeof window !== 'undefined' ? navigator.userAgent : 'unknown',
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.message || 'Codigo invalido');
+      if (data.access_token) {
+        localStorage.setItem('access_token', data.access_token);
+      }
+      if (data.refresh_token) {
+        localStorage.setItem('refresh_token', data.refresh_token);
+      }
+      toast({
+        title: "¡Bienvenido!",
+        description: "Accediendo al PLIA AI Studio...",
+      });
+      router.push('/experimental/iachatweb');
+    } catch (err: any) {
+      toast({
+        title: "Codigo incorrecto",
+        description: err.message,
+        variant: "destructive",
       });
     } finally {
       setLoading(false);
@@ -225,6 +281,65 @@ export default function AiStudioLoginPage() {
                       >
                         O usar mi contraseña
                       </button>
+                    </motion.div>
+                  )}
+
+                  {/* Step: 2FA — codigo enviado por email */}
+                  {step === '2fa' && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="space-y-6"
+                    >
+                      <div className="bg-white/5 p-4 rounded-2xl border border-white/5">
+                        <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest mb-1">
+                          Verificacion en 2 pasos
+                        </p>
+                        <p className="text-sm text-white font-medium">
+                          Te enviamos un codigo de 6 digitos a{' '}
+                          <span className="font-bold">{email}</span>. Revisa tu bandeja (y spam).
+                        </p>
+                      </div>
+
+                      <form onSubmit={handleVerify2FA} className="space-y-6">
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-4">
+                            Codigo
+                          </label>
+                          <Input
+                            type="text"
+                            inputMode="numeric"
+                            pattern="\d{6}"
+                            maxLength={6}
+                            placeholder="123456"
+                            className="bg-white/5 border-white/10 h-14 rounded-2xl text-center text-2xl font-mono tracking-[0.6em] focus:ring-cta/20 focus:border-cta/30 text-white"
+                            value={twoFactorCode}
+                            onChange={(e) => setTwoFactorCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                            required
+                            autoFocus
+                          />
+                        </div>
+
+                        <Button
+                          type="submit"
+                          className="w-full h-14 rounded-2xl bg-cta hover:bg-cta-hover text-black font-black uppercase tracking-widest shadow-[0_0_20px_rgba(191,255,0,0.1)] transition-all active:scale-95"
+                          disabled={loading || twoFactorCode.length !== 6}
+                        >
+                          {loading ? 'Verificando...' : 'Verificar y entrar'}
+                        </Button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setStep('password');
+                            setTwoFactorCode('');
+                            setTwoFactorUserId(null);
+                          }}
+                          className="w-full text-center text-[11px] font-black uppercase tracking-widest text-slate-500 hover:text-white transition-all"
+                        >
+                          Volver
+                        </button>
+                      </form>
                     </motion.div>
                   )}
 
