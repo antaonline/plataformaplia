@@ -104,8 +104,26 @@ export class CodegenService {
         const status = e?.response?.status;
         recordProviderResult(provider.id, false, status);
         const tag = status || e?.code || 'err';
+        // En 429/403/400 mostramos el body que devuelve el proveedor: ahi
+        // viene si es "Quota exceeded", "Billing not enabled", "API key
+        // invalid", "Permission denied", etc. Sin esto solo veiamos "429"
+        // y no se podia distinguir cuota agotada de key incorrecta.
+        const bodyText = (() => {
+          const d = e?.response?.data;
+          if (!d) return e?.message || '';
+          if (typeof d === 'string') return d.slice(0, 400);
+          try {
+            const msg =
+              d?.error?.message ||
+              d?.error?.status ||
+              JSON.stringify(d).slice(0, 400);
+            return msg;
+          } catch {
+            return String(d).slice(0, 400);
+          }
+        })();
         this.logger.warn(
-          `[chain ${phase}] ${model} (provider=${provider.id}) fallo ${tag} -> siguiente`,
+          `[chain ${phase}] ${model} (provider=${provider.id}) fallo ${tag} -> siguiente | detalle: ${bodyText}`,
         );
       }
     }
@@ -408,6 +426,7 @@ export class CodegenService {
     // los limites de tasa del proveedor (sobre todo Gemini free).
     const CONCURRENCY = 2;
     const queue = [...componentFiles];
+    const failedFiles: { path: string; error: string }[] = [];
     const worker = async () => {
       for (;;) {
         const f = queue.shift();
@@ -418,14 +437,26 @@ export class CodegenService {
           {},
           params.existingFiles?.[f.path],
         );
-        const code = await this.completeWithChain(
-          fileModels,
-          fileSystem,
-          [{ role: 'user', content: user }],
-          { maxTokens: 16000, temperature: 0.7, onUsage },
-          phase,
-        );
-        files[f.path] = this.stripCodeFences(code);
+        try {
+          const code = await this.completeWithChain(
+            fileModels,
+            fileSystem,
+            [{ role: 'user', content: user }],
+            { maxTokens: 16000, temperature: 0.7, onUsage },
+            phase,
+          );
+          files[f.path] = this.stripCodeFences(code);
+        } catch (e: any) {
+          // Si un archivo individual falla (todos los modelos cayeron para
+          // ese archivo), NO abortamos toda la generacion. Logueamos y
+          // seguimos: el sitio quedara con algunos archivos faltantes que
+          // el usuario puede pedir regenerar en el siguiente turn.
+          const msg = e?.response?.data?.error?.message || e?.message || String(e);
+          failedFiles.push({ path: f.path, error: msg.slice(0, 200) });
+          this.logger.error(
+            `[gen-file] FAIL ${f.path}: ${msg.slice(0, 200)} (continuando con el resto)`,
+          );
+        }
       }
     };
     await Promise.all(
@@ -433,6 +464,13 @@ export class CodegenService {
         worker(),
       ),
     );
+    if (failedFiles.length > 0) {
+      this.logger.warn(
+        `[gen-file] ${failedFiles.length}/${componentFiles.length} archivos fallaron: ${failedFiles
+          .map((f) => f.path)
+          .join(', ')}`,
+      );
+    }
 
     // Index (home) al final: conoce todos los componentes ya generados y
     // arma el orden correcto de secciones/imports.
