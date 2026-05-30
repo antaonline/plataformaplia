@@ -41,7 +41,8 @@ PAQUETES PREINSTALADOS (NO los declares en "dependencies" del plan):
 - framer-motion (animaciones)
 - lucide-react (iconos)
 - date-fns, react-day-picker, input-otp
-- embla-carousel-react, react-resizable-panels, vaul
+- embla-carousel-react + embla-carousel-autoplay, react-resizable-panels, vaul
+- react-intersection-observer (useInView para animar al hacer scroll)
 - cmdk (command palette)
 - next-themes (dark mode)
 - sonner (toasts modernos)
