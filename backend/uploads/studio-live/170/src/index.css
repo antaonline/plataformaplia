@@ -2,19 +2,30 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --color-primary: #3A7D44;
-  --color-secondary: #F4A261;
-  --color-accent: #E76F51;
-  --color-bg: #F1FAEE;
-  --color-surface: #FFFFFF;
-  --color-text: #1D3557;
+@layer base {
+  :root {
+    --background: 105 55% 96%;
+    --foreground: 215 50% 23%;
+    --card: 0 0% 100%;
+    --card-foreground: 215 50% 23%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 215 50% 23%;
+    --primary: 129 37% 36%;
+    --primary-foreground: 215 50% 23%;
+    --secondary: 27 87% 67%;
+    --secondary-foreground: 215 50% 23%;
+    --muted: 0 0% 100%;
+    --muted-foreground: 215 50% 23%;
+    --accent: 12 76% 61%;
+    --accent-foreground: 215 50% 23%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 0 0% 100%;
+    --input: 0 0% 100%;
+    --ring: 129 37% 36%;
+    --radius: 0.5rem;
+  }
 }
 
 html, body, #root { min-height: 100vh; margin: 0; }
-body {
-  background-color: #F1FAEE;
-  color: #1D3557;
-  font-family: 'Roboto', ui-sans-serif, system-ui, sans-serif;
-}
-h1, h2, h3, h4, h5, h6 { font-family: 'Poppins', ui-sans-serif, system-ui, sans-serif; }
+body { background-color: hsl(var(--background)); color: hsl(var(--foreground)); }
