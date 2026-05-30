@@ -262,7 +262,15 @@ export class PaymentsService {
   }
 
   async handleWebhook(body: any) {
-    console.log('Webhook Izipay recibido:', body);
+    // Loguear solo metadata segura — el body puede traer tokens / datos del cliente.
+    const safeMeta = {
+      orderId: body?.orderId || body?.order_id,
+      status: body?.status,
+      amount: body?.amount,
+      currency: body?.currency,
+      eventType: body?.eventType || body?.event,
+    };
+    console.log('Webhook Izipay recibido:', safeMeta);
     return { ok: true };
   }
 

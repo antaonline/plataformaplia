@@ -43,8 +43,8 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ) {
 
-    console.log('RAW BODY:', body); // 👈 AQUÍ
-    
+    // SECURITY: NUNCA loguear body crudo — contiene password en texto plano
+    // y queda persistido en los logs de PM2/CloudWatch/etc.
     const fingerprint = generateFingerprint(req);
 
     const result = await this.authService.login(
