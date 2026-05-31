@@ -42,15 +42,23 @@ async function bootstrap() {
   // por defecto NO lo hace y los requests cross-origin desde plia.pe ->
   // api.plia.pe quedaban bloqueados ("Failed to fetch" en el browser).
   // Hacer que Nest siempre los maneje es más simple y portable.
+  //
+  // NOTA: detrás de LiteSpeed/CyberPanel, el header Origin puede llegar
+  // DUPLICADO (ej: "https://plia.pe, https://plia.pe") porque el proxy
+  // re-emite el header además del que envía el browser. Node concatena
+  // los valores con coma. Por eso parseamos solo el primer Origin antes
+  // de validar — sin esto, ningún request cross-origin pasa.
+  const isAllowedOrigin = (raw?: string): boolean => {
+    if (!raw) return true; // curl, Postman, server-to-server
+    const first = raw.split(',')[0].trim();
+    if (!first) return true;
+    if (first.includes('localhost') || first.includes('127.0.0.1')) return true;
+    return /^https?:\/\/(.*\.)?plia\.pe(:\d+)?$/.test(first);
+  };
+
   app.enableCors({
     origin: (origin, callback) => {
-      // Permite: sin origin (curl/Postman), localhost (dev) y cualquier
-      // subdominio de plia.pe (incluyendo plia.pe, api.plia.pe, etc.)
-      if (
-        !origin ||
-        origin.includes('localhost') ||
-        /^https?:\/\/(.*\.)?plia\.pe(:\d+)?$/.test(origin)
-      ) {
+      if (isAllowedOrigin(origin)) {
         callback(null, true);
       } else {
         callback(new Error(`Not allowed by CORS: ${origin}`));
