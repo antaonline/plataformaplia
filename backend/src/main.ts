@@ -37,29 +37,30 @@ async function bootstrap() {
     }),
   )
 
-  // En producción, LiteSpeed maneja Access-Control-Allow-Origin via extraHeaders.
-  // Solo respondemos 204 a OPTIONS para el preflight; los headers CORS los agrega LiteSpeed.
-  // En local (no producción), usamos el middleware cors completo.
-  if (process.env.NODE_ENV === 'production') {
-    app.use((req: any, res: any, next: any) => {
-      if (req.method === 'OPTIONS') {
-        res.status(204).end();
+  // CORS: lo maneja Nest tanto en dev como en producción. Antes asumíamos
+  // que LiteSpeed/CyberPanel agregaba los headers via extraHeaders, pero
+  // por defecto NO lo hace y los requests cross-origin desde plia.pe ->
+  // api.plia.pe quedaban bloqueados ("Failed to fetch" en el browser).
+  // Hacer que Nest siempre los maneje es más simple y portable.
+  app.enableCors({
+    origin: (origin, callback) => {
+      // Permite: sin origin (curl/Postman), localhost (dev) y cualquier
+      // subdominio de plia.pe (incluyendo plia.pe, api.plia.pe, etc.)
+      if (
+        !origin ||
+        origin.includes('localhost') ||
+        /^https?:\/\/(.*\.)?plia\.pe(:\d+)?$/.test(origin)
+      ) {
+        callback(null, true);
       } else {
-        next();
+        callback(new Error(`Not allowed by CORS: ${origin}`));
       }
-    });
-  } else {
-    app.enableCors({
-      origin: (origin, callback) => {
-        if (!origin || origin.includes('localhost') || origin.includes('plia.pe')) {
-          callback(null, true);
-        } else {
-          callback(new Error('Not allowed by CORS'));
-        }
-      },
-      credentials: true,
-    });
-  }
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+    maxAge: 86400, // cache del preflight por 24h
+  });
 
   // Servimos /uploads desde process.cwd() (raiz del backend), que es donde
   // la IA escribe los previews/imagenes. Usar __dirname apuntaba a dist/ y
