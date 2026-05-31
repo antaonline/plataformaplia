@@ -37,31 +37,42 @@ async function bootstrap() {
     }),
   )
 
-  // CORS: lo maneja Nest tanto en dev como en producción. Antes asumíamos
-  // que LiteSpeed/CyberPanel agregaba los headers via extraHeaders, pero
-  // por defecto NO lo hace y los requests cross-origin desde plia.pe ->
-  // api.plia.pe quedaban bloqueados ("Failed to fetch" en el browser).
-  // Hacer que Nest siempre los maneje es más simple y portable.
+  // CORS: lo maneja Nest tanto en dev como en producción.
   //
-  // NOTA: detrás de LiteSpeed/CyberPanel, el header Origin puede llegar
-  // DUPLICADO (ej: "https://plia.pe, https://plia.pe") porque el proxy
-  // re-emite el header además del que envía el browser. Node concatena
-  // los valores con coma. Por eso parseamos solo el primer Origin antes
-  // de validar — sin esto, ningún request cross-origin pasa.
-  const isAllowedOrigin = (raw?: string): boolean => {
-    if (!raw) return true; // curl, Postman, server-to-server
+  // PROBLEMA detrás de LiteSpeed/CyberPanel: el proxy reenvía el request
+  // con DOS headers "Origin" (el del browser + uno propio). Node concatena
+  // los valores: "https://plia.pe, https://plia.pe". La librería `cors`
+  // de Express, al hacer callback(null, true), refleja ese valor SUCIO en
+  // el header de respuesta -> "Access-Control-Allow-Origin: https://plia.pe,
+  // https://plia.pe" que es spec-inválido y el browser bloquea.
+  //
+  // FIX: parseamos el primer Origin del request y se lo pasamos
+  // EXPLÍCITAMENTE al callback (en lugar de true), así la librería usa el
+  // valor limpio en el header de respuesta.
+  const parseOrigin = (raw?: string): string | null => {
+    if (!raw) return null;
     const first = raw.split(',')[0].trim();
-    if (!first) return true;
-    if (first.includes('localhost') || first.includes('127.0.0.1')) return true;
-    return /^https?:\/\/(.*\.)?plia\.pe(:\d+)?$/.test(first);
+    return first || null;
+  };
+  const isAllowedOrigin = (origin: string): boolean => {
+    if (origin.includes('localhost') || origin.includes('127.0.0.1')) return true;
+    return /^https?:\/\/(.*\.)?plia\.pe(:\d+)?$/.test(origin);
   };
 
   app.enableCors({
-    origin: (origin, callback) => {
-      if (isAllowedOrigin(origin)) {
-        callback(null, true);
+    origin: (rawOrigin, callback) => {
+      const clean = parseOrigin(rawOrigin);
+      // Sin Origin (curl, Postman, server-to-server) lo aceptamos.
+      if (!clean) {
+        callback(null, false); // false = no setear Allow-Origin, request pasa
+        return;
+      }
+      if (isAllowedOrigin(clean)) {
+        // Pasamos el origin LIMPIO. La librería lo usará tal cual en
+        // Access-Control-Allow-Origin -> nunca con coma.
+        callback(null, clean);
       } else {
-        callback(new Error(`Not allowed by CORS: ${origin}`));
+        callback(new Error(`Not allowed by CORS: ${rawOrigin}`));
       }
     },
     credentials: true,
