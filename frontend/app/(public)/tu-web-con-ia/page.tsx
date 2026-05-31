@@ -18,6 +18,7 @@ import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { DeepParticleField } from "@/components/shared/DeepParticleField";
 import { AnimatedSection } from "@/components/shared/AnimatedSection";
+import { ComingSoonGate } from "@/components/shared/ComingSoonGate";
 
 const PLACEHOLDER_EXAMPLES = [
   "una landing page para mi gimnasio",
@@ -27,7 +28,14 @@ const PLACEHOLDER_EXAMPLES = [
   "una tienda online de café orgánico"
 ];
 
-export default function AiWebLandingPage() {
+// ─────────────────────────────────────────────────────────────────────
+// FEATURE FLAG: la página real está envuelta en ComingSoonGate al final.
+// Mientras NEXT_PUBLIC_IACHAT_LANDING_ENABLED !== 'true', los usuarios
+// ven una pantalla "Próximamente". Admins entran con ?preview=<token>
+// (token definido en NEXT_PUBLIC_PREVIEW_KEY).
+// ─────────────────────────────────────────────────────────────────────
+
+function AiWebLandingContent() {
   const [prompt, setPrompt] = useState('');
   const [isSimulating, setIsSimulating] = useState(false);
   
@@ -423,5 +431,21 @@ export default function AiWebLandingPage() {
         }
       `}</style>
     </div>
+  );
+}
+
+// Export final: gate de "Próximamente" alrededor del landing real.
+// Para habilitar al publico: NEXT_PUBLIC_IACHAT_LANDING_ENABLED=true en .env
+// Para preview privado: añadir ?preview=<NEXT_PUBLIC_PREVIEW_KEY> a la URL.
+export default function AiWebLandingPage() {
+  return (
+    <ComingSoonGate
+      enabled={process.env.NEXT_PUBLIC_IACHAT_LANDING_ENABLED === 'true'}
+      previewToken={process.env.NEXT_PUBLIC_PREVIEW_KEY}
+      title="PLIA Studio llega muy pronto"
+      subtitle="Estamos puliendo los últimos detalles del generador de webs con IA. Déjanos tu correo en contacto y serás de los primeros en probarlo."
+    >
+      <AiWebLandingContent />
+    </ComingSoonGate>
   );
 }
