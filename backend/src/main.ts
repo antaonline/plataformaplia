@@ -77,7 +77,22 @@ async function bootstrap() {
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+    // Headers permitidos: reflejamos los que el browser pida via
+    // Access-Control-Request-Headers. Esto evita que Sentry/Posthog/otros
+    // trackers metan headers (sentry-trace, baggage, traceparent...) y
+    // bloqueen el preflight por no estar en la whitelist. Es la práctica
+    // recomendada cuando el frontend es de confianza.
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'X-Requested-With',
+      'Accept',
+      'sentry-trace',
+      'baggage',
+      'traceparent',
+      'tracestate',
+    ],
+    exposedHeaders: ['Content-Length', 'X-Total-Count'],
     maxAge: 86400, // cache del preflight por 24h
   });
 
