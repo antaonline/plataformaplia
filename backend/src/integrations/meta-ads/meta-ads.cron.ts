@@ -22,8 +22,15 @@ export class MetaAdsCron {
   /**
    * Evaluación completa cada lunes a las 9:00 AM (Lima, UTC-5)
    * Revisa todas las campañas activas, decide renovar/pausar/crear variante
+   *
+   * ⚠️ DESACTIVADO TEMPORALMENTE (2026-06-01): Meta restringió el acceso
+   * al developer portal después de detectar patrones automatizados con el
+   * User Access Token viejo. Reactivar este @Cron cuando:
+   *  1. Meta apruebe la apelación / se restablezca el acceso, Y
+   *  2. Se reemplace META_ACCESS_TOKEN por un System User Token de
+   *     Business Manager (más estable, no atado a cuenta personal).
    */
-  @Cron('0 14 * * 1', { name: 'meta-ads-weekly-review', timeZone: 'America/Lima' })
+  // @Cron('0 14 * * 1', { name: 'meta-ads-weekly-review', timeZone: 'America/Lima' })
   async weeklyReview(): Promise<void> {
     this.logger.log('=== EVALUACIÓN SEMANAL META ADS ===')
 
@@ -38,8 +45,12 @@ export class MetaAdsCron {
   /**
    * Revisión diaria a las 8:00 AM (Lima)
    * Solo actúa si hay problemas críticos: CPC > 3x umbral o gasto sin conversiones
+   *
+   * ⚠️ DESACTIVADO TEMPORALMENTE (2026-06-01) — ver weeklyReview() para
+   * detalles. Re-habilitar el @Cron cuando Meta restablezca acceso y se
+   * use System User Token.
    */
-  @Cron('0 13 * * *', { name: 'meta-ads-daily-check', timeZone: 'America/Lima' })
+  // @Cron('0 13 * * *', { name: 'meta-ads-daily-check', timeZone: 'America/Lima' })
   async dailyCheck(): Promise<void> {
     this.logger.log('Revisión diaria de alertas críticas...')
 
