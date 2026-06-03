@@ -43,9 +43,11 @@ export const metadata: Metadata = {
     canonical: "/",
   },
   icons: {
+    // Next.js 14 auto-detecta app/icon.svg y app/apple-icon.svg.
+    // Listamos el SVG explicitamente para reforzar y mantener el icono
+    // del directorio public/ disponible (mismo archivo, cero duplicacion).
     icon: [
       { url: "/iconblack-plia-cuadrado.svg", type: "image/svg+xml" },
-      { url: "/favicon.ico", sizes: "any" },
     ],
     shortcut: "/iconblack-plia-cuadrado.svg",
     apple: "/iconblack-plia-cuadrado.svg",

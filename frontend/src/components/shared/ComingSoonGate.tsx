@@ -87,8 +87,13 @@ export function ComingSoonGate({
 
   if (allowed) return <>{children}</>;
 
+  // SEO: cuando mostramos "Proximamente" no queremos que Google indexe
+  // esta pantalla como contenido oficial. Inyectamos noindex client-side
+  // (el head ya esta renderizado por el layout, asi que usamos un hack
+  // de modificar document.head desde useEffect).
   return (
     <main className="relative min-h-screen flex flex-col items-center justify-center overflow-hidden bg-background px-6 py-20">
+      <ComingSoonNoIndex />
       {/* Halo decorativo */}
       <div className="absolute inset-0 pointer-events-none">
         <div className="absolute top-1/4 left-1/4 w-[40rem] h-[40rem] bg-cta/10 rounded-full blur-[120px]" />
@@ -188,4 +193,27 @@ export function ComingSoonGate({
       </motion.div>
     </main>
   );
+}
+
+/**
+ * Inyecta <meta name="robots" content="noindex, nofollow"> en el <head>
+ * mientras la pantalla "Próximamente" está visible. Sin esto, Google
+ * indexaría esa pantalla como contenido oficial del dominio y al habilitar
+ * la página real Google tardaría semanas en re-indexarla.
+ */
+function ComingSoonNoIndex() {
+  React.useEffect(() => {
+    const meta = document.createElement('meta');
+    meta.name = 'robots';
+    meta.content = 'noindex, nofollow';
+    meta.dataset.pliaComingSoon = '1';
+    document.head.appendChild(meta);
+    return () => {
+      const existing = document.head.querySelector(
+        'meta[data-plia-coming-soon="1"]',
+      );
+      if (existing) existing.remove();
+    };
+  }, []);
+  return null;
 }
