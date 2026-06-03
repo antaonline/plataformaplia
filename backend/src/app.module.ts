@@ -21,13 +21,13 @@ import { CyberpanelModule } from './integrations/cyberpanel/cyberpanel.module';
 import { NextExportModule } from './integrations/next-export/next-export.module';
 import { RenewHostingCron } from './cron/renew-hosting.cron';
 import { PublishProjectsCron } from './cron/publish-projects.cron';
+import { CustomDomainDriftCron } from './cron/custom-domain-drift.cron';
 import { MailModule } from './mail/mail.module';
 import { ContactModule } from './contact/contact.module';
 import { HostingModule } from './hosting/hosting.module';
 import { AiChatModule } from './experimental/iachat/iachat.module';
 import { SandboxModule } from './experimental/sandbox/sandbox.module';
 import { PreviewModule } from './experimental/preview/preview.module';
-import { MetaAdsModule } from './integrations/meta-ads/meta-ads.module';
 import { SiteContactModule } from './site-contact/site-contact.module';
 
 import { ThrottlerModule } from '@nestjs/throttler'
@@ -62,11 +62,16 @@ import { ThrottlerModule } from '@nestjs/throttler'
     AiChatModule,
     SandboxModule,
     PreviewModule,
-    MetaAdsModule,
     SiteContactModule,
   ],
   controllers: [AppController, OrdersController],
-  providers: [AppService, ProjectsService, RenewHostingCron, PublishProjectsCron],
+  providers: [
+    AppService,
+    ProjectsService,
+    RenewHostingCron,
+    PublishProjectsCron,
+    CustomDomainDriftCron,
+  ],
 })
 export class AppModule {}
 

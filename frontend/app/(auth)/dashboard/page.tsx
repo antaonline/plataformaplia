@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { CustomDomainWizard } from '@/components/dashboard/CustomDomainWizard';
 import {
   Dialog,
   DialogContent,
@@ -63,6 +64,9 @@ type Project = {
   onboardingData: any;
   startedAt: string | null;
   deadline: string | null;
+  // Dominio propio vinculado vía vhAlias (null si solo usa subdominio plia.pe)
+  customDomain?: string | null;
+  customDomainAttachedAt?: string | null;
   subscription?: {
     id: number;
     endDate: string;
@@ -648,6 +652,8 @@ export default function DashboardPage() {
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
   const [catalogPdfFile, setCatalogPdfFile] = useState<File | null>(null);
   const [renewOpen, setRenewOpen] = useState(false);
+  // Wizard de vinculación de dominio propio
+  const [domainWizardOpen, setDomainWizardOpen] = useState(false);
   const [renewMethod, setRenewMethod] = useState<'card' | 'yape' | null>(null);
   const [renewLoading, setRenewLoading] = useState(false);
   const [renewError, setRenewError] = useState<string | null>(null);
@@ -3207,10 +3213,31 @@ export default function DashboardPage() {
                       <CardTitle>Tu web</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-3">
-                      <p className="text-sm text-muted-foreground">Tu web estara online aqui:</p>
-                      <div className="rounded-lg border border-border bg-white px-3 py-2 text-sm">
-                        {resolvedPublicUrl || 'https://tu-negocio.plia.pe'}
-                      </div>
+                      {project?.customDomain ? (
+                        <>
+                          <p className="text-xs uppercase tracking-wider font-bold text-muted-foreground">
+                            Dominio principal
+                          </p>
+                          <div className="rounded-lg border-2 border-cta/40 bg-cta/5 px-3 py-2 text-sm font-semibold">
+                            https://{project.customDomain}
+                          </div>
+                          <p className="text-xs uppercase tracking-wider font-bold text-muted-foreground mt-3">
+                            Subdominio alterno (redirige al principal)
+                          </p>
+                          <div className="rounded-lg border border-border bg-white px-3 py-2 text-xs text-muted-foreground">
+                            {resolvedPublicUrl || 'https://tu-negocio.plia.pe'}
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <p className="text-sm text-muted-foreground">
+                            Tu web estara online aqui:
+                          </p>
+                          <div className="rounded-lg border border-border bg-white px-3 py-2 text-sm">
+                            {resolvedPublicUrl || 'https://tu-negocio.plia.pe'}
+                          </div>
+                        </>
+                      )}
                       <Button
                         variant="outline"
                         className="w-full"
@@ -3226,7 +3253,32 @@ export default function DashboardPage() {
                       >
                         <Link href={`/dashboard/detalles-proyecto/${project.id}`}>Ver proyecto</Link>
                       </Button>
-                      <Button variant="cta" className="w-full">Comprar dominio propio</Button>
+                      {project?.customDomain ? (
+                        <div className="text-center text-xs text-muted-foreground pt-2">
+                          ✓ Dominio vinculado
+                        </div>
+                      ) : (
+                        <Button
+                          variant="cta"
+                          className="w-full"
+                          onClick={() => setDomainWizardOpen(true)}
+                          disabled={
+                            !resolvedPublicUrl ||
+                            !(
+                              project?.status === 'PUBLISHED' ||
+                              project?.status === 'DELIVERED'
+                            )
+                          }
+                          title={
+                            project?.status === 'PUBLISHED' ||
+                            project?.status === 'DELIVERED'
+                              ? 'Conectá tu dominio propio'
+                              : 'Disponible cuando tu web esté publicada'
+                          }
+                        >
+                          Vincular mi dominio
+                        </Button>
+                      )}
                     </CardContent>
                   </Card>
 
@@ -3513,6 +3565,30 @@ export default function DashboardPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Wizard de vinculación de dominio propio */}
+      {project && (
+        <CustomDomainWizard
+          open={domainWizardOpen}
+          onClose={() => setDomainWizardOpen(false)}
+          projectId={project.id}
+          fallbackUrl={resolvedPublicUrl || ''}
+          apiBase={apiBase}
+          serverIp={
+            (typeof window !== 'undefined' &&
+              (process.env.NEXT_PUBLIC_SERVER_IP as string)) ||
+            '142.171.227.112'
+          }
+          onSuccess={(customDomain) => {
+            // Optimistic update + refetch del proyecto desde el server
+            setProject((prev: any) =>
+              prev ? { ...prev, customDomain } : prev,
+            );
+            // Recargamos en 1s para que el card refleje el nuevo estado
+            setTimeout(() => window.location.reload(), 1500);
+          }}
+        />
+      )}
     </div>
   );
 }
