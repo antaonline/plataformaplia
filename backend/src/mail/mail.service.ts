@@ -15,6 +15,7 @@ import {
   renewalNoticeTemplate,
   contactMessageTemplate,
   siteContactSubmissionTemplate,
+  customDomainAttachedTemplate,
   TwoFactorPayload,
   AccountSetupPayload,
   WelcomePayload,
@@ -28,6 +29,7 @@ import {
   RenewalNoticePayload,
   ContactMessagePayload,
   SiteContactSubmissionPayload,
+  CustomDomainAttachedPayload,
 } from './templates';
 
 /**
@@ -244,6 +246,18 @@ export class MailService {
       replyTo: payload.email,
       context: 'contact',
       rendered: contactMessageTemplate(payload),
+    });
+  }
+
+  /** Notifica al cliente que su dominio propio quedó vinculado al sitio. */
+  async sendCustomDomainAttached(
+    payload: { to: string } & CustomDomainAttachedPayload,
+  ) {
+    const { to, ...data } = payload;
+    return this.send({
+      to,
+      context: `custom domain ${data.customDomain}`,
+      rendered: customDomainAttachedTemplate(data),
     });
   }
 

@@ -1,10 +1,14 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import axios from 'axios';
-import { execFileSync } from 'child_process';
+import { execFile, execFileSync } from 'child_process';
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'crypto';
 import * as fs from 'fs';
 import https from 'https';
+import * as path from 'path';
+import { promisify } from 'util';
 import { PrismaService } from '../../prisma/prisma.service';
+
+const execFileAsync = promisify(execFile);
 
 export type StoredCyberpanelAccount = {
   username: string;
@@ -1291,6 +1295,169 @@ export class CyberpanelService {
         `deleteMailbox(${email}) fallo: ${error?.message || error}`,
       );
       return false;
+    }
+  }
+
+  // ──────────────────────────────────────────────────────────────────
+  // ALIAS DE DOMINIO (vhAlias) — vincula un dominio externo del cliente
+  // al vhost del subdominio plia.pe SIN consumir slot de CyberPanel.
+  // Toda la operación atómica vive en el script bash plia-attach-domain.sh
+  // que hace backup + cambios + certbot + restart + rollback automático.
+  // ──────────────────────────────────────────────────────────────────
+
+  /**
+   * Vincula `aliasDomain` (ej. mi-marca.com) como vhAlias del vhost de
+   * `subdomain` (ej. cevicheriaperu.plia.pe). El subdominio queda sirviendo
+   * los mismos archivos para ambos hosts y se re-emite el cert Let's Encrypt
+   * con multi-SAN.
+   *
+   * Lanza BadRequestException si el script falla (rollback ya aplicado).
+   */
+  async attachAliasDomain(subdomain: string, aliasDomain: string): Promise<{
+    ok: boolean;
+    step: string;
+    message: string;
+  }> {
+    this.validateDomain(subdomain, 'subdomain');
+    this.validateDomain(aliasDomain, 'aliasDomain');
+
+    const script = this.resolveAttachDomainScript();
+    this.logger.log(
+      `attachAliasDomain script=${script} subdomain=${subdomain} alias=${aliasDomain}`,
+    );
+
+    try {
+      const { stdout, stderr } = await execFileAsync(
+        '/bin/bash',
+        [script, 'attach', subdomain, aliasDomain],
+        { timeout: 120_000, maxBuffer: 1024 * 1024 },
+      );
+      const out = (stdout || '').trim();
+      const parsed = this.parseScriptJson(out);
+      this.logger.log(
+        `attachAliasDomain ok subdomain=${subdomain} alias=${aliasDomain} step=${parsed.step}`,
+      );
+      if (stderr) {
+        this.logger.warn(`attachAliasDomain stderr: ${stderr.slice(0, 500)}`);
+      }
+      return parsed;
+    } catch (error: any) {
+      const stderr = (error?.stderr || '').toString().trim();
+      const stdout = (error?.stdout || '').toString().trim();
+      const parsed = this.parseScriptJson(stderr || stdout, {
+        ok: false,
+        step: 'script',
+        message: error?.message || String(error),
+      });
+      this.logger.error(
+        `attachAliasDomain FAIL subdomain=${subdomain} alias=${aliasDomain} step=${parsed.step} msg=${parsed.message}`,
+      );
+      throw new BadRequestException(
+        `No se pudo vincular el dominio (${parsed.step}): ${parsed.message}`,
+      );
+    }
+  }
+
+  /**
+   * Inverso de attachAliasDomain: remueve el alias del vhost y de los
+   * mappings del listener, re-emite el cert sin el alias. Idempotente
+   * (si no estaba vinculado, no falla).
+   */
+  async detachAliasDomain(subdomain: string, aliasDomain: string): Promise<{
+    ok: boolean;
+    step: string;
+    message: string;
+  }> {
+    this.validateDomain(subdomain, 'subdomain');
+    this.validateDomain(aliasDomain, 'aliasDomain');
+
+    const script = this.resolveAttachDomainScript();
+    try {
+      const { stdout } = await execFileAsync(
+        '/bin/bash',
+        [script, 'detach', subdomain, aliasDomain],
+        { timeout: 90_000, maxBuffer: 1024 * 1024 },
+      );
+      return this.parseScriptJson((stdout || '').trim());
+    } catch (error: any) {
+      const stderr = (error?.stderr || '').toString().trim();
+      const parsed = this.parseScriptJson(stderr, {
+        ok: false,
+        step: 'script',
+        message: error?.message || String(error),
+      });
+      this.logger.error(
+        `detachAliasDomain FAIL subdomain=${subdomain} alias=${aliasDomain} msg=${parsed.message}`,
+      );
+      throw new BadRequestException(
+        `No se pudo desvincular el dominio (${parsed.step}): ${parsed.message}`,
+      );
+    }
+  }
+
+  /** Path al script bash en disco. Se busca primero en PLIA_ATTACH_SCRIPT (env),
+   * luego en backend/scripts/, luego en /usr/local/bin/plia-attach-domain.sh. */
+  private resolveAttachDomainScript(): string {
+    const envPath = process.env.PLIA_ATTACH_DOMAIN_SCRIPT;
+    if (envPath && fs.existsSync(envPath)) return envPath;
+    const localScript = path.join(
+      process.cwd(),
+      'scripts',
+      'plia-attach-domain.sh',
+    );
+    if (fs.existsSync(localScript)) return localScript;
+    const installed = '/usr/local/bin/plia-attach-domain.sh';
+    if (fs.existsSync(installed)) return installed;
+    throw new BadRequestException(
+      'Script plia-attach-domain.sh no encontrado. Setea PLIA_ATTACH_DOMAIN_SCRIPT o copia el script a /usr/local/bin/.',
+    );
+  }
+
+  private parseScriptJson(
+    raw: string,
+    fallback: { ok: boolean; step: string; message: string } = {
+      ok: false,
+      step: 'unknown',
+      message: 'Sin respuesta del script',
+    },
+  ): { ok: boolean; step: string; message: string } {
+    if (!raw) return fallback;
+    // Algunas líneas del script pueden ir a stdout antes del JSON final.
+    // Buscar la última línea que parece JSON.
+    const lines = raw.split('\n').map((l) => l.trim()).filter(Boolean).reverse();
+    for (const line of lines) {
+      if (line.startsWith('{') && line.endsWith('}')) {
+        try {
+          const obj = JSON.parse(line);
+          return {
+            ok: !!obj.ok,
+            step: String(obj.step || 'unknown'),
+            message: String(obj.message || ''),
+          };
+        } catch {
+          continue;
+        }
+      }
+    }
+    return fallback;
+  }
+
+  /** Valida dominio: sin protocolo, sin path, formato razonable. */
+  private validateDomain(domain: string, field: string): void {
+    if (!domain || typeof domain !== 'string') {
+      throw new BadRequestException(`${field}: dominio vacío`);
+    }
+    if (!/^[a-z0-9][a-z0-9-]{0,62}(\.[a-z0-9][a-z0-9-]{0,62})+$/.test(domain)) {
+      throw new BadRequestException(
+        `${field}: formato de dominio inválido (${domain})`,
+      );
+    }
+    // Reglas extras
+    if (domain.length > 253) {
+      throw new BadRequestException(`${field}: dominio demasiado largo`);
+    }
+    if (domain.includes('..') || domain.startsWith('-') || domain.endsWith('-')) {
+      throw new BadRequestException(`${field}: dominio con caracteres inválidos`);
     }
   }
 }

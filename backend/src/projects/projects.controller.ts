@@ -72,6 +72,56 @@ export class ProjectsController {
     return project;
   }
 
+  // ──────────────────────────────────────────────────────────────────
+  // DOMINIO PROPIO (custom domain) — el cliente conecta su propio
+  // dominio (ej. "mi-marca.com") al subdominio plia.pe ya publicado.
+  // Se vincula como vhAlias en LiteSpeed (mismo public_html, 0 slot
+  // extra del package CyberPanel). El subdominio queda con redirect 301.
+  // ──────────────────────────────────────────────────────────────────
+
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/custom-domain/check-dns')
+  async checkCustomDomainDns(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { domain: string },
+    @Req() req: any,
+  ) {
+    if (!body?.domain) {
+      throw new BadRequestException('Falta el campo domain.');
+    }
+    return this.projectsService.checkCustomDomainDns(
+      id,
+      req.user.id,
+      String(body.domain).trim().toLowerCase(),
+    );
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/custom-domain/attach')
+  async attachCustomDomain(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { domain: string },
+    @Req() req: any,
+  ) {
+    if (!body?.domain) {
+      throw new BadRequestException('Falta el campo domain.');
+    }
+    return this.projectsService.attachCustomDomain(
+      id,
+      req.user.id,
+      String(body.domain).trim().toLowerCase(),
+    );
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Delete(':id/custom-domain')
+  async detachCustomDomain(
+    @Param('id', ParseIntPipe) id: number,
+    @Req() req: any,
+  ) {
+    return this.projectsService.detachCustomDomain(id, req.user.id);
+  }
+
   @UseGuards(JwtAuthGuard)
   @Get(':id/diagnostics')
   async diagnostics(

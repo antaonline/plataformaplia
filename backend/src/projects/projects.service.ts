@@ -1289,4 +1289,336 @@ var timer = setInterval(tick,1000);
     );
     return { success: true, id: projectId };
   }
+
+  // ──────────────────────────────────────────────────────────────────
+  // DOMINIO PROPIO (custom domain)
+  // El cliente conecta su dominio (ej. mi-marca.com) al subdominio
+  // ya publicado. Se vincula como vhAlias en LiteSpeed sin consumir
+  // un slot adicional en CyberPanel.
+  // ──────────────────────────────────────────────────────────────────
+
+  /**
+   * Validación de formato + DNS check. Devuelve si el dominio del cliente
+   * ya apunta a la IP del servidor. Se llama desde el wizard ANTES de
+   * intentar attach, para dar feedback al usuario.
+   */
+  async checkCustomDomainDns(
+    projectId: number,
+    userId: number,
+    rawDomain: string,
+  ): Promise<{
+    ok: boolean;
+    pointsToServer: boolean;
+    serverIp: string | null;
+    resolvedIps: string[];
+    reason?: string;
+  }> {
+    const domain = this.normalizeCustomDomainInput(rawDomain);
+    this.validateCustomDomainFormat(domain);
+
+    const project = await this.requireOwnedProject(projectId, userId);
+    this.ensureProjectIsPublished(project);
+    await this.ensureDomainNotInUse(domain, projectId);
+
+    const serverIp =
+      process.env.SERVER_PUBLIC_IP ||
+      this.extractIpFromUrl(process.env.CYBERPANEL_API_URL) ||
+      null;
+
+    const resolvedIps = await this.resolveDomainA(domain);
+    const pointsToServer = !!serverIp && resolvedIps.includes(serverIp);
+
+    return {
+      ok: true,
+      pointsToServer,
+      serverIp,
+      resolvedIps,
+      reason: pointsToServer
+        ? undefined
+        : resolvedIps.length === 0
+          ? 'El dominio no resuelve a ninguna IP. ¿Configuraste el registro A?'
+          : `El dominio resuelve a ${resolvedIps.join(', ')}, no a ${serverIp}. Espera la propagación DNS (5 min a 2h).`,
+    };
+  }
+
+  /**
+   * Vincula el dominio al subdominio del proyecto. Pasos:
+   * 1. Valida ownership + estado proyecto.
+   * 2. Verifica DNS apunta al servidor.
+   * 3. Llama cyberpanelService.attachAliasDomain (script bash atómico).
+   * 4. Escribe .htaccess del subdominio con redirect 301 al dominio nuevo.
+   * 5. Actualiza DB.
+   * 6. Envía email de confirmación.
+   */
+  async attachCustomDomain(
+    projectId: number,
+    userId: number,
+    rawDomain: string,
+  ): Promise<{
+    ok: boolean;
+    customDomain: string;
+    primaryUrl: string;
+    fallbackUrl: string;
+  }> {
+    const domain = this.normalizeCustomDomainInput(rawDomain);
+    this.validateCustomDomainFormat(domain);
+
+    const project = await this.requireOwnedProject(projectId, userId);
+    this.ensureProjectIsPublished(project);
+    await this.ensureDomainNotInUse(domain, projectId);
+
+    const subdomain = this.getProjectSubdomain(project);
+    if (!subdomain) {
+      throw new BadRequestException(
+        'Este proyecto aún no tiene subdominio publicado. Espera a que termine la publicación inicial.',
+      );
+    }
+
+    // Pre-check DNS (suave: si falla devolvemos error claro y NO intentamos certbot)
+    const dnsCheck = await this.checkCustomDomainDns(projectId, userId, domain);
+    if (!dnsCheck.pointsToServer) {
+      throw new BadRequestException(
+        dnsCheck.reason ||
+          'El DNS del dominio aún no apunta al servidor. Verifica los registros A.',
+      );
+    }
+
+    this.logger.log(
+      `attachCustomDomain project=${projectId} subdomain=${subdomain} domain=${domain}`,
+    );
+
+    // Paso clave: el script bash atómico
+    try {
+      await this.cyberpanelService.attachAliasDomain(subdomain, domain);
+    } catch (err: any) {
+      this.logger.error(
+        `attachCustomDomain FAIL project=${projectId} domain=${domain}: ${err?.message || err}`,
+      );
+      throw err;
+    }
+
+    // Redirect 301 del subdominio al dominio propio (escrito en public_html)
+    try {
+      await this.writeSubdomainRedirect(subdomain, domain);
+    } catch (err: any) {
+      this.logger.warn(
+        `attachCustomDomain redirect htaccess fallo project=${projectId}: ${err?.message || err}`,
+      );
+      // No abortamos: el dominio ya está vinculado, el redirect es nice-to-have.
+    }
+
+    // DB update
+    await (this.prisma as any).project.update({
+      where: { id: projectId },
+      data: {
+        customDomain: domain,
+        customDomainAttachedAt: new Date(),
+      },
+    });
+
+    // Email best-effort
+    const primaryUrl = `https://${domain}`;
+    const fallbackUrl = `https://${subdomain}`;
+    try {
+      const user = await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { email: true, name: true },
+      });
+      if (user?.email && (this.mailService as any).sendCustomDomainAttached) {
+        await (this.mailService as any).sendCustomDomainAttached({
+          to: user.email,
+          customerName: user.name || 'tú',
+          customDomain: domain,
+          subdomain,
+          primaryUrl,
+          fallbackUrl,
+        });
+      }
+    } catch (err: any) {
+      this.logger.warn(
+        `attachCustomDomain email fallo project=${projectId}: ${err?.message || err}`,
+      );
+    }
+
+    return { ok: true, customDomain: domain, primaryUrl, fallbackUrl };
+  }
+
+  /**
+   * Desvincula el dominio propio: remueve vhAlias, mappings, redirect.
+   * Idempotente: si ya estaba desvinculado, devuelve ok.
+   */
+  async detachCustomDomain(projectId: number, userId: number): Promise<{ ok: boolean }> {
+    const project: any = await this.requireOwnedProject(projectId, userId);
+    const current = project.customDomain as string | null;
+    if (!current) return { ok: true };
+
+    const subdomain = this.getProjectSubdomain(project);
+    if (subdomain) {
+      try {
+        await this.cyberpanelService.detachAliasDomain(subdomain, current);
+      } catch (err: any) {
+        this.logger.warn(
+          `detachCustomDomain script falló project=${projectId}: ${err?.message || err}. Continuando con cleanup DB.`,
+        );
+      }
+      // Borrar el .htaccess redirect
+      try {
+        const root = process.env.CYBERPANEL_SITES_ROOT || '/home';
+        const publicDir = process.env.CYBERPANEL_PUBLIC_DIR || 'public_html';
+        const htaccess = join(root, subdomain, publicDir, '.htaccess');
+        if (fs.existsSync(htaccess)) fs.unlinkSync(htaccess);
+      } catch {
+        /* ignore */
+      }
+    }
+
+    await (this.prisma as any).project.update({
+      where: { id: projectId },
+      data: { customDomain: null, customDomainAttachedAt: null },
+    });
+    return { ok: true };
+  }
+
+  // ── helpers de custom domain ────────────────────────────────────────
+
+  private normalizeCustomDomainInput(raw: string): string {
+    return (raw || '')
+      .trim()
+      .toLowerCase()
+      .replace(/^https?:\/\//, '')
+      .replace(/\/.*$/, '')
+      .replace(/:\d+$/, '')
+      .replace(/^www\./, '');
+  }
+
+  private validateCustomDomainFormat(domain: string): void {
+    if (!/^[a-z0-9][a-z0-9-]{0,62}(\.[a-z0-9][a-z0-9-]{0,62})+$/.test(domain)) {
+      throw new BadRequestException(
+        'Formato de dominio inválido. Ejemplo válido: mi-marca.com',
+      );
+    }
+    if (domain.length > 253) {
+      throw new BadRequestException('Dominio demasiado largo.');
+    }
+    if (
+      domain.endsWith('.plia.pe') ||
+      domain === 'plia.pe' ||
+      domain.endsWith('.localhost') ||
+      domain === 'localhost'
+    ) {
+      throw new BadRequestException(
+        'Ese dominio está reservado. Usa tu dominio propio (ej. mi-marca.com).',
+      );
+    }
+  }
+
+  private async requireOwnedProject(projectId: number, userId: number) {
+    const project = await this.prisma.project.findUnique({
+      where: { id: projectId },
+    });
+    if (!project) throw new NotFoundException('Proyecto no encontrado.');
+    if (project.userId !== userId) {
+      throw new NotFoundException('Proyecto no encontrado.');
+    }
+    return project;
+  }
+
+  private ensureProjectIsPublished(project: any): void {
+    if (project.status !== 'PUBLISHED' && project.status !== 'DELIVERED') {
+      throw new BadRequestException(
+        'Tu proyecto aún no está publicado. Espera a que termine la publicación inicial (24-48h).',
+      );
+    }
+  }
+
+  private async ensureDomainNotInUse(
+    domain: string,
+    excludingProjectId: number,
+  ): Promise<void> {
+    const existing = await (this.prisma as any).project.findFirst({
+      where: {
+        customDomain: domain,
+        NOT: { id: excludingProjectId },
+      },
+      select: { id: true },
+    });
+    if (existing) {
+      throw new BadRequestException(
+        'Este dominio ya está vinculado a otro proyecto en PLIA.',
+      );
+    }
+  }
+
+  private getProjectSubdomain(project: any): string | null {
+    let raw: string | null = null;
+    try {
+      const data = JSON.parse((project.onboardingData as string) || '{}');
+      raw = data?.publicDomain || null;
+      if (!raw && data?.subdomain) {
+        const baseDomain = process.env.CYBERPANEL_DOMAIN_BASE || 'plia.pe';
+        raw = `${data.subdomain}.${baseDomain}`;
+      }
+    } catch {
+      raw = null;
+    }
+    if (!raw) return null;
+    // El subdominio debe ser un host plia.pe (no dominio del cliente ya vinculado)
+    const baseDomain = (process.env.CYBERPANEL_DOMAIN_BASE || 'plia.pe').toLowerCase();
+    if (!raw.toLowerCase().endsWith(`.${baseDomain}`)) {
+      // Caso edge: si publicDomain ya es el dominio propio (en algún flow viejo),
+      // intentamos derivar el subdominio desde data.subdomain.
+      try {
+        const data = JSON.parse((project.onboardingData as string) || '{}');
+        if (data?.subdomain) {
+          return `${data.subdomain}.${baseDomain}`;
+        }
+      } catch {
+        /* ignore */
+      }
+      return null;
+    }
+    return raw.toLowerCase();
+  }
+
+  private extractIpFromUrl(url?: string): string | null {
+    if (!url) return null;
+    const m = url.match(/^https?:\/\/(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})/);
+    return m ? m[1] : null;
+  }
+
+  private async resolveDomainA(domain: string): Promise<string[]> {
+    const dns = await import('dns/promises');
+    try {
+      const ips = await dns.resolve4(domain, { ttl: false } as any);
+      return Array.isArray(ips) ? ips.map((x: any) => String(x)) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Escribe .htaccess en public_html del subdominio con redirect 301 al
+   * dominio nuevo. Solo redirige requests CUYO Host es el subdominio
+   * (los requests a cevicheriaperu.com siguen sirviendo el sitio normal).
+   */
+  private async writeSubdomainRedirect(
+    subdomain: string,
+    targetDomain: string,
+  ): Promise<void> {
+    const root = process.env.CYBERPANEL_SITES_ROOT || '/home';
+    const publicDir = process.env.CYBERPANEL_PUBLIC_DIR || 'public_html';
+    const dir = join(root, subdomain, publicDir);
+    if (!fs.existsSync(dir)) {
+      throw new Error(`public_html no existe: ${dir}`);
+    }
+    const subEscaped = subdomain.replace(/\./g, '\\.');
+    const wwwSubEscaped = `www\\.${subEscaped}`;
+    const htaccess = `# PLIA: redirect 301 del subdominio al dominio propio.
+# Generado automáticamente por attachCustomDomain. NO editar a mano.
+RewriteEngine On
+RewriteCond %{HTTP_HOST} ^(${subEscaped}|${wwwSubEscaped})$ [NC]
+RewriteRule ^(.*)$ https://${targetDomain}/$1 [R=301,L]
+`;
+    fs.writeFileSync(join(dir, '.htaccess'), htaccess, 'utf-8');
+  }
 }

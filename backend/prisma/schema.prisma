@@ -73,6 +73,13 @@ model Project {
   createdAt             DateTime             @default(now())
   updatedAt             DateTime             @updatedAt
   hostingSubscriptionId Int?
+  // ── Dominio propio del cliente (vinculado vía LiteSpeed vhAlias) ──
+  // Cuando el cliente conecta su dominio propio (ej. "mi-marca.com"), se
+  // configura como vhAlias del vhost del subdominio plia.pe correspondiente
+  // (sin crear un sitio nuevo en CyberPanel → 0 slot extra del package).
+  // El subdominio queda como redirect 301 al dominio principal.
+  customDomain          String?              @unique
+  customDomainAttachedAt DateTime?
   subscription          HostingSubscription? @relation(fields: [hostingSubscriptionId], references: [id])
   order                 Order                @relation(fields: [orderId], references: [id])
   user                  user                 @relation(fields: [userId], references: [id])

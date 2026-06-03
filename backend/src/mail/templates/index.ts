@@ -24,6 +24,7 @@ export { revisionDeployedTemplate } from './revision-deployed';
 export { renewalNoticeTemplate } from './renewal-notice';
 export { contactMessageTemplate } from './contact-message';
 export { siteContactSubmissionTemplate } from './site-contact-submission';
+export { customDomainAttachedTemplate } from './custom-domain-attached';
 
 // === Tipos (compile-time only, requieren `export type`) ===
 export type { TwoFactorPayload } from './two-factor';
@@ -39,3 +40,4 @@ export type { RevisionDeployedPayload } from './revision-deployed';
 export type { RenewalNoticePayload } from './renewal-notice';
 export type { ContactMessagePayload } from './contact-message';
 export type { SiteContactSubmissionPayload } from './site-contact-submission';
+export type { CustomDomainAttachedPayload } from './custom-domain-attached';
