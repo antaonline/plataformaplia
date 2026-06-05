@@ -295,9 +295,28 @@ export class PreviewService implements OnModuleDestroy {
     pp.status = 'starting';
     this.appendLog(pp, `[PLIA] Iniciando servidor Vite en el puerto ${port}...`);
 
+    // CRITICAL: pasar --base con el path del proxy. Sin esto, Vite emite
+    // index.html con <script src="/src/main.tsx"> (path absoluto), pero
+    // el browser resuelve eso contra el origen del padre — que es el
+    // proxy NestJS, NO el dev server Vite. Resultado: 404 en main.tsx y
+    // pantalla blanca. Con --base=/api/experimental/preview/<id>/serve/
+    // Vite emite todos los assets con ese prefix y resuelven via el proxy.
+    const basePath = `/api/experimental/preview/${chatId}/serve/`;
+
     const child = spawn(
       npmCommand,
-      ['run', 'dev', '--', '--port', String(port), '--host', '127.0.0.1', '--strictPort'],
+      [
+        'run',
+        'dev',
+        '--',
+        '--port',
+        String(port),
+        '--host',
+        '127.0.0.1',
+        '--strictPort',
+        '--base',
+        basePath,
+      ],
       {
         cwd: projectPath,
         env: devEnv(chatId),
