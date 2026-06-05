@@ -555,21 +555,50 @@ export class CodegenService {
     const componentFiles = plan.files.filter((f) => !isEntry(f.path));
     const entryFile = plan.files.find((f) => isEntry(f.path));
 
-    // Componentes con concurrencia limitada (2 a la vez) para no reventar
-    // los limites de tasa del proveedor (sobre todo Gemini free).
-    const CONCURRENCY = 2;
+    // Concurrencia: si Gemini está desactivado, solo queda Claude. El
+    // rate limit de Claude es POR ORGANIZACIÓN (no por request), así que
+    // disparar 2 archivos en paralelo solo acelera reventar el límite de
+    // output-tokens/min. Con un solo provider serializamos (1 a la vez).
+    // Con Gemini activo, 2 reparte carga entre providers.
+    const geminiOff =
+      String(process.env.DISABLE_GEMINI || '').toLowerCase() === 'true';
+    const CONCURRENCY = geminiOff ? 1 : 2;
     const queue = [...componentFiles];
     const failedFiles: { path: string; error: string }[] = [];
-    const worker = async () => {
-      for (;;) {
-        const f = queue.shift();
-        if (!f) return;
-        const user = buildFileUserPrompt(
-          f,
-          params.userPrompt,
-          {},
-          params.existingFiles?.[f.path],
-        );
+
+    // Detecta errores de rate-limit (429 "output tokens per minute" o
+    // breaker abierto). Para estos NO queremos fallar -> stub roto. Mejor
+    // esperar a que la ventana del rate limit se libere y reintentar.
+    const isRateLimited = (e: any): boolean => {
+      const status = e?.response?.status;
+      const msg = (
+        e?.response?.data?.error?.message ||
+        e?.message ||
+        String(e)
+      ).toLowerCase();
+      return (
+        status === 429 ||
+        msg.includes('rate limit') ||
+        msg.includes('tokens per minute') ||
+        msg.includes('cooldown') ||
+        msg.includes('breaker') ||
+        msg.includes('agotada sin respuesta')
+      );
+    };
+
+    const genOneFile = async (f: PlannedFile): Promise<void> => {
+      const user = buildFileUserPrompt(
+        f,
+        params.userPrompt,
+        {},
+        params.existingFiles?.[f.path],
+      );
+      // Hasta 5 intentos con espera creciente SOLO para rate-limit. Esto
+      // hace la generación más lenta en Tier 1 de Anthropic, pero EVITA
+      // que el sitio quede con stubs rotos. Cargá un tier superior en
+      // Anthropic (50k tokens/min) para que esto sea instantáneo.
+      const maxRateRetries = 5;
+      for (let attempt = 0; attempt <= maxRateRetries; attempt++) {
         try {
           const code = await this.completeWithChain(
             fileModels,
@@ -579,17 +608,34 @@ export class CodegenService {
             phase,
           );
           files[f.path] = this.stripCodeFences(code);
+          return;
         } catch (e: any) {
-          // Si un archivo individual falla (todos los modelos cayeron para
-          // ese archivo), NO abortamos toda la generacion. Logueamos y
-          // seguimos: el sitio quedara con algunos archivos faltantes que
-          // el usuario puede pedir regenerar en el siguiente turn.
+          if (isRateLimited(e) && attempt < maxRateRetries) {
+            // Esperar a que la ventana de rate-limit (60s) se libere.
+            // Backoff: 20s, 30s, 40s, 50s, 60s.
+            const waitMs = (20 + attempt * 10) * 1000;
+            this.logger.warn(
+              `[gen-file] ${f.path}: rate-limit, esperando ${waitMs / 1000}s y reintentando (intento ${attempt + 1}/${maxRateRetries})`,
+            );
+            await new Promise((r) => setTimeout(r, waitMs));
+            continue;
+          }
+          // Error no recuperable o se agotaron los reintentos.
           const msg = e?.response?.data?.error?.message || e?.message || String(e);
           failedFiles.push({ path: f.path, error: msg.slice(0, 200) });
           this.logger.error(
             `[gen-file] FAIL ${f.path}: ${msg.slice(0, 200)} (continuando con el resto)`,
           );
+          return;
         }
+      }
+    };
+
+    const worker = async () => {
+      for (;;) {
+        const f = queue.shift();
+        if (!f) return;
+        await genOneFile(f);
       }
     };
     await Promise.all(
@@ -617,7 +663,8 @@ export class CodegenService {
     }
 
     // Index (home) al final: conoce todos los componentes ya generados y
-    // arma el orden correcto de secciones/imports.
+    // arma el orden correcto de secciones/imports. Es el archivo MÁS
+    // crítico — sin él, pantalla blanca. Usa el mismo retry-on-rate-limit.
     if (entryFile) {
       const user = buildFileUserPrompt(
         entryFile,
@@ -625,14 +672,33 @@ export class CodegenService {
         files,
         params.existingFiles?.[entryFile.path],
       );
-      const code = await this.completeWithChain(
-        fileModels,
-        fileSystem,
-        [{ role: 'user', content: user }],
-        { maxTokens: 16000, temperature: 0.7, onUsage },
-        phase,
-      );
-      files[entryFile.path] = this.stripCodeFences(code);
+      const maxRateRetries = 6; // el entry es crítico — más paciencia.
+      for (let attempt = 0; attempt <= maxRateRetries; attempt++) {
+        try {
+          const code = await this.completeWithChain(
+            fileModels,
+            fileSystem,
+            [{ role: 'user', content: user }],
+            { maxTokens: 16000, temperature: 0.7, onUsage },
+            phase,
+          );
+          files[entryFile.path] = this.stripCodeFences(code);
+          break;
+        } catch (e: any) {
+          if (isRateLimited(e) && attempt < maxRateRetries) {
+            const waitMs = (20 + attempt * 10) * 1000;
+            this.logger.warn(
+              `[gen-file] ENTRY ${entryFile.path}: rate-limit, esperando ${waitMs / 1000}s (intento ${attempt + 1}/${maxRateRetries})`,
+            );
+            await new Promise((r) => setTimeout(r, waitMs));
+            continue;
+          }
+          this.logger.error(
+            `[gen-file] ENTRY falló: ${e?.message || e}. El sitio puede quedar incompleto.`,
+          );
+          break;
+        }
+      }
     }
 
     // ─── VALIDADOR POST-CODEGEN (hasta 2 reintentos + stubs garantía) ──
