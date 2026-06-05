@@ -114,35 +114,94 @@ async function generateImageWithAI(
   // Wrap del prompt para fotografia premium tipo magazine, sin texto/marcas.
   const wrapped = `Professional photography, photorealistic, premium magazine quality, cinematic lighting, 4K detail. ${prompt}. No text, no logos, no watermarks. Editorial style.`;
 
-  try {
-    const res = await axios.post(
-      'https://api.openai.com/v1/images/generations',
-      {
-        model: 'dall-e-3',
+  // Modelo configurable. En 2026 OpenAI deprecó dall-e-3 en muchas cuentas a
+  // favor de gpt-image-1. Default gpt-image-1; si tu key solo tiene dall-e-3
+  // seteá IMG_OPENAI_MODEL=dall-e-3 en .env. Probamos en orden ambos.
+  const preferred = process.env.IMG_OPENAI_MODEL || 'gpt-image-1';
+  const chain = preferred === 'dall-e-3'
+    ? ['dall-e-3', 'gpt-image-1']
+    : ['gpt-image-1', 'dall-e-3'];
+
+  for (const model of chain) {
+    try {
+      // gpt-image-1 usa quality low/medium/high y devuelve b64_json.
+      // dall-e-3 usa quality standard/hd y devuelve url.
+      const isGptImage = model === 'gpt-image-1';
+      const body: any = {
+        model,
         prompt: wrapped.slice(0, 4000),
         n: 1,
-        size,
-        quality: process.env.IMG_OPENAI_QUALITY || 'standard',
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
+        size: isGptImage ? mapSizeForGptImage(size) : size,
+      };
+      if (isGptImage) {
+        body.quality = process.env.IMG_OPENAI_QUALITY_GPT || 'medium';
+      } else {
+        body.quality = process.env.IMG_OPENAI_QUALITY || 'standard';
+      }
+
+      const res = await axios.post(
+        'https://api.openai.com/v1/images/generations',
+        body,
+        {
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+          },
+          timeout: 120_000,
         },
-        timeout: 90_000,
-      },
-    );
-    const url = res.data?.data?.[0]?.url;
-    if (url) {
-      logger.log(`[ImageAI] generada "${prompt.slice(0, 60)}..." -> ${size}`);
+      );
+
+      const item = res.data?.data?.[0];
+      // url (dall-e-3) o b64_json (gpt-image-1).
+      if (item?.url) {
+        logger.log(`[ImageAI] ${model} generada "${prompt.slice(0, 50)}..." (url)`);
+        return item.url;
+      }
+      if (item?.b64_json) {
+        const saved = await saveB64Image(item.b64_json);
+        if (saved) {
+          logger.log(`[ImageAI] ${model} generada "${prompt.slice(0, 50)}..." (b64 -> ${saved})`);
+          return saved;
+        }
+      }
+      logger.warn(`[ImageAI] ${model} respondió sin url ni b64_json.`);
+    } catch (e: any) {
+      const status = e?.response?.status;
+      const msg = e?.response?.data?.error?.message || e?.message;
+      logger.warn(
+        `[ImageAI] ${model} fallo (${status || 'err'}): ${String(msg).slice(0, 120)} -> próximo modelo`,
+      );
+      // Si fue "model does not exist", probamos el siguiente del chain.
+      continue;
     }
-    return url || null;
-  } catch (e: any) {
-    const status = e?.response?.status;
-    const msg = e?.response?.data?.error?.message || e?.message;
-    logger.warn(
-      `[ImageAI] DALL-E fallo (${status || 'err'}) para "${prompt.slice(0, 60)}...": ${msg}`,
-    );
+  }
+  logger.warn(`[ImageAI] todos los modelos OpenAI fallaron para "${prompt.slice(0, 50)}..."`);
+  return null;
+}
+
+/** gpt-image-1 acepta 1024x1024, 1024x1536 (portrait), 1536x1024 (landscape). */
+function mapSizeForGptImage(dalleSize: string): string {
+  if (dalleSize === '1024x1792') return '1024x1536';
+  if (dalleSize === '1792x1024') return '1536x1024';
+  return '1024x1024';
+}
+
+/**
+ * Guarda una imagen base64 en uploads/media y devuelve su URL pública.
+ * gpt-image-1 devuelve b64_json (no URL), así que la persistimos nosotros.
+ */
+async function saveB64Image(b64: string): Promise<string | null> {
+  try {
+    const fs = await import('fs/promises');
+    const path = await import('path');
+    const dir = path.join(process.cwd(), 'uploads', 'media');
+    await fs.mkdir(dir, { recursive: true });
+    const name = `aiimg-${Date.now()}-${Math.round(Math.random() * 1e9)}.png`;
+    const filePath = path.join(dir, name);
+    await fs.writeFile(filePath, Buffer.from(b64, 'base64'));
+    const base = (process.env.PUBLIC_API_URL || process.env.PREVIEW_PROXY_BASE || 'http://localhost:3002').replace(/\/$/, '');
+    return `${base}/uploads/media/${name}`;
+  } catch {
     return null;
   }
 }

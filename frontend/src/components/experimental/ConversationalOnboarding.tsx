@@ -260,7 +260,7 @@ const Bubble: React.FC<{ msg: ChatMsg }> = ({ msg }) => {
         transition={{ duration: 0.25 }}
         className="flex justify-end"
       >
-        <div className="max-w-[85%] px-4 py-2.5 rounded-2xl rounded-br-sm bg-cta text-black text-sm font-medium leading-relaxed whitespace-pre-wrap">
+        <div className="max-w-[85%] px-4 py-2.5 rounded-2xl rounded-br-sm bg-indigo-600 text-white text-sm font-medium leading-relaxed whitespace-pre-wrap shadow-lg shadow-indigo-600/20">
           {msg.text}
         </div>
       </motion.div>

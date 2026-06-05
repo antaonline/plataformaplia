@@ -230,6 +230,34 @@ export class CodegenService {
     return validKeys > 0 ? direct : null;
   }
 
+  /**
+   * Decide un valor placeholder razonable para un export stub según su
+   * nombre. Plural/list/items/data -> []. config/theme/brand -> {}. resto "".
+   */
+  private stubValueForName(sym: string): string {
+    const lower = sym.toLowerCase();
+    if (
+      lower.endsWith('s') ||
+      lower.includes('list') ||
+      lower.includes('items') ||
+      lower.includes('data') ||
+      lower.includes('gallery') ||
+      lower.includes('faqs')
+    ) {
+      return '[]';
+    }
+    if (
+      lower.includes('config') ||
+      lower.includes('theme') ||
+      lower.includes('brand') ||
+      lower.includes('settings') ||
+      lower.endsWith('info')
+    ) {
+      return '{}';
+    }
+    return '""';
+  }
+
   private stripCodeFences(s: string): string {
     let out = s.trim();
     // Quita ```lang ... ``` envolvente si el modelo lo agrega.
@@ -620,16 +648,56 @@ export class CodegenService {
     //      placeholder. Garantiza que la app renderice aunque sea minima.
     try {
       let missing = validateImports(files, params.existingFiles);
-      for (let attempt = 1; attempt <= 2 && missing.length > 0; attempt++) {
-        this.logger.warn(
-          `[validator] attempt=${attempt} ${missing.length} imports rotos: ` +
-            missing
-              .map((m) => `${m.importerPath}->${m.importSource}(${m.reason})`)
-              .slice(0, 5)
-              .join(', ') +
-            (missing.length > 5 ? '...' : ''),
+
+      // PASO 1: los 'export-missing' (archivo EXISTE pero le falta un
+      // símbolo) los arreglamos DIRECTO apendando los exports faltantes al
+      // contenido existente. NO los mandamos a la IA porque regenerar el
+      // archivo entero rompe OTROS imports (la IA no conoce todos los
+      // símbolos que el resto de componentes necesitan de ese archivo).
+      // Esto resuelve el bug de constants.ts que se autodestruía.
+      const appendStubsForExportMissing = () => {
+        const exportMissing = missing.filter((m) => m.reason === 'export-missing');
+        if (exportMissing.length === 0) return;
+        const byPath = new Map<string, Set<string>>();
+        for (const m of exportMissing) {
+          // Solo nombres named — el default-missing en archivo existente es
+          // raro y lo dejamos para la IA/stub final.
+          if (m.missingNamedSymbols.length === 0) continue;
+          let set = byPath.get(m.expectedPath);
+          if (!set) {
+            set = new Set();
+            byPath.set(m.expectedPath, set);
+          }
+          for (const s of m.missingNamedSymbols) set.add(s);
+        }
+        for (const [path, syms] of byPath.entries()) {
+          const existing = files[path] ?? files[`/${path}`] ?? '';
+          const key = files[path] !== undefined ? path : `/${path}`;
+          const appended = [
+            existing.trimEnd(),
+            '',
+            '// ─── Exports auto-completados por el validador ─────────────',
+            ...[...syms].map((s) => `export const ${s} = ${this.stubValueForName(s)};`),
+            '',
+          ].join('\n');
+          files[key] = appended;
+        }
+        this.logger.log(
+          `[validator] export-missing: apendí ${[...byPath.values()].reduce((n, s) => n + s.size, 0)} exports a ${byPath.size} archivos existentes (sin destruir contenido).`,
         );
-        const fixPrompt = buildMissingFilesPrompt(missing);
+      };
+      appendStubsForExportMissing();
+      missing = validateImports(files, params.existingFiles);
+
+      // PASO 2: los 'file-missing' (archivo NO existe) SÍ los pedimos a la
+      // IA, hasta 2 reintentos.
+      for (let attempt = 1; attempt <= 2 && missing.some((m) => m.reason === 'file-missing'); attempt++) {
+        const fileMissing = missing.filter((m) => m.reason === 'file-missing');
+        this.logger.warn(
+          `[validator] attempt=${attempt} ${fileMissing.length} archivos faltantes: ` +
+            fileMissing.map((m) => m.expectedPath).slice(0, 5).join(', '),
+        );
+        const fixPrompt = buildMissingFilesPrompt(fileMissing);
         try {
           const raw = await this.completeWithChain(
             fileModels,
@@ -642,33 +710,28 @@ export class CodegenService {
           if (parsed && Object.keys(parsed).length > 0) {
             Object.assign(files, parsed);
             this.logger.log(
-              `[validator] attempt=${attempt} añadió/sobrescribió ${Object.keys(parsed).length} archivos: ${Object.keys(parsed).join(', ')}`,
+              `[validator] attempt=${attempt} añadió ${Object.keys(parsed).length} archivos: ${Object.keys(parsed).join(', ')}`,
             );
           } else {
-            this.logger.warn(
-              `[validator] attempt=${attempt} JSON vacío/malformado.`,
-            );
-            break; // no tiene caso reintentar si la IA no respondió en formato.
+            break;
           }
         } catch (e: any) {
-          this.logger.warn(
-            `[validator] attempt=${attempt} falló: ${e?.message || e}`,
-          );
-          break; // rate limit / 503 — no insistir.
+          this.logger.warn(`[validator] attempt=${attempt} falló: ${e?.message || e}`);
+          break;
         }
-        // Re-validar para próximo loop o salida.
+        // Re-validar y re-apendar export-missing que la nueva gen pudo crear.
+        missing = validateImports(files, params.existingFiles);
+        appendStubsForExportMissing();
         missing = validateImports(files, params.existingFiles);
       }
 
-      // STUBS DE GARANTÍA: si DESPUÉS de los reintentos siguen faltando
-      // imports, fabricamos archivos placeholder. La app renderiza con
-      // datos vacíos en vez de pantalla blanca. El cliente puede pedir
-      // "completá el menú" en el chat y la IA lo enriquece.
+      // PASO 3: STUBS de garantía para lo que AÚN falte (file-missing que
+      // la IA no logró generar). Estos sí crean archivo nuevo — no destruyen
+      // nada porque por definición no existían.
       if (missing.length > 0) {
         this.logger.warn(
-          `[validator] post-reintentos siguen rotos ${missing.length}. Generando stubs de garantía.`,
+          `[validator] post-reintentos siguen rotos ${missing.length}. Generando stubs de garantía (solo archivos nuevos).`,
         );
-        // Agrupar por path para no escribir 2 veces el mismo archivo.
         const stubsByPath = new Map<
           string,
           { needsDefault: boolean; named: Set<string> }
@@ -683,60 +746,48 @@ export class CodegenService {
           for (const sym of m.missingNamedSymbols) s.named.add(sym);
         }
         for (const [path, spec] of stubsByPath.entries()) {
-          const lines: string[] = [
-            `// AUTO-STUB generado por el validador post-codegen.`,
-            `// La IA importó símbolos de aquí pero no entregó este archivo`,
-            `// (o le erró al nombre de los exports). Lo rellenamos con`,
-            `// placeholders para que la app renderice; podés pedir en el`,
-            `// chat "completá <path>" y la IA lo enriquece.`,
-            '',
-          ];
-          // Decidir extensión: si el path no termina en .ts/.tsx, asumimos
-          // .ts para data files.
+          // SEGURIDAD: si el archivo YA existe (export-missing que escapó),
+          // apendar en vez de reemplazar — nunca destruir contenido real.
+          const existsKey =
+            files[path] !== undefined
+              ? path
+              : files[`/${path}`] !== undefined
+                ? `/${path}`
+                : null;
           const isTsx = /\.tsx$/i.test(path);
+          const exportLines: string[] = [];
           for (const sym of spec.named) {
-            // Heurística simple: si el nombre sugiere array de algo
-            // (pizzas, items, menus, gallery, faqs, testimonios), exportar []
-            // Si sugiere objeto (config, brand, theme), exportar {}
-            // Caso default: string vacío.
-            const lower = sym.toLowerCase();
-            let value = '""';
-            if (
-              lower.endsWith('s') ||
-              lower.includes('list') ||
-              lower.includes('items') ||
-              lower.includes('data')
-            ) {
-              value = '[]';
-            } else if (
-              lower.includes('config') ||
-              lower.includes('theme') ||
-              lower.includes('brand') ||
-              lower.includes('settings') ||
-              lower.endsWith('info')
-            ) {
-              value = '{}';
-            }
-            lines.push(`export const ${sym} = ${value};`);
+            exportLines.push(`export const ${sym} = ${this.stubValueForName(sym)};`);
           }
           if (spec.needsDefault) {
-            if (isTsx) {
-              lines.push(
-                '',
-                'export default function Placeholder() {',
-                '  return null;',
-                '}',
-              );
-            } else {
-              lines.push('', 'export default null;');
-            }
+            exportLines.push(
+              isTsx
+                ? '\nexport default function Placeholder() {\n  return null;\n}'
+                : '\nexport default null;',
+            );
           }
-          files[path] = lines.join('\n') + '\n';
+          if (existsKey) {
+            files[existsKey] =
+              files[existsKey].trimEnd() +
+              '\n\n// ─── Stubs de garantía ─────\n' +
+              exportLines.join('\n') +
+              '\n';
+          } else {
+            files[path] =
+              [
+                `// AUTO-STUB del validador post-codegen.`,
+                `// Importado pero no entregado por la IA. Placeholder para`,
+                `// que la app renderice; pedí "completá ${path}" en el chat.`,
+                '',
+                ...exportLines,
+                '',
+              ].join('\n') + '\n';
+          }
         }
         this.logger.log(
           `[validator] generados ${stubsByPath.size} stubs: ${[...stubsByPath.keys()].join(', ')}`,
         );
-      } else if (missing.length === 0) {
+      } else {
         this.logger.log(`[validator] todos los imports resuelven OK.`);
       }
     } catch (e: any) {

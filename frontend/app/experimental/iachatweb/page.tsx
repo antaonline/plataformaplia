@@ -115,33 +115,36 @@ export default function DashboardPage() {
   const [studioCaps, setStudioCaps] = useState<StudioCapabilities | null>(null);
   const onboardingRef = useRef<ConversationalOnboardingHandle | null>(null);
 
-  // Coordina el redirect final: cuando ya tenemos chatId Y el preview
-  // status del backend dice 'running', navegamos al editor. Para el
-  // cliente es invisible porque el layout es el mismo (chat izq + canvas
-  // der). Solo cambia la URL.
+  // Coordina el redirect final. Poll al CHAT (no al preview — el preview
+  // recién arranca al entrar a /project). Cuando el chat tiene un mensaje
+  // del assistant con archivos generados (la generación terminó), redirige
+  // a /project/<id>. La página del editor arranca el preview de Vite.
   useEffect(() => {
     if (!chatViewActive || pendingChatId === null) return;
     const token = localStorage.getItem('access_token');
     if (!token) return;
     let mounted = true;
     let attempts = 0;
-    const maxAttempts = 60; // ~3 min de poll
+    let announcedDesigning = false;
+    const maxAttempts = 100; // ~5 min de poll (la gen puede tardar 2-4 min)
     const poll = async () => {
       attempts++;
       try {
         const res = await fetch(
-          `${apiBase}/experimental/preview/${pendingChatId}/status`,
+          `${apiBase}/experimental/iachat/${pendingChatId}`,
           { headers: { Authorization: `Bearer ${token}` } },
         );
         if (res.ok) {
           const data = await res.json();
-          // Publicamos progreso al chat según el estado del backend.
-          if (data.status === 'installing' && onboardingRef.current) {
-            onboardingRef.current.appendProgress?.(
-              'Instalando dependencias del proyecto…',
-            );
-          } else if (data.status === 'running' && data.url) {
-            // Listo: la web está corriendo. Hacemos el redirect.
+          const messages: any[] = Array.isArray(data.messages) ? data.messages : [];
+          // ¿Hay un mensaje del assistant con [FILES]? = generación terminada.
+          const assistantWithFiles = messages.find(
+            (m) =>
+              m.role === 'assistant' &&
+              typeof m.content === 'string' &&
+              m.content.includes('[FILES]'),
+          );
+          if (assistantWithFiles) {
             onboardingRef.current?.appendProgress?.(
               '¡Tu web está lista! Abriendo el editor…',
               { done: true },
@@ -150,8 +153,15 @@ export default function DashboardPage() {
               if (mounted) {
                 router.push(`/experimental/iachatweb/project/${pendingChatId}`);
               }
-            }, 800);
+            }, 900);
             return;
+          }
+          // Aún generando: un solo mensaje de "diseñando" para no spamear.
+          if (!announcedDesigning && attempts >= 2) {
+            announcedDesigning = true;
+            onboardingRef.current?.appendProgress?.(
+              'Estoy escribiendo el código de cada sección. Esto toma 1-3 minutos…',
+            );
           }
         }
       } catch {
@@ -159,6 +169,11 @@ export default function DashboardPage() {
       }
       if (mounted && attempts < maxAttempts) {
         setTimeout(poll, 3000);
+      } else if (mounted && attempts >= maxAttempts) {
+        // Timeout de seguridad: si tardó demasiado, redirigimos igual —
+        // la página del editor mostrará el estado real (sigue generando
+        // o ya terminó).
+        router.push(`/experimental/iachatweb/project/${pendingChatId}`);
       }
     };
     poll();
