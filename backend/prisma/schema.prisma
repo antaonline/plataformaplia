@@ -45,16 +45,59 @@ model DomainSelection {
 }
 
 model plan {
-  id           Int                   @id @default(autoincrement())
-  name         String
-  description  String
-  price        Float
-  hostingYear  Boolean               @default(true)
-  slug         String?               @unique
-  serviceType  PlanServiceType       @default(WEBSITE_BUILD)
-  createdAt    DateTime              @default(now())
-  subscription HostingSubscription[]
-  order        Order[]
+  id              Int                   @id @default(autoincrement())
+  name            String
+  description     String
+  price           Float
+  hostingYear     Boolean               @default(true)
+  slug            String?               @unique
+  serviceType     PlanServiceType       @default(WEBSITE_BUILD)
+  createdAt       DateTime              @default(now())
+  subscription    HostingSubscription[]
+  order           Order[]
+  studioLimits    StudioPlanLimits?
+}
+
+// Límites específicos para planes de Plia Studio (iachat AI).
+// Relación 1:1 con `plan`. Los planes que NO son de Studio (LANDING/WEB
+// tradicionales) simplemente no tienen este registro asociado y el
+// código asume "sin acceso a Studio".
+model StudioPlanLimits {
+  id                   Int     @id @default(autoincrement())
+  planId               Int     @unique
+  plan                 plan    @relation(fields: [planId], references: [id])
+
+  // ── Capacidad ──
+  maxProjects          Int     @default(1)        // -1 = ilimitado
+  maxGenerationsPerMonth Int   @default(10)       // -1 = ilimitado
+
+  // ── Herramientas creativas habilitadas ──
+  canUseClaude         Boolean @default(true)     // Claude para chat + código
+  canUseDalle          Boolean @default(true)     // DALL-E para imágenes
+  canUseFlux           Boolean @default(false)    // Flux Pro (calidad alta)
+  canUseTripo3D        Boolean @default(false)    // Imagen → 3D
+  canUseMeshy          Boolean @default(false)    // Alternativa a Tripo3D
+  canUseHigsfield      Boolean @default(false)    // Video cinematográfico AI
+  canUseRunway         Boolean @default(false)    // Video transitions
+  canUseLumaAI         Boolean @default(false)    // Alternativa video
+  canUseLottieLib      Boolean @default(true)     // Librería propia de Lotties
+
+  // ── Features del editor ──
+  canEditCode          Boolean @default(false)    // Acceso al código fuente
+  canUseAdvancedCanvas Boolean @default(false)    // Canvas Konva con zoom/drag (vs editor simple)
+  canUseInlineEditing  Boolean @default(true)     // Click en elemento → editar
+  canUse3DTemplates    Boolean @default(false)    // Templates 3D cinematográficos
+  canUseCustomDomain   Boolean @default(false)    // Vincular dominio propio
+  hasWatermark         Boolean @default(true)     // "Made with PLIA" en footer
+
+  // ── Soporte ──
+  supportTier          String  @default("community") // community | email | priority
+
+  // ── White label (solo Studio/Agency) ──
+  whiteLabelEnabled    Boolean @default(false)
+
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 }
 
 model Project {
@@ -333,6 +376,7 @@ model AiMessage {
 enum PlanServiceType {
   WEBSITE_BUILD
   HOSTING_ONLY
+  STUDIO_SUBSCRIPTION  // Plia Studio (iachat AI) — planes Free/Starter/Pro/Studio
 }
 
 enum ProjectType {

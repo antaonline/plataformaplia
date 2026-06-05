@@ -16,6 +16,11 @@ import { cn } from '@/lib/utils';
 import { ThinkingEngine, AgentState } from '@/components/experimental/ThinkingEngine';
 import { UpsellModal } from '@/components/experimental/UpsellModal';
 import FileExplorer from '@/components/experimental/FileExplorer';
+import {
+  OnboardingChat,
+  StudioCapabilities,
+  OnboardingAnswers,
+} from '@/components/experimental/OnboardingChat';
 import { toast } from 'sonner';
 import ThinkingSection from '@/components/chat/ThinkingSection';
 import ToolResultItem from '@/components/chat/ToolResultItem';
@@ -63,6 +68,14 @@ export default function projectPage() {
   }, []);
 
   const [messages, setMessages] = useState<any[]>([]);
+  // ── Onboarding Conversacional (PLIA Studio v2) ──
+  // Cuando el proyecto está recién creado (sin mensajes ni archivos generados)
+  // mostramos un chat guiado en lugar de saltar directo al canvas. Esto ahorra
+  // costos de API porque calibramos la generación según lo que el cliente realmente
+  // necesita y permite ofrecer la mejor experiencia "WOW" sin desperdiciar tokens.
+  const [studioCaps, setStudioCaps] = useState<StudioCapabilities | null>(null);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const onboardingCheckedRef = useRef(false);
   const [input, setInput] = useState('');
   const [viewport, setViewport] = useState<'desktop' | 'tablet' | 'mobile'>('desktop');
   // Sprint 4: alternar entre vista de preview (iframe) y vista de codigo
@@ -573,6 +586,32 @@ export default function projectPage() {
       }
       if (data.aiRules) setAiRules(data.aiRules);
       if (data.chatMode) setChatMode(data.chatMode);
+
+      // ── Decisión: ¿mostrar OnboardingChat o ir directo al canvas? ──
+      // Lo mostramos solo si el proyecto está completamente vacío (sin
+      // mensajes previos y sin archivos generados). Una vez decidido,
+      // no lo volvemos a mostrar en esa sesión aunque el cliente borre todo.
+      if (!onboardingCheckedRef.current) {
+        onboardingCheckedRef.current = true;
+        const hasMessages = Array.isArray(data.messages) && data.messages.length > 0;
+        const hasGeneratedFiles = Object.keys(allPages).length > 0;
+        if (!hasMessages && !hasGeneratedFiles) {
+          // Proyecto vacío → cargar capabilities y mostrar onboarding
+          try {
+            const token = localStorage.getItem('access_token');
+            if (token) {
+              const capsRes = await fetch(`${apiBase}/experimental/studio-plans/me`, {
+                headers: { Authorization: `Bearer ${token}` },
+              });
+              if (capsRes.ok) {
+                const caps = await capsRes.json();
+                setStudioCaps(caps);
+              }
+            }
+          } catch {/* el onboarding funciona aunque caps falle */}
+          setShowOnboarding(true);
+        }
+      }
     } catch (e) { console.error("Error fetching chat data", e); }
   };
 
@@ -770,6 +809,57 @@ export default function projectPage() {
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInput(e.target.value);
+  };
+
+  /**
+   * Cuando el cliente termina el OnboardingChat, convertimos sus respuestas
+   * en un prompt rico para la IA y disparamos la primera generación.
+   * El prompt incluye el contexto de complejidad para que el AI Router del
+   * backend pueda decidir qué stack de APIs usar (Claude solo vs Claude+3D
+   * vs full stack con Higsfield, etc.).
+   */
+  const handleOnboardingComplete = async (a: OnboardingAnswers) => {
+    const typeLabels: Record<string, string> = {
+      landing: 'una landing de servicio',
+      tienda: 'una tienda online',
+      restaurante: 'una web para restaurante/cafetería',
+      portfolio: 'un portfolio personal',
+      corporativa: 'una web corporativa',
+      otro: 'una web',
+    };
+    const styleLabels: Record<string, string> = {
+      simple: 'estilo simple, directo y limpio. Sin efectos pesados.',
+      modern: 'estilo moderno con microinteracciones y animaciones suaves.',
+      clean:
+        'estilo Apple/Stripe: tipografía cuidada, espacios amplios, animaciones sutiles muy pulidas.',
+      premium:
+        'estilo PREMIUM con elementos 3D, video hero cinematográfico y scroll-triggered animations nivel agencia top.',
+    };
+    const assetHint = a.hasOwnAssets
+      ? 'El cliente va a subir sus propias fotos en el siguiente turno.'
+      : 'No tiene fotos propias — generá imágenes profesionales con IA que encajen con el rubro.';
+
+    const promptParts = [
+      `Quiero ${typeLabels[a.projectType] || 'una web'} para mi negocio.`,
+      `Nombre del negocio: ${a.businessName}`,
+      `Descripción: ${a.description}`,
+      ``,
+      `Estilo visual: ${styleLabels[a.complexity]}`,
+      assetHint,
+      ``,
+      `[META]${JSON.stringify({
+        projectType: a.projectType,
+        businessName: a.businessName,
+        complexity: a.complexity,
+        hasOwnAssets: a.hasOwnAssets,
+      })}[/META]`,
+    ];
+    const prompt = promptParts.join('\n');
+
+    // Cerramos el onboarding y disparamos la generación (handleSend ya
+    // mostrará el estado "Generando..." en el canvas).
+    setShowOnboarding(false);
+    await handleSend(prompt);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -1499,6 +1589,15 @@ export default function projectPage() {
         onClose={() => setUpsellOpen(false)}
         reason={upsellReason}
         currentPlan={creditsChip?.plan}
+      />
+      {/* Conversational Onboarding — solo aparece la primera vez que el cliente
+          entra al proyecto, antes de cualquier generación. Sustituye el canvas
+          por un chat guiado de 5 pasos. */}
+      <OnboardingChat
+        open={showOnboarding}
+        capabilities={studioCaps}
+        onComplete={handleOnboardingComplete}
+        onClose={() => setShowOnboarding(false)}
       />
       <Toaster />
     </div>
