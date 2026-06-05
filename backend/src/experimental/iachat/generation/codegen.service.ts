@@ -19,6 +19,10 @@ import {
   buildFileUserPrompt,
   buildPlanSystemPrompt,
 } from './prompts';
+import {
+  validateImports,
+  buildMissingFilesPrompt,
+} from './import-validator';
 
 // PLIA Studio (Sprint 1, Lovable parity): proyectos con scaffold Vite + shadcn/ui
 // permiten descomponer mucho mas — secciones individuales, paginas separadas,
@@ -171,6 +175,59 @@ export class CodegenService {
 
     // Otros (css, json, md): no escribimos stub.
     return '';
+  }
+
+  /**
+   * Parsea la respuesta del auto-fix del validador. La IA debe devolver
+   * { "files": { "src/data/menu.ts": "...", "src/components/Hero.tsx": "..." } }.
+   * Toleramos varios formatos: con y sin code fences, JSON con texto antes
+   * o después, y { files: ... } o { path: content } directo en el root.
+   * Devuelve un mapa path->contenido o null si no se puede parsear.
+   */
+  private parseFixerResponse(
+    raw: string,
+  ): Record<string, string> | null {
+    if (!raw || typeof raw !== 'string') return null;
+    let s = this.stripCodeFences(raw).trim();
+
+    // Tratamos de extraer el primer bloque JSON {} balanceado.
+    const start = s.indexOf('{');
+    const end = s.lastIndexOf('}');
+    if (start === -1 || end === -1 || end <= start) return null;
+    s = s.slice(start, end + 1);
+
+    let parsed: any;
+    try {
+      parsed = JSON.parse(s);
+    } catch {
+      return null;
+    }
+
+    if (!parsed || typeof parsed !== 'object') return null;
+    // Forma A: { files: { path: content } }
+    if (parsed.files && typeof parsed.files === 'object') {
+      const out: Record<string, string> = {};
+      for (const [p, c] of Object.entries(parsed.files)) {
+        if (typeof c === 'string' && c.trim()) out[p] = c;
+      }
+      return out;
+    }
+    // Forma B: { path: content } directo
+    const direct: Record<string, string> = {};
+    let validKeys = 0;
+    for (const [p, c] of Object.entries(parsed)) {
+      // Heuristica: una clave que parece path (tiene "/" o termina en .ts/.tsx)
+      // y un value string son una entrada de archivo.
+      if (
+        typeof c === 'string' &&
+        c.trim() &&
+        (p.includes('/') || /\.(tsx?|jsx?|ts|json)$/i.test(p))
+      ) {
+        direct[p] = c;
+        validKeys++;
+      }
+    }
+    return validKeys > 0 ? direct : null;
   }
 
   private stripCodeFences(s: string): string {
@@ -543,6 +600,62 @@ export class CodegenService {
         phase,
       );
       files[entryFile.path] = this.stripCodeFences(code);
+    }
+
+    // ─── VALIDADOR POST-CODEGEN ─────────────────────────────────────────
+    // Escaneamos los archivos generados buscando imports a "@/..." que NO
+    // resuelvan a un archivo+export real. Si la IA prometió secciones que
+    // no entregó (ej: importa { menuData } from "@/data/menu" pero nunca
+    // creó ese archivo), el preview queda en blanco con "does not provide
+    // an export named 'X'".
+    //
+    // Si encontramos rotos, hacemos UN reintento: prompt corto y específico
+    // pidiendo SOLO los archivos faltantes. Si vuelve a fallar, los stubs
+    // que generamos abajo (BASE_UTILS_FILE pattern) cubren el caso peor
+    // sin pantalla blanca.
+    try {
+      const missing = validateImports(files, params.existingFiles);
+      if (missing.length > 0) {
+        this.logger.warn(
+          `[validator] ${missing.length} imports rotos detectados: ` +
+            missing
+              .map((m) => `${m.importerPath}->${m.importSource}`)
+              .slice(0, 5)
+              .join(', ') +
+            (missing.length > 5 ? '...' : ''),
+        );
+        const fixPrompt = buildMissingFilesPrompt(missing);
+        try {
+          const raw = await this.completeWithChain(
+            fileModels,
+            fileSystem,
+            [{ role: 'user', content: fixPrompt }],
+            { json: true, maxTokens: 8000, temperature: 0.5, onUsage },
+            phase,
+          );
+          // Parseamos { "files": { ... } } y mergeamos.
+          const parsed = this.parseFixerResponse(raw);
+          if (parsed && Object.keys(parsed).length > 0) {
+            Object.assign(files, parsed);
+            this.logger.log(
+              `[validator] auto-fix añadió ${Object.keys(parsed).length} archivos: ${Object.keys(parsed).join(', ')}`,
+            );
+          } else {
+            this.logger.warn(
+              `[validator] auto-fix devolvió JSON vacío o malformado. El cliente verá un error específico en el preview con AUTO-FIX disponible.`,
+            );
+          }
+        } catch (e: any) {
+          this.logger.warn(
+            `[validator] auto-fix falló: ${e?.message || e}. El cliente verá el error con AUTO-FIX disponible.`,
+          );
+        }
+      }
+    } catch (e: any) {
+      // El validador NUNCA debe romper la generación entera. Si falla,
+      // log y seguimos — peor caso: el cliente ve el toast de error con
+      // AUTO-FIX y arregla manual.
+      this.logger.warn(`[validator] crash inesperado: ${e?.message || e}`);
     }
 
     // El modelo NUNCA debe regenerar estos (los controla la plataforma).
