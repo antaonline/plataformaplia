@@ -106,12 +106,16 @@ export class PreviewProxyController {
       return;
     }
 
-    // Recortar el prefijo del proxy para obtener el path que Vite espera
-    const prefix = `/api/experimental/preview/${id}/serve`;
-    let vitePath: string = req.url;
-    if (vitePath.startsWith(prefix)) vitePath = vitePath.slice(prefix.length);
-    if (!vitePath || vitePath === '') vitePath = '/';
-    if (!vitePath.startsWith('/')) vitePath = '/' + vitePath;
+    // IMPORTANTE: NO recortamos el prefijo. Vite ahora corre con
+    // `--base /api/experimental/preview/<id>/serve/` (ver preview.service.ts),
+    // asi que espera recibir las requests con ESA URL completa. Si le
+    // mandaramos solo "/", Vite asume que el cliente esta fuera de su base
+    // y devuelve un 302 redirect AL base — el browser sigue el redirect,
+    // vuelve al proxy, mismo path, loop infinito (ERR_TOO_MANY_REDIRECTS).
+    //
+    // Pasando req.url tal cual, Vite ve "/api/.../serve/src/main.tsx",
+    // reconoce que esta dentro de su base, y sirve "/src/main.tsx".
+    const vitePath: string = req.url || '/';
 
     const parsed = new URL(localUrl);
     const proxyReq = http.request(
