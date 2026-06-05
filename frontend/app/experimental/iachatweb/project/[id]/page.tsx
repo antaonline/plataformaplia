@@ -21,6 +21,7 @@ import {
   StudioCapabilities,
   OnboardingAnswers,
 } from '@/components/experimental/OnboardingChat';
+import { Templates3DDialog } from '@/components/experimental/Templates3DDialog';
 import { toast } from 'sonner';
 import ThinkingSection from '@/components/chat/ThinkingSection';
 import ToolResultItem from '@/components/chat/ToolResultItem';
@@ -75,6 +76,7 @@ export default function projectPage() {
   // necesita y permite ofrecer la mejor experiencia "WOW" sin desperdiciar tokens.
   const [studioCaps, setStudioCaps] = useState<StudioCapabilities | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [showTemplates3D, setShowTemplates3D] = useState(false);
   const onboardingCheckedRef = useRef(false);
   const [input, setInput] = useState('');
   const [viewport, setViewport] = useState<'desktop' | 'tablet' | 'mobile'>('desktop');
@@ -862,6 +864,38 @@ export default function projectPage() {
     await handleSend(prompt);
   };
 
+  /**
+   * Llamado cuando el cliente confirma usar un template 3D en el dialog.
+   * Guardamos el HTML resultante como pagina del proyecto via un mensaje
+   * de chat que instruye al motor a NO regenerar y simplemente persistir
+   * el HTML tal cual. Usamos un prompt especial con marcador [TEMPLATE_3D]
+   * que el backend reconoce (o sino, lo metemos como mensaje del usuario
+   * que dice "aplica este HTML como pagina 'showcase.html' del proyecto"
+   * y dejamos que Claude lo procese).
+   *
+   * Implementacion simple para v1: enviamos el HTML al chat como un mensaje
+   * que solicita la insercion textual. Backend mejorado (siguiente sprint)
+   * detectara [TEMPLATE_3D] y hara un write directo al filesystem del
+   * proyecto sin pasar por Claude — ahorra tokens.
+   */
+  const handleUseTemplate3D = async (slug: string, templateInput: any, html: string) => {
+    const message = [
+      `[TEMPLATE_3D]${slug}[/TEMPLATE_3D]`,
+      `Quiero que agregues esta pagina 3D ya generada al proyecto como "showcase.html" (o si ya existe, reemplazala). NO regeneres el HTML — usalo TAL CUAL como te lo doy. Solo crea/actualiza el archivo.`,
+      '',
+      '=== HTML COMPLETO DEL TEMPLATE ===',
+      html,
+      '=== FIN HTML ===',
+      '',
+      `Meta del template (para referencia, no tocar):`,
+      '```json',
+      JSON.stringify({ templateSlug: slug, input: templateInput }, null, 2),
+      '```',
+    ].join('\n');
+    setShowTemplates3D(false);
+    await handleSend(message);
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -1397,12 +1431,29 @@ export default function projectPage() {
                           className="hidden"
                           id="file-upload-chat"
                         />
-                        <label 
-                          htmlFor="file-upload-chat" 
+                        <label
+                          htmlFor="file-upload-chat"
                           className="h-9 w-9 flex items-center justify-center rounded-xl hover:bg-slate-200/50 transition-colors cursor-pointer text-slate-500"
                         >
                           <Paperclip className="h-4 w-4" />
                         </label>
+
+                        {/* Boton Templates 3D — solo lo mostramos si el plan
+                            del usuario incluye templates 3D (Pro/Studio). Para
+                            usuarios Free, mostramos un boton "candado" que
+                            abre el dialog igual pero las cards aparecen
+                            bloqueadas — sirve como discovery/upsell. */}
+                        <button
+                          type="button"
+                          onClick={() => setShowTemplates3D(true)}
+                          title={studioCaps?.editor?.canUse3DTemplates
+                            ? 'Templates 3D Premium'
+                            : 'Templates 3D (requiere plan Pro)'}
+                          className="h-9 px-3 flex items-center gap-1.5 rounded-xl hover:bg-slate-200/50 transition-colors text-slate-600 text-xs font-semibold"
+                        >
+                          <Layout className="h-3.5 w-3.5 text-orange-500" />
+                          <span className="hidden sm:inline">Templates 3D</span>
+                        </button>
 
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
@@ -1598,6 +1649,16 @@ export default function projectPage() {
         capabilities={studioCaps}
         onComplete={handleOnboardingComplete}
         onClose={() => setShowOnboarding(false)}
+      />
+      {/* Catalogo de templates 3D premium (solo Pro/Studio). Abre wizard +
+          preview iframe + inserta pagina al proyecto. */}
+      <Templates3DDialog
+        open={showTemplates3D}
+        userPlanSlug={studioCaps?.planSlug}
+        apiBase={apiBase}
+        authToken={typeof window !== 'undefined' ? localStorage.getItem('access_token') || '' : ''}
+        onClose={() => setShowTemplates3D(false)}
+        onUseTemplate={handleUseTemplate3D}
       />
       <Toaster />
     </div>
