@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PROVIDERS, FallbackProvider } from '../experimental/iachat/generation/providers';
 import { enforceContactForms } from './contact-form-enforcer';
+import { enforcePremiumQuality } from './premium-quality-enforcer';
 
 export type WebMode = 'LANDING' | 'WEB';
 
@@ -20,12 +21,75 @@ const MODEL_SONNET =
   process.env.ANTHROPIC_MODEL ||
   'claude-sonnet-4-6';
 
-const STATIC_RULES = `Generas SITIOS WEB ESTATICOS de calidad de agencia premium (HTML + Tailwind via CDN). REGLAS DURAS:
-- Cada pagina es un .html COMPLETO y autocontenido: <!DOCTYPE html>, <head> con <script src="https://cdn.tailwindcss.com"></script>, Google Fonts via <link>, y <body>.
-- PROHIBIDO React/JSX/build tools/imports. Solo HTML + clases Tailwind + JS vanilla minimo si hace falta.
-- Contenido REAL y persuasivo en espanol especifico del negocio (NADA de lorem ipsum ni placeholders).
-- Diseno cohesivo: respeta SIEMPRE la paleta y tipografia del design system dado. Espaciado generoso, jerarquia tipografica fuerte, secciones ricas, responsive impecable, microinteracciones CSS sutiles.
-- Usa EXACTAMENTE las URLs de imagen que se te entreguen (no inventes URLs de imagen).`;
+const STATIC_RULES = `Generas SITIOS WEB ESTATICOS de NIVEL AGENCIA PREMIUM (HTML + Tailwind via CDN).
+EL CLIENTE PAGO S/390+ POR ESTE SITIO: tiene que verse como si lo hizo un estudio
+profesional. Si entregas algo plano y predecible, fallaste. Referencias visuales:
+Apple, Stripe, Linear, Vercel, Notion, Framer, Awwwards winners.
+
+REGLAS DURAS DE ESTRUCTURA:
+- Cada pagina es un .html COMPLETO y autocontenido: <!DOCTYPE html>, <head> con
+  <script src="https://cdn.tailwindcss.com"></script>, Google Fonts via <link>, y <body>.
+- PROHIBIDO React/JSX/build tools/imports. SOLO HTML estatico + clases Tailwind + JS vanilla.
+- PROHIBIDO escribir codigo JSX literal como {[...].map(...)} o {variable.map(...)} dentro del HTML:
+  eso se renderiza como TEXTO PLANO horrible en el navegador. Si quieres iterar una lista, escribe los
+  items uno por uno EN HTML, o usa un <script> al final que haga document.createElement.
+- Contenido REAL y persuasivo en espanol neutro (mercado peruano), especifico del negocio.
+  NADA de lorem ipsum, "Lorem", placeholders, ni textos genericos tipo "Tu mejor opcion".
+- Usa EXACTAMENTE las URLs de imagen que se te entreguen. NO inventes URLs de imagen.
+
+LIBRERIAS PREMIUM OBLIGATORIAS (cargar via CDN en <head> o antes de </body>):
+- GSAP + ScrollTrigger:
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+  USALOS: parallax leve del hero (yPercent o background scroll), reveal on scroll de
+  secciones (gsap.from con opacity:0 y y:30), counters animados para stats, fade
+  de elementos al entrar al viewport. SIEMPRE registrar el plugin: gsap.registerPlugin(ScrollTrigger).
+- (opcional pero recomendado para ricas microinteracciones) Lenis para smooth scroll:
+    <script src="https://cdn.jsdelivr.net/gh/studio-freight/lenis@1.0.42/bundled/lenis.min.js"></script>
+
+DISENO PREMIUM (no opcional):
+- HERO con altura min-h-screen, fondo con imagen + overlay con gradient COMPLEJO
+  (3+ stops, no un overlay plano). Si hay GSAP, agregar parallax en la imagen del hero
+  (data-parallax o gsap.to con scrub). Titulo en 5xl/7xl con tracking-tight, peso bold/black.
+- CADA SECCION debe ser VISUALMENTE DISTINTA de la anterior: alterna fondos (claro/oscuro/
+  gradient/imagen), alterna layouts (grid 2-col / grid 3-col / split asimetrico / full-width),
+  alterna alignment. Si dos secciones consecutivas se ven iguales, esta MAL.
+- Microinteracciones obligatorias: botones con hover transform + shadow + transition,
+  cards con hover translateY(-4px), imagenes con scale al hover, links con underline
+  animado (background-size 0 100% -> 100% 100%).
+- Iconografia: usa SVG inline tipo Lucide/Heroicons (path real, stroke 1.5-2px).
+  PROHIBIDO usar emojis como iconos principales en hero/CTAs. Emojis solo en chips
+  decorativos pequenos.
+- Tipografia con jerarquia EVIDENTE: 5 tamanos minimo (xs labels, base body, xl
+  subtitles, 3xl-5xl titles, 6xl-7xl heroes). Espaciado generoso (py-20 minimo entre secciones).
+- COLORES: respeta el design system pero usa la paleta con sofisticacion: gradientes
+  multi-stop, sombras de color (no solo gris), bordes con color del accent al hover.
+
+GOOGLE MAPS (cuando aplique):
+- USA EL FORMATO KEYLESS por busqueda de direccion (NO Place ID inventado):
+    <iframe src="https://www.google.com/maps?q=DIRECCION+URL-ENCODED&output=embed" ...>
+- NUNCA generes URLs con Place IDs que no existen ("0x...%3A0x0" es un fake clasico).
+  Eso muestra al cliente un mapa generico. Si no sabes la direccion exacta, omite el mapa.
+
+FORMULARIOS:
+- NUNCA uses mailto: como fallback. NUNCA hagas window.location.href = mailtoLink.
+- El form action lo recibis explicitamente en el prompt; usalo tal cual con POST.
+
+CATALOGO MINIMO DE SECCIONES (LANDING debe tener 8+ de estas; WEB usa segun pagina):
+1. Nav sticky con backdrop-blur, logo + items + CTA primario.
+2. Hero con altura min-h-screen, gradient overlay complejo, parallax, h1 huge + sub + 2 CTAs + chip de ubicacion/badge.
+3. Logos/proof bar o stats (3-4 numeros grandes con counter animado: clientes, anos, productos, etc).
+4. Caracteristicas/servicios en grid 3-col o 4-col con iconos SVG inline y descripciones reales.
+5. Galeria de productos/proyectos/portfolio (grid masonry o carousel con hover scale).
+6. Bloque emocional/storytelling: split 2-col texto + imagen lateral grande, NO centered text card.
+7. Testimonios con foto/avatar, nombre, rol, comilla grande decorativa. Minimo 2-3.
+8. FAQ accordion (details/summary HTML5 + arrow animated chevron).
+9. CTA final full-width con fondo de color o imagen + botones grandes.
+10. Mapa + bloque de contacto (si aplica al rubro).
+11. Footer multi-columna con marca, enlaces, redes, contacto, y legal.
+
+Cada seccion: si dejas todas planas y "centradas", se ve barato. ROMPE el ritmo: alguna
+seccion asimetrica, alguna con imagen grande de un lado, alguna con fondo oscuro, alguna con gradient.`;
 
 @Injectable()
 export class WebsiteGenService {
@@ -62,8 +126,8 @@ export class WebsiteGenService {
   ): Promise<SitePlan> {
     const pageRule =
       mode === 'LANDING'
-        ? 'Es una LANDING: EXACTAMENTE 1 pagina de ventas (index.html). PROHIBIDO paginas internas.'
-        : 'Es una WEB INSTITUCIONAL: entre 2 y 5 paginas internas (index.html + p.ej. nosotros.html, contacto.html, y las que pida el rubro). Se enlazan entre si.';
+        ? `Es una LANDING PREMIUM: EXACTAMENTE 1 pagina de ventas (index.html), pero con 8-11 secciones distintas y ricas (hero, stats, servicios, galeria, storytelling, testimonios, FAQ, CTA final, ubicacion/mapa, contacto, footer). PROHIBIDO paginas internas.`
+        : `Es una WEB INSTITUCIONAL PREMIUM: entre 2 y 5 paginas internas (index.html + p.ej. nosotros.html, servicios.html, proyectos.html, contacto.html). Cada pagina debe tener 5-8 secciones ricas. Se enlazan entre si.`;
     const system = `${STATIC_RULES}\n\nDevuelve SOLO este JSON valido (sin texto fuera):
 {
  "projectName":"...",
@@ -72,7 +136,17 @@ export class WebsiteGenService {
  "imagePrompts":[{"id":"hero","prompt":"prompt en ingles para DALL-E, fotorealista, alta calidad","usage":"hero"}]
 }
 ${pageRule}
-imagePrompts: 3-6 imagenes necesarias para el sitio (hero, secciones, etc.). Las imagenes que suba el cliente (si las hay) las VES en este mensaje: son contenido REAL del negocio (logo, fotos del local, productos, equipo, etc). PRIORIDAD: estas imagenes del cliente DEBEN usarse en el sitio final donde correspondan (logo en el header, fotos del local en hero/ubicacion, fotos de productos en galeria, fotos del equipo en seccion equipo, etc). SOLO genera prompts en imagePrompts para cubrir SLOTS que las imagenes del cliente NO cubren. Si el cliente sube 3 fotos de productos, no generes prompts adicionales para productos — usa las del cliente.`;
+imagePrompts: 5-9 imagenes necesarias para el sitio (hero cinematografico, banners de
+secciones, fotos de productos, ambientes, detalles de textura, etc). Calidad
+fotografica REAL, ningun ilustracion plana. Para el HERO pedi siempre algo
+cinematografico de alta calidad (luz dramatica, profundidad, composicion premium).
+Las imagenes que suba el cliente (si las hay) las VES en este mensaje: son contenido
+REAL del negocio (logo, fotos del local, productos, equipo, etc). PRIORIDAD: estas
+imagenes del cliente DEBEN usarse en el sitio final donde correspondan (logo en el
+header, fotos del local en hero/ubicacion, fotos de productos en galeria, fotos del
+equipo en seccion equipo, etc). SOLO genera prompts en imagePrompts para cubrir
+SLOTS que las imagenes del cliente NO cubren. Si el cliente sube 3 fotos de
+productos, no generes prompts adicionales para productos — usa las del cliente.`;
     // El logo va primero en el array de imagenes multimodales para que la
     // IA lo VEA y pueda identificarlo (por su forma/transparencia/copy).
     const multimodalImages = clientLogo ? [clientLogo, ...clientImages] : clientImages;
@@ -119,7 +193,7 @@ imagePrompts: 3-6 imagenes necesarias para el sitio (hero, secciones, etc.). Las
               return ps.slice(0, 5);
             })(),
       imagePrompts: Array.isArray(parsed?.imagePrompts)
-        ? parsed!.imagePrompts.filter((x) => x && x.prompt).slice(0, 6)
+        ? parsed!.imagePrompts.filter((x) => x && x.prompt).slice(0, 9)
         : [],
     };
     return safe;
@@ -226,19 +300,27 @@ SALIDA: devuelve SOLO el HTML completo de la pagina pedida. Sin explicaciones, s
         [{ role: 'user', content: user }],
         {
           model: MODEL_SONNET,
-          maxTokens: 16000,
-          temperature: 0.7,
+          // 24k da espacio a 8-10 secciones ricas + GSAP setup + multiples
+          // svg inline + paragraphs reales. Con 16k Claude truncaba y
+          // entregaba sitios de 6 secciones planas.
+          maxTokens: 24000,
+          // 0.55 es mas calibrado: variedad creativa pero menos drift
+          // hacia errores tipo JSX literal o Place IDs inventados.
+          temperature: 0.55,
           images: multimodalImages,
         },
       );
-      // Enforce contact form rules: aunque el system prompt lo dice,
-      // Claude a veces omite el action, honeypot, script de submit, o
-      // traduce los names a espanol. Este post-procesado garantiza que
-      // todo form de contacto generado va al endpoint correcto y envia.
-      files[page.file] = enforceContactForms(
-        this.stripFences(raw),
-        formEndpoint,
-      );
+      // Pipeline de post-procesado en orden:
+      //  1. Quitar cercas ``` que a veces se cuelan.
+      //  2. enforcePremiumQuality: limpia JSX literal, neutraliza mailto:,
+      //     inyecta GSAP+ScrollTrigger si Claude los olvido, arregla embeds
+      //     de mapa con Place ID inventado.
+      //  3. enforceContactForms: garantiza que todo <form> de contacto
+      //     tenga action correcto, honeypot, mensaje inline, submit AJAX.
+      let html = this.stripFences(raw);
+      html = enforcePremiumQuality(html, formEndpoint);
+      html = enforceContactForms(html, formEndpoint);
+      files[page.file] = html;
     }
     if (!files['index.html']) {
       const firstKey = Object.keys(files)[0];
@@ -325,9 +407,11 @@ Devuelve el HTML completo de la pagina con el cambio aplicado. Si esta solicitud
       } else {
         edited[file] = cleaned;
       }
-      // Garantizar reglas de form aunque sea una edicion. Si el form ya
-      // estaba bien, no cambia nada (idempotente). Si Claude lo preservo
-      // pero estaba roto, este paso lo arregla.
+      // Garantizar reglas de calidad premium + form aunque sea una edicion.
+      // Idempotente: si ya cumplian, no cambia nada. Si Claude rompio algo
+      // o el sitio venia de una version anterior con JSX literal / mailto /
+      // GSAP faltante, este paso lo arregla.
+      edited[file] = enforcePremiumQuality(edited[file], formEndpoint);
       if (formEndpoint) {
         edited[file] = enforceContactForms(edited[file], formEndpoint);
       }
