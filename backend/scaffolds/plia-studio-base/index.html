@@ -11,6 +11,58 @@
     <script type="module" src="/src/main.tsx"></script>
 
     <!--
+      PLIA Studio: capturador de ERRORES DE RUNTIME. Si la generación de
+      la IA dejó código que rompe en runtime (import roto, export mismatch,
+      undefined.foo), la pantalla queda en blanco y el cliente no entiende
+      qué pasa. Este script captura el error y lo manda al editor padre
+      via postMessage para que se vea en pantalla como un toast rojo con
+      botón "AUTO-FIX". Inspirado en el overlay de error de Vite.
+
+      Solo se activa si estamos dentro de PLIA Studio (parent !== self).
+      En produccion (sitio publicado) este listener no envía nada porque
+      no hay parent que escuche.
+    -->
+    <script>
+      (function () {
+        if (window.parent === window) return;
+        var notify = function (kind, message, stack) {
+          try {
+            window.parent.postMessage(
+              {
+                type: 'PLIA_RUNTIME_ERROR',
+                kind: kind,
+                message: String(message || '').slice(0, 800),
+                stack: stack ? String(stack).slice(0, 2000) : null,
+                ts: Date.now(),
+              },
+              '*'
+            );
+          } catch (_) {}
+        };
+        window.addEventListener('error', function (e) {
+          notify('error', e.message || e.error || 'Error desconocido', e.error && e.error.stack);
+        });
+        window.addEventListener('unhandledrejection', function (e) {
+          var msg = e.reason && (e.reason.message || String(e.reason));
+          notify('promise', msg || 'Promise rejected', e.reason && e.reason.stack);
+        });
+        // Watchdog: si tras 4 segundos el #root sigue vacío, asumimos que
+        // hubo un error que window.onerror NO disparo (típicamente un
+        // import roto que mata el module bootstrap sin throw global).
+        setTimeout(function () {
+          var root = document.getElementById('root');
+          if (root && root.children.length === 0) {
+            notify(
+              'blank',
+              'La página quedó en blanco — probable error de import o export entre componentes. Revisa la consola del navegador.',
+              null
+            );
+          }
+        }, 4000);
+      })();
+    </script>
+
+    <!--
       PLIA Studio: capturador de miniaturas. Solo se activa si el iframe
       esta embebido en PLIA Studio (window.parent !== window) Y recibe el
       mensaje PLIA_CAPTURE. En produccion (sitio publicado, sin padre PLIA)

@@ -436,20 +436,39 @@ export default function projectPage() {
   // Recibe la imagen del preview y la guarda como thumbnail del proyecto.
   useEffect(() => {
     const onMsg = async (e: MessageEvent) => {
-      if (!e.data || e.data.type !== 'PLIA_SHOT' || !e.data.dataUrl) return;
-      const token = localStorage.getItem('access_token');
-      if (!token) return;
-      try {
-        await fetch(`${apiBase}/experimental/iachat/${id}/thumbnail`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ dataUrl: e.data.dataUrl }),
-        });
-      } catch (err) {
-        /* best-effort */
+      // 1. Captura de miniatura.
+      if (e.data?.type === 'PLIA_SHOT' && e.data.dataUrl) {
+        const token = localStorage.getItem('access_token');
+        if (!token) return;
+        try {
+          await fetch(`${apiBase}/experimental/iachat/${id}/thumbnail`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ dataUrl: e.data.dataUrl }),
+          });
+        } catch (err) {
+          /* best-effort */
+        }
+        return;
+      }
+
+      // 2. Captura de errores de runtime del proyecto generado.
+      // El index.html del scaffold escucha window.onerror,
+      // unhandledrejection y un watchdog de "root vacio tras 4s" y nos
+      // los envia. Asi el cliente VE el problema en vez de un blanco mudo.
+      if (e.data?.type === 'PLIA_RUNTIME_ERROR' && e.data.message) {
+        const kind = e.data.kind as 'error' | 'promise' | 'blank';
+        const prefix =
+          kind === 'blank'
+            ? 'Página en blanco'
+            : kind === 'promise'
+            ? 'Promise sin manejar'
+            : 'Error de runtime';
+        setRuntimeError(`${prefix}: ${e.data.message}`);
+        return;
       }
     };
     window.addEventListener('message', onMsg);
