@@ -90,8 +90,11 @@ export class StudioPlansService {
    * el plan Free como fallback (igual al freemium actual).
    */
   async getCapabilities(userId: number): Promise<StudioPlanCapabilities> {
-    // Buscar la suscripción activa más reciente del usuario que sea STUDIO_SUBSCRIPTION.
-    // Si no tiene → fallback a Plia Studio Free.
+    // Buscar la suscripción activa más reciente del usuario que sea
+    // STUDIO_SUBSCRIPTION. El schema de hostingSubscription usa startDate
+    // como fecha de inicio (no createdAt — pifié al asumirlo cuando armé
+    // este service). Si el usuario no tiene suscripción Studio activa,
+    // cae al fallback de studio-free abajo.
     const sub = await (this.prisma as any).hostingSubscription.findFirst({
       where: {
         userId,
@@ -101,7 +104,7 @@ export class StudioPlansService {
       include: {
         plan: { include: { studioLimits: true } },
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { startDate: 'desc' },
     });
 
     let plan = sub?.plan;
@@ -183,7 +186,9 @@ export class StudioPlansService {
       });
       const chatIds = chats.map((c: any) => c.id);
       if (!chatIds.length) return 0;
-      const count = await (this.prisma as any).aiChatMessage.count({
+      // El modelo se llama AiMessage en schema.prisma (no AiChatMessage —
+      // segunda pifia mía al armar el service).
+      const count = await (this.prisma as any).aiMessage.count({
         where: {
           chatId: { in: chatIds },
           role: 'assistant',
