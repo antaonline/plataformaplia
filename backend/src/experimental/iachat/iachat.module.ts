@@ -8,9 +8,16 @@ import { CreditService } from './generation/credit.service';
 import { WorkspaceService } from './workspace.service';
 import { StudioPlansModule } from './studio-plans/studio-plans.module';
 import { Templates3DModule } from './templates-3d/templates-3d.module';
+import { MuapiModule } from './muapi/muapi.module';
 
 @Module({
-  imports: [PrismaModule, AiModule, StudioPlansModule, Templates3DModule],
+  imports: [
+    PrismaModule,
+    AiModule,
+    StudioPlansModule,
+    Templates3DModule,
+    MuapiModule,
+  ],
   controllers: [AiChatController],
   providers: [AiChatService, CodegenService, CreditService, WorkspaceService],
   exports: [
@@ -19,6 +26,7 @@ import { Templates3DModule } from './templates-3d/templates-3d.module';
     WorkspaceService,
     StudioPlansModule,
     Templates3DModule,
+    MuapiModule,
   ],
 })
 export class AiChatModule {}
