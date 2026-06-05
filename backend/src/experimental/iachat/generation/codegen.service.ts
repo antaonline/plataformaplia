@@ -29,6 +29,11 @@ import {
 // data files. Lovable/Dyad generan 20-40 archivos por proyecto.
 const MAX_FILES = 40;
 
+/** Escapa caracteres especiales de regex en un string. */
+function escapeRe(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 export interface GenerateParams {
   userId: number;
   userPrompt: string;
@@ -673,11 +678,28 @@ export class CodegenService {
         for (const [path, syms] of byPath.entries()) {
           const existing = files[path] ?? files[`/${path}`] ?? '';
           const key = files[path] !== undefined ? path : `/${path}`;
+          const lines: string[] = [];
+          for (const s of syms) {
+            // CLAVE: si el símbolo YA está declarado en el archivo (típico:
+            // `const Navigation = () => {...}; export default Navigation;` e
+            // Index lo importa como named { Navigation }), NO podemos
+            // redeclararlo con `export const Navigation = ...` -> tiraría
+            // "Identifier 'Navigation' has already been declared". En ese
+            // caso hacemos un RE-EXPORT del identificador existente.
+            const declaredRe = new RegExp(
+              `\\b(?:const|let|var|function|class)\\s+${escapeRe(s)}\\b`,
+            );
+            if (declaredRe.test(existing)) {
+              lines.push(`export { ${s} };`);
+            } else {
+              lines.push(`export const ${s} = ${this.stubValueForName(s)};`);
+            }
+          }
           const appended = [
             existing.trimEnd(),
             '',
             '// ─── Exports auto-completados por el validador ─────────────',
-            ...[...syms].map((s) => `export const ${s} = ${this.stubValueForName(s)};`),
+            ...lines,
             '',
           ].join('\n');
           files[key] = appended;

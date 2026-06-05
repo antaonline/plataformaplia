@@ -42,6 +42,26 @@ const M = {
     'claude-sonnet-4-6',
 };
 
+// Flag para desactivar Gemini globalmente. Util cuando no hay creditos
+// cargados en Google AI Studio (todos los gemini-* tiran 429 "credits
+// depleted" y solo desperdician ~1s por modelo antes de caer a Claude).
+// Con DISABLE_GEMINI=true las cadenas usan SOLO Claude — mas rapido y
+// predecible. Setealo en .env.
+const GEMINI_DISABLED =
+  String(process.env.DISABLE_GEMINI || '').toLowerCase() === 'true';
+
+/**
+ * Filtra una cadena de modelos: si Gemini esta desactivado, quita todos
+ * los gemini-* y garantiza que quede al menos un Claude. Si la cadena
+ * queda vacia tras filtrar, inyecta [sonnet, haiku] como fallback duro.
+ */
+function chain(...models: string[]): string[] {
+  if (!GEMINI_DISABLED) return models;
+  const filtered = models.filter((m) => !/^gemini/i.test(m));
+  if (filtered.length === 0) return [M.sonnet, M.haiku];
+  return filtered;
+}
+
 // ===== Cadenas reusables =====
 // Modelos REALES disponibles en Google AI Studio Nivel 1 (paid) hoy:
 //   gemini-2.0-flash, gemini-2.0-flash-lite
@@ -58,16 +78,16 @@ const M = {
 
 // Freemium BUILD: pide calidad alta. Pro primero (mejor design system),
 // Flash variants si Pro rate-limit, Haiku rescate.
-const FREE_BUILD_CHAIN = [
+const FREE_BUILD_CHAIN = chain(
   'gemini-2.5-pro',
   'gemini-3.5-flash',
   'gemini-2.5-flash',
   'gemini-2.0-flash',
   M.haiku,
-];
+);
 
 // Freemium EDIT/PLAN: Flash + Flash Lite (alta cuota RPM y RPD), Haiku rescate.
-const FREE_FLASH_CHAIN = [
+const FREE_FLASH_CHAIN = chain(
   'gemini-2.5-flash',
   'gemini-3.5-flash',
   'gemini-2.5-flash-lite',
@@ -75,40 +95,40 @@ const FREE_FLASH_CHAIN = [
   'gemini-2.0-flash',
   'gemini-2.0-flash-lite',
   M.haiku,
-];
+);
 
 const FREE_PLAN_CHAIN = FREE_FLASH_CHAIN;
 
 // Plan pagado basico (PRESENCIA): Flash decente + Flash Lite + Haiku.
-const PAID_BASIC_CHAIN = [
+const PAID_BASIC_CHAIN = chain(
   'gemini-2.5-flash',
   'gemini-3.5-flash',
   'gemini-2.5-flash-lite',
   'gemini-3.1-flash-lite',
   M.haiku,
-];
+);
 
 // Build de alta calidad (EMPRENDEDOR/AGENCIA): Gemini Pro PRIMERO porque es
 // 30x mas barato que Sonnet y produce calidad similar para diseno web.
 // Sonnet queda como fallback de calidad garantizada si todos los Gemini
 // caen — esto cubre tanto bursts de TPM como caidas de Google.
-const PAID_HIGH_BUILD = [
+const PAID_HIGH_BUILD = chain(
   'gemini-2.5-pro',
   'gemini-3.5-flash',
   'gemini-2.5-flash',
   'gemini-2.0-flash',
   M.sonnet,
-];
+);
 
 // Plan / Edit de planes pagos medianos/altos: Flash Lite es ideal para
 // edits quirurgicos (4K RPM, 150K RPD). Subimos a Flash si Lite falla.
-const PAID_FAST_CHAIN = [
+const PAID_FAST_CHAIN = chain(
   'gemini-3.1-flash-lite',
   'gemini-2.5-flash-lite',
   'gemini-2.5-flash',
   'gemini-3.5-flash',
   M.haiku,
-];
+);
 
 export const PLANS: Record<PlanCode, PlanConfig> = {
   EXPLORADOR: {

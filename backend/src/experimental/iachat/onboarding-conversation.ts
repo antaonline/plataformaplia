@@ -39,7 +39,14 @@ export interface OnboardingCapabilitiesHint {
   canUsePremium3D: boolean; // tripo3d habilitado
 }
 
-const provider = new FallbackProvider([PROVIDERS.claude, PROVIDERS.gemini, PROVIDERS.openai]);
+// Si Gemini está desactivado (sin créditos), no lo incluimos en la cadena.
+const GEMINI_DISABLED =
+  String(process.env.DISABLE_GEMINI || '').toLowerCase() === 'true';
+const provider = new FallbackProvider(
+  GEMINI_DISABLED
+    ? [PROVIDERS.claude, PROVIDERS.openai]
+    : [PROVIDERS.claude, PROVIDERS.gemini, PROVIDERS.openai],
+);
 
 const MODEL =
   process.env.ONBOARDING_MODEL ||
