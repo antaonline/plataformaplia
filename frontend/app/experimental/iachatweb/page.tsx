@@ -45,6 +45,7 @@ import {
   StudioCapabilities,
   OnboardingAnswers,
 } from "@/components/experimental/OnboardingChat";
+import { OnboardingToEditorTransition } from "@/components/experimental/OnboardingToEditorTransition";
 
 
 
@@ -90,6 +91,12 @@ export default function DashboardPage() {
   // Transición tipo Claudable al crear proyecto
   const [transitioning, setTransitioning] = useState(false);
   const [transitionPrompt, setTransitionPrompt] = useState('');
+  // Para la nueva animación cinematográfica del onboarding al editor:
+  // guardamos el businessName y el chatId que estamos creando para
+  // poder mostrar el preview del layout y hacer el redirect cuando la
+  // animación termina (~2200ms).
+  const [transitionBusinessName, setTransitionBusinessName] = useState('');
+  const [pendingChatId, setPendingChatId] = useState<number | null>(null);
 
   // Upsell (mejorar plan)
   const [upsellOpen, setUpsellOpen] = useState(false);
@@ -103,6 +110,19 @@ export default function DashboardPage() {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [onboardingInitialDesc, setOnboardingInitialDesc] = useState('');
   const [studioCaps, setStudioCaps] = useState<StudioCapabilities | null>(null);
+  // Flag: la animación de transición ya completó su secuencia. Si el
+  // chatId llegó antes -> redirect inmediato en el onComplete. Si llegó
+  // después -> el useEffect de abajo dispara el redirect al recibirlo.
+  const [transitionAnimDone, setTransitionAnimDone] = useState(false);
+
+  // Coordina el redirect: cuando ya tenemos chatId Y la animación terminó,
+  // navegamos al editor. Evita freeze visual si el backend tarda más que
+  // la animación (~2200ms).
+  useEffect(() => {
+    if (transitioning && transitionAnimDone && pendingChatId !== null) {
+      router.push(`/experimental/iachatweb/project/${pendingChatId}`);
+    }
+  }, [transitioning, transitionAnimDone, pendingChatId, router]);
 
   const fetchHistory = async (token: string, customBase?: string) => {
     const base = customBase || apiBase;
@@ -422,6 +442,12 @@ export default function DashboardPage() {
 
     setShowOnboarding(false);
     setIsLoading(true);
+    // Arrancamos la transición cinematográfica YA — el POST corre en
+    // paralelo, así el cliente ve el "estudio armándose" mientras el
+    // backend crea el chat. Esto disimula el latency del round-trip.
+    setTransitionPrompt(richPrompt);
+    setTransitionBusinessName(a.businessName || '');
+    setTransitioning(true);
     try {
       const res = await fetch(`${apiBase}/experimental/iachat`, {
         method: 'POST',
@@ -433,13 +459,12 @@ export default function DashboardPage() {
       });
       if (res.ok) {
         const data = await res.json();
-        // Mostramos el nombre del negocio en la pantalla de transición —
-        // mas cinematográfico que mostrar el prompt completo de 500+ chars.
-        setTransitionPrompt(`Construyendo ${a.businessName}...`);
-        setTransitioning(true);
-        setTimeout(() => {
-          router.push(`/experimental/iachatweb/project/${data.id}`);
-        }, 1100);
+        // Guardamos el chatId. El redirect se dispara cuando
+        // OnboardingToEditorTransition llame a onComplete (al terminar
+        // la secuencia ~2200ms). Si el backend respondió rapido, eso
+        // garantiza que la animación se ve completa antes del cut. Si
+        // tardó más que la animación, igual el redirect espera al id.
+        setPendingChatId(data.id);
         return;
       }
       if (res.status === 403) {
@@ -837,50 +862,24 @@ export default function DashboardPage() {
         <div className="fixed inset-0 z-10" onClick={() => { setActiveMenuId(null); setIsMenuOpen(false); }} />
       )}
 
-      {/* Transición tipo Claudable al crear el proyecto */}
-      <AnimatePresence>
-        {transitioning && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.4 }}
-            className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-[#0d1117] overflow-hidden"
-          >
-            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(191,255,0,0.10),transparent_55%)]" />
-            <motion.div
-              initial={{ scale: 0.6, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{ delay: 0.1, type: 'spring', stiffness: 200, damping: 18 }}
-              className="relative z-10 flex flex-col items-center text-center px-8"
-            >
-              <motion.div
-                animate={{ rotate: 360 }}
-                transition={{ repeat: Infinity, duration: 2.5, ease: 'linear' }}
-                className="h-16 w-16 rounded-3xl bg-cta/10 border border-cta/30 flex items-center justify-center mb-8 shadow-[0_0_40px_rgba(191,255,0,0.25)]"
-              >
-                <Sparkles className="h-8 w-8 text-cta" />
-              </motion.div>
-              <h2 className="text-2xl md:text-3xl font-black text-white mb-3">
-                Creando tu estudio
-              </h2>
-              <p className="max-w-md text-sm text-white/50 font-medium leading-relaxed mb-8 line-clamp-3">
-                {transitionPrompt}
-              </p>
-              <div className="flex gap-2">
-                {[0, 1, 2].map((i) => (
-                  <motion.div
-                    key={i}
-                    className="h-2 w-2 rounded-full bg-cta"
-                    animate={{ opacity: [0.2, 1, 0.2], y: [0, -4, 0] }}
-                    transition={{ repeat: Infinity, duration: 1, delay: i * 0.18 }}
-                  />
-                ))}
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* Transición cinematográfica al crear proyecto: el OnboardingChat
+          se "convierte" en el layout del editor mientras el chat se va
+          armando en el panel izquierdo y el canvas aparece desde la derecha.
+          onComplete se dispara tras ~2200ms; si en ese momento ya tenemos
+          el chatId del backend (lo normal porque el POST corre en paralelo
+          desde handleOnboardingComplete), hacemos el redirect. Si el
+          backend tardó más, esperamos en el useEffect de abajo. */}
+      <OnboardingToEditorTransition
+        open={transitioning}
+        businessName={transitionBusinessName}
+        initialPrompt={transitionPrompt}
+        onComplete={() => {
+          // Marcamos animación terminada. Si el chatId ya llegó del
+          // backend, el useEffect coordinador dispara router.push.
+          // Si no, espera a que llegue.
+          setTransitionAnimDone(true);
+        }}
+      />
 
       <UpsellModal
         open={upsellOpen}
