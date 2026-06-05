@@ -125,11 +125,31 @@ export class PreviewProxyController {
       (proxyRes) => {
         res.status(proxyRes.statusCode || 200);
         for (const [k, v] of Object.entries(proxyRes.headers)) {
-          // Saltar headers de hop-by-hop y X-Frame-Options (lo sobreescribimos)
-          if (['connection', 'transfer-encoding', 'x-frame-options'].includes(k)) continue;
+          // Saltar hop-by-hop + headers de embedding (los re-seteamos abajo).
+          if (
+            [
+              'connection',
+              'transfer-encoding',
+              'x-frame-options',
+              'content-security-policy',
+            ].includes(k)
+          )
+            continue;
           res.setHeader(k, v as string | string[]);
         }
-        res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+        // Permitir embedding del preview desde el Studio. El frontend corre
+        // en localhost:3001 (dev) o el dominio publico del Studio (prod).
+        // Para que el iframe pueda cargar este recurso desde otro origen
+        // (Studio en :3001, backend en :3002), usamos CSP frame-ancestors
+        // configurable y NO seteamos X-Frame-Options (deprecated, ademas
+        // conflictua con CSP en navegadores modernos).
+        const frameAncestors =
+          process.env.CSP_FRAME_ANCESTORS ||
+          "'self' http://localhost:3001 http://localhost:3000 http://127.0.0.1:3001";
+        res.setHeader(
+          'Content-Security-Policy',
+          `frame-ancestors ${frameAncestors}`,
+        );
         res.setHeader('Access-Control-Allow-Origin', '*');
         proxyRes.pipe(res);
       },

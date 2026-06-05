@@ -263,12 +263,16 @@ export class PreviewService implements OnModuleDestroy {
     await writeGeneratedFiles(projectPath, files);
 
     const port = await findAvailablePort(PORT_START, PORT_END);
-    // La URL publica pasa por el proxy NestJS (GET /experimental/preview/:id/serve/*).
-    // PREVIEW_PROXY_BASE debe ser la URL base del API publica, ej: https://api.plia.pe
-    const proxyBase = (process.env.PREVIEW_PROXY_BASE || '').replace(/\/$/, '');
-    const url = proxyBase
-      ? `${proxyBase}/api/experimental/preview/${chatId}/serve/`
-      : `http://127.0.0.1:${port}`; // fallback local (dev)
+    // La URL publica pasa SIEMPRE por el proxy NestJS
+    // (GET /experimental/preview/:id/serve/*). PREVIEW_PROXY_BASE debe ser
+    // la URL base del API publica, ej: https://api.plia.pe (prod) o
+    // http://localhost:3002 (dev). Si no esta seteada, asumimos dev local
+    // en :3002 — porque hacer iframe directo a 127.0.0.1:PORT de Vite causa
+    // problemas: (1) X-Frame-Options de Vite bloquea, (2) CORS distinto
+    // origen, (3) no podemos inyectar nuestros headers (CSP frame-ancestors).
+    const proxyBase = (process.env.PREVIEW_PROXY_BASE || 'http://localhost:3002')
+      .replace(/\/$/, '');
+    const url = `${proxyBase}/api/experimental/preview/${chatId}/serve/`;
 
     const pp: PreviewProcess = {
       process: null,
