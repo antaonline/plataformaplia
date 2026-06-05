@@ -185,6 +185,66 @@ async function mergeDependencies(
 }
 
 /**
+ * Mergea el contenido que la IA quiso poner en src/lib/utils.ts con el del
+ * scaffold. Preserva intacta la función `cn` (que TODOS los componentes
+ * shadcn importan via "@/lib/utils") y apenda las exports extras de la IA
+ * (constantes, helpers, datos del proyecto).
+ *
+ * Si la IA accidentalmente redefinió `cn` o duplicó imports de clsx/
+ * tailwind-merge, los quitamos antes de mergear para no tener errores de
+ * "duplicate identifier".
+ *
+ * Si el archivo del scaffold no se puede leer por alguna razon, fallback:
+ * escribimos un cn minimo + el contenido de la IA.
+ */
+async function mergeUtilsTs(
+  _projectPath: string,
+  aiContent: string,
+): Promise<string> {
+  const scaffoldHeader = `import { clsx, type ClassValue } from "clsx";
+import { twMerge } from "tailwind-merge";
+
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs));
+}
+`;
+
+  // Sanitizar el contenido de la IA:
+  //  1. Quitar imports duplicados de clsx / tailwind-merge.
+  //  2. Quitar redefiniciones de `cn` (function o const).
+  //  3. Quitar líneas vacías al inicio.
+  let cleaned = aiContent;
+  cleaned = cleaned.replace(
+    /^\s*import\s+[^;]*?from\s+["']clsx["'][^;]*;?\s*$/gm,
+    '',
+  );
+  cleaned = cleaned.replace(
+    /^\s*import\s+[^;]*?from\s+["']tailwind-merge["'][^;]*;?\s*$/gm,
+    '',
+  );
+  // export function cn(...) { ... }  — multilínea, balanceada con un cierre.
+  cleaned = cleaned.replace(
+    /export\s+function\s+cn\s*\([\s\S]*?\}\s*\n?/g,
+    '',
+  );
+  // export const cn = ... ; (una linea o multilinea hasta el cierre con ;)
+  cleaned = cleaned.replace(
+    /export\s+const\s+cn\s*=[\s\S]*?;\s*\n?/g,
+    '',
+  );
+  // Limpiar líneas vacías consecutivas al inicio
+  cleaned = cleaned.replace(/^\s*\n+/, '');
+
+  // Si después de limpiar no queda nada útil (la IA solo había emitido cn
+  // y nada mas), devolvemos solo el scaffold.
+  if (!cleaned.trim()) {
+    return scaffoldHeader;
+  }
+
+  return `${scaffoldHeader}\n// ─── Constants/helpers added by AI ────────────────────────────────────\n${cleaned}\n`;
+}
+
+/**
  * Vuelca los archivos generados por la IA en el workspace.
  * - Soporta paths con o sin prefijo `src/` (la IA usa `src/...` en Sprint 1+).
  * - Bloquea path-traversal (../).
@@ -259,8 +319,19 @@ export async function writeGeneratedFiles(
       this.logger?.warn?.(`[scaffold] bloqueado intento de pisar shadcn: ${rel}`);
       continue;
     }
+    // CASO ESPECIAL src/lib/utils.ts: la IA suele meter aqui constantes
+    // del proyecto (COMPANY_NAME, COLORS, etc.) que OTROS componentes
+    // importan via "@/lib/utils". Bloquear el write sin mas rompe la app.
+    // Pero pisarlo directo tambien rompe (mata la funcion `cn` que TODOS
+    // los shadcn usan). Solucion: MERGE — preservamos el cn original del
+    // scaffold y apendamos las exports extras de la IA.
+    if (rel === 'src/lib/utils.ts') {
+      const merged = await mergeUtilsTs(projectPath, content);
+      await writeAlways(target, merged);
+      continue;
+    }
+
     const CORE_PROTECTED = new Set([
-      'src/lib/utils.ts',     // funcion cn — la usan TODOS los shadcn
       'src/main.tsx',         // entry point del bundle Vite
       'src/vite-env.d.ts',    // tipos Vite
       'src/globals.css',      // gestionado via __design__.json
@@ -271,8 +342,7 @@ export async function writeGeneratedFiles(
       // aqui para no romper la signature del helper.
       console.warn(
         `[scaffold] bloqueado intento de pisar archivo CORE: ${rel}. ` +
-          `Si la IA queria poner constantes ahi, deberia usar ` +
-          `src/lib/constants.ts o src/lib/<otro-nombre>.ts.`,
+          `Si la IA queria poner constantes ahi, deberia usar otro nombre.`,
       );
       continue;
     }
