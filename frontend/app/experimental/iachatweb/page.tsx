@@ -41,11 +41,13 @@ import { DeepParticleField } from "@/components/shared/DeepParticleField";
 import { AnimatedSection } from "@/components/shared/AnimatedSection";
 import { UpsellModal } from "@/components/experimental/UpsellModal";
 import {
-  OnboardingChat,
   StudioCapabilities,
   OnboardingAnswers,
 } from "@/components/experimental/OnboardingChat";
-import { OnboardingToEditorTransition } from "@/components/experimental/OnboardingToEditorTransition";
+import {
+  ConversationalOnboarding,
+  ConversationalOnboardingHandle,
+} from "@/components/experimental/ConversationalOnboarding";
 
 
 
@@ -102,27 +104,68 @@ export default function DashboardPage() {
   const [upsellOpen, setUpsellOpen] = useState(false);
   const [upsellReason, setUpsellReason] = useState<string | undefined>(undefined);
 
-  // Onboarding conversacional: cuando el cliente submitea el textarea
-  // principal con su prompt, NO creamos el chat al toque. Primero abrimos
-  // el OnboardingChat para refinar el prompt (tipo, complexity, assets...).
-  // Solo al completar las preguntas creamos el chat y transicionamos al
-  // canvas con un prompt rico que incluye las respuestas.
-  const [showOnboarding, setShowOnboarding] = useState(false);
-  const [onboardingInitialDesc, setOnboardingInitialDesc] = useState('');
+  // Vista de chat conversacional: cuando el cliente submitea el textarea
+  // principal, la landing se TRANSFORMA in-place al layout chat+canvas
+  // (sin cambio de URL). Las preguntas y respuestas del onboarding son
+  // mensajes del chat. Cuando termina, se dispara la generación y los
+  // mensajes de progreso aparecen como assistant messages en el mismo chat.
+  // Solo al terminar de renderizar la web se hace router.push al /project.
+  const [chatViewActive, setChatViewActive] = useState(false);
+  const [chatInitialPrompt, setChatInitialPrompt] = useState('');
   const [studioCaps, setStudioCaps] = useState<StudioCapabilities | null>(null);
-  // Flag: la animación de transición ya completó su secuencia. Si el
-  // chatId llegó antes -> redirect inmediato en el onComplete. Si llegó
-  // después -> el useEffect de abajo dispara el redirect al recibirlo.
-  const [transitionAnimDone, setTransitionAnimDone] = useState(false);
+  const onboardingRef = useRef<ConversationalOnboardingHandle | null>(null);
 
-  // Coordina el redirect: cuando ya tenemos chatId Y la animación terminó,
-  // navegamos al editor. Evita freeze visual si el backend tarda más que
-  // la animación (~2200ms).
+  // Coordina el redirect final: cuando ya tenemos chatId Y el preview
+  // status del backend dice 'running', navegamos al editor. Para el
+  // cliente es invisible porque el layout es el mismo (chat izq + canvas
+  // der). Solo cambia la URL.
   useEffect(() => {
-    if (transitioning && transitionAnimDone && pendingChatId !== null) {
-      router.push(`/experimental/iachatweb/project/${pendingChatId}`);
-    }
-  }, [transitioning, transitionAnimDone, pendingChatId, router]);
+    if (!chatViewActive || pendingChatId === null) return;
+    const token = localStorage.getItem('access_token');
+    if (!token) return;
+    let mounted = true;
+    let attempts = 0;
+    const maxAttempts = 60; // ~3 min de poll
+    const poll = async () => {
+      attempts++;
+      try {
+        const res = await fetch(
+          `${apiBase}/experimental/preview/${pendingChatId}/status`,
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+        if (res.ok) {
+          const data = await res.json();
+          // Publicamos progreso al chat según el estado del backend.
+          if (data.status === 'installing' && onboardingRef.current) {
+            onboardingRef.current.appendProgress?.(
+              'Instalando dependencias del proyecto…',
+            );
+          } else if (data.status === 'running' && data.url) {
+            // Listo: la web está corriendo. Hacemos el redirect.
+            onboardingRef.current?.appendProgress?.(
+              '¡Tu web está lista! Abriendo el editor…',
+              { done: true },
+            );
+            setTimeout(() => {
+              if (mounted) {
+                router.push(`/experimental/iachatweb/project/${pendingChatId}`);
+              }
+            }, 800);
+            return;
+          }
+        }
+      } catch {
+        /* reintento */
+      }
+      if (mounted && attempts < maxAttempts) {
+        setTimeout(poll, 3000);
+      }
+    };
+    poll();
+    return () => {
+      mounted = false;
+    };
+  }, [chatViewActive, pendingChatId, apiBase, router]);
 
   const fetchHistory = async (token: string, customBase?: string) => {
     const base = customBase || apiBase;
@@ -294,8 +337,8 @@ export default function DashboardPage() {
       const pending = sessionStorage.getItem('plia_pending_prompt');
       if (pending && pending.trim()) {
         sessionStorage.removeItem('plia_pending_prompt');
-        setOnboardingInitialDesc(pending.trim());
-        setShowOnboarding(true);
+        setChatInitialPrompt(pending.trim());
+        setChatViewActive(true);
       }
     };
 
@@ -378,6 +421,11 @@ export default function DashboardPage() {
    * propias. Si lo mandamos directo a Claude, Claude tiene que adivinar
    * y la calidad baja. El onboarding refina antes de gastar tokens.
    */
+  /**
+   * Submit del textarea principal. La landing se transforma in-place al
+   * layout chat+canvas (sin cambio de URL). El ConversationalOnboarding
+   * arranca con el prompt como primer mensaje del user.
+   */
   const handleCreate = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!input.trim() || isLoading) return;
@@ -385,20 +433,17 @@ export default function DashboardPage() {
     const token = localStorage.getItem('access_token');
     if (!token) return;
 
-    // Pre-cargamos capabilities si todavía no las tenemos (race condition
-    // raro: cliente súper rápido). No bloqueamos: el onboarding funciona
-    // con caps=null usando defaults (todo abierto).
-    if (!studioCaps) {
-      fetchStudioCaps(token);
-    }
-    setOnboardingInitialDesc(input.trim());
-    setShowOnboarding(true);
+    if (!studioCaps) fetchStudioCaps(token);
+    setChatInitialPrompt(input.trim());
+    setChatViewActive(true);
   };
 
   /**
-   * Convierte las respuestas del onboarding en un prompt rico y AHORA SÍ
-   * crea el chat. Mismo flujo de transición que tenía handleCreate antes:
-   * fade-in del prompt + redirect a /project/[id] tras 1100ms.
+   * Disparado cuando el ConversationalOnboarding recolectó todas las
+   * respuestas y el cliente confirmó. Crea el chat en el backend y
+   * comienza a publicar progreso al chat mismo via onboardingRef.
+   * El redirect al /project/<id> ocurre en el useEffect de poll cuando
+   * el preview pasa a 'running'.
    */
   const handleOnboardingComplete = async (a: OnboardingAnswers) => {
     const token = localStorage.getItem('access_token');
@@ -440,14 +485,11 @@ export default function DashboardPage() {
       })}[/META]`,
     ].join('\n');
 
-    setShowOnboarding(false);
+    // En el nuevo flujo, NO cerramos ningun dialog ni mostramos transición
+    // aparte: el ConversationalOnboarding SIGUE visible publicando progreso
+    // como mensajes del assistant. Solo cambiamos a "fase generating".
     setIsLoading(true);
-    // Arrancamos la transición cinematográfica YA — el POST corre en
-    // paralelo, así el cliente ve el "estudio armándose" mientras el
-    // backend crea el chat. Esto disimula el latency del round-trip.
-    setTransitionPrompt(richPrompt);
-    setTransitionBusinessName(a.businessName || '');
-    setTransitioning(true);
+    onboardingRef.current?.appendProgress?.('Conectando con el motor de PLIA…');
     try {
       const res = await fetch(`${apiBase}/experimental/iachat`, {
         method: 'POST',
@@ -459,11 +501,12 @@ export default function DashboardPage() {
       });
       if (res.ok) {
         const data = await res.json();
-        // Guardamos el chatId. El redirect se dispara cuando
-        // OnboardingToEditorTransition llame a onComplete (al terminar
-        // la secuencia ~2200ms). Si el backend respondió rapido, eso
-        // garantiza que la animación se ve completa antes del cut. Si
-        // tardó más que la animación, igual el redirect espera al id.
+        onboardingRef.current?.appendProgress?.(
+          'Listo. Estoy diseñando la arquitectura y generando los archivos…',
+        );
+        // El poll del useEffect tomará el chatId y empezará a publicar
+        // progreso del preview hasta que esté running, momento en el que
+        // hace router.push al /project.
         setPendingChatId(data.id);
         return;
       }
@@ -862,25 +905,6 @@ export default function DashboardPage() {
         <div className="fixed inset-0 z-10" onClick={() => { setActiveMenuId(null); setIsMenuOpen(false); }} />
       )}
 
-      {/* Transición cinematográfica al crear proyecto: el OnboardingChat
-          se "convierte" en el layout del editor mientras el chat se va
-          armando en el panel izquierdo y el canvas aparece desde la derecha.
-          onComplete se dispara tras ~2200ms; si en ese momento ya tenemos
-          el chatId del backend (lo normal porque el POST corre en paralelo
-          desde handleOnboardingComplete), hacemos el redirect. Si el
-          backend tardó más, esperamos en el useEffect de abajo. */}
-      <OnboardingToEditorTransition
-        open={transitioning}
-        businessName={transitionBusinessName}
-        initialPrompt={transitionPrompt}
-        onComplete={() => {
-          // Marcamos animación terminada. Si el chatId ya llegó del
-          // backend, el useEffect coordinador dispara router.push.
-          // Si no, espera a que llegue.
-          setTransitionAnimDone(true);
-        }}
-      />
-
       <UpsellModal
         open={upsellOpen}
         onClose={() => setUpsellOpen(false)}
@@ -888,17 +912,76 @@ export default function DashboardPage() {
         currentPlan={credits?.plan}
       />
 
-      {/* Conversational Onboarding: aparece cuando el cliente submitea el
-          textarea principal (o llega con un prompt diferido). Hace 5
-          preguntas para refinar el prompt antes de gastar tokens.
-          Al completar -> crea el chat y dispara la transición al canvas. */}
-      <OnboardingChat
-        open={showOnboarding}
-        capabilities={studioCaps}
-        initialDescription={onboardingInitialDesc}
-        onComplete={handleOnboardingComplete}
-        onClose={() => setShowOnboarding(false)}
-      />
+      {/* VISTA CHAT CONVERSACIONAL — se monta encima de la landing con un
+          fade-in. La transición visual desde el textarea grande hacia
+          este layout la maneja AnimatePresence + framer-motion en la
+          propia landing (los elementos con layoutId se animan solos).
+          No es un cambio de URL, es solo otro modo de visualización del
+          mismo route. */}
+      <AnimatePresence>
+        {chatViewActive && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.4 }}
+            className="fixed inset-0 z-[90] bg-[#0d1117] flex"
+          >
+            {/* Halo decorativo */}
+            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_30%_50%,rgba(191,255,0,0.08),transparent_55%),radial-gradient(ellipse_at_85%_50%,rgba(99,102,241,0.06),transparent_55%)] pointer-events-none" />
+
+            {/* Chat panel izquierdo — animado desde abajo. */}
+            <motion.div
+              initial={{ x: -40, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              transition={{ delay: 0.15, duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+              className="relative z-10 w-[400px] flex-shrink-0 border-r border-white/5 bg-black/30 backdrop-blur-sm"
+            >
+              <ConversationalOnboarding
+                ref={onboardingRef}
+                capabilities={studioCaps}
+                initialPrompt={chatInitialPrompt}
+                onConfirm={handleOnboardingComplete}
+                onClose={() => setChatViewActive(false)}
+              />
+            </motion.div>
+
+            {/* Canvas placeholder derecho — slide-in desde abajo */}
+            <motion.div
+              initial={{ y: 40, opacity: 0, scale: 0.98 }}
+              animate={{ y: 0, opacity: 1, scale: 1 }}
+              transition={{ delay: 0.25, duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+              className="relative z-10 flex-1 m-4 rounded-3xl bg-white/[0.02] border border-white/5 overflow-hidden flex items-center justify-center"
+            >
+              {!pendingChatId ? (
+                <div className="text-center text-white/30 max-w-md px-8">
+                  <div className="w-16 h-16 rounded-2xl bg-white/5 flex items-center justify-center mx-auto mb-4">
+                    <Sparkles className="w-8 h-8 text-white/20" />
+                  </div>
+                  <p className="text-sm font-medium leading-relaxed">
+                    Tu sitio va a aparecer aquí.<br />
+                    Respondé las preguntas y construimos juntos.
+                  </p>
+                </div>
+              ) : (
+                <div className="text-center text-white/40 max-w-md px-8">
+                  <motion.div
+                    animate={{ rotate: 360 }}
+                    transition={{ repeat: Infinity, duration: 3, ease: 'linear' }}
+                    className="w-16 h-16 rounded-2xl bg-cta/10 border border-cta/30 flex items-center justify-center mx-auto mb-4"
+                  >
+                    <Sparkles className="w-8 h-8 text-cta" />
+                  </motion.div>
+                  <p className="text-sm font-medium leading-relaxed">
+                    Construyendo tu sitio…<br />
+                    Esto puede tomar 1-2 minutos.
+                  </p>
+                </div>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <style jsx global>{`
         .scrollbar-none::-webkit-scrollbar { display: none; }
