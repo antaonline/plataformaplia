@@ -14,6 +14,7 @@ import { CodegenService } from './generation/codegen.service';
 import { CreditService } from './generation/credit.service';
 import { ChatMsg } from './generation/codegen.types';
 import { WorkspaceService } from './workspace.service';
+import { detectTemplate3DInjection } from './template-3d-injector';
 
 export type ChatMode = 'build' | 'ask' | 'plan';
 
@@ -172,13 +173,50 @@ export class AiChatService {
 
     // 2. Persistir mensaje del usuario
     await this.prisma.aiMessage.create({
-      data: { 
-        chatId, 
-        role: 'user', 
+      data: {
+        chatId,
+        role: 'user',
         content,
         images: images && images.length > 0 ? JSON.stringify(images) : null,
       } as any,
     });
+
+    // 2.5. FAST-PATH: si el mensaje trae un template 3D pre-armado
+    // ([TEMPLATE_3D]<slug>[/TEMPLATE_3D] + bloque HTML completo), saltamos
+    // la llamada a Claude y persistimos el HTML directamente como pagina
+    // del proyecto. Ahorra ~$0.25 por uso y garantiza que el HTML resultante
+    // es EXACTAMENTE el que el cliente vio en el preview iframe (sin que
+    // Claude lo "interprete" y rompa la escena Three.js).
+    const tmplInjection = detectTemplate3DInjection(content);
+    if (tmplInjection) {
+      this.logger.log(
+        `sendMessage: fast-path TEMPLATE_3D=${tmplInjection.slug} chat=${chatId} user=${userId} sizeKb=${(tmplInjection.html.length / 1024).toFixed(1)}`,
+      );
+      // Mergeamos con los archivos que ya existian en el proyecto, asi no
+      // perdemos lo generado previamente por Claude. El template solo
+      // agrega/sobreescribe sus dos archivos (page.tsx + lib/showcase-html.ts).
+      const priorHistory = await this.prisma.aiMessage.findMany({
+        where: { chatId },
+        orderBy: { createdAt: 'asc' },
+      });
+      const existing = this.collectExistingFiles(
+        priorHistory.filter((m) => m.id !== undefined), // todos
+      );
+      const merged = { ...existing, ...tmplInjection.files };
+      const assistantMsg = this.composeMessage({
+        meta: { source: 'template-3d', slug: tmplInjection.slug, ...tmplInjection.meta },
+        response: tmplInjection.assistantResponse,
+        files: merged,
+        dependencies: {},
+      });
+      return this.prisma.aiMessage.create({
+        data: {
+          chatId,
+          role: 'assistant',
+          content: assistantMsg,
+        },
+      });
+    }
 
     // 3. Obtener historial completo
     const history = await this.prisma.aiMessage.findMany({
