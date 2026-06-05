@@ -6,6 +6,12 @@ import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { AiChatService, ChatMode } from './iachat.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { PROVIDERS, resolveProviderForModel } from './generation/providers';
+import { StudioPlansService } from './studio-plans/studio-plans.service';
+import {
+  onboardingTurn,
+  briefToRichPrompt,
+  OnboardingTurnMessage,
+} from './onboarding-conversation';
 
 /**
  * Ping minimal a un modelo: 1 mensaje "ping", 5 tokens max. Mide latencia,
@@ -68,6 +74,7 @@ export class AiChatController {
   constructor(
     private readonly aiChatService: AiChatService,
     private readonly prisma: PrismaService,
+    private readonly studioPlans: StudioPlansService,
   ) {}
 
   // ---- Diagnostico de providers (solo ADMIN) ----
@@ -139,6 +146,49 @@ export class AiChatController {
   @Get('history')
   getHistory(@Request() req: any) {
     return this.aiChatService.getUserHistory(req.user.id);
+  }
+
+  // ---- Onboarding conversacional con IA real ----
+  // POST /api/experimental/iachat/onboarding-turn
+  // El frontend llama a esto en CADA mensaje del usuario durante el
+  // onboarding centrado. La IA decide la siguiente pregunta con criterio
+  // o, cuando tiene suficiente, devuelve done:true + richPrompt para crear
+  // el chat. Reemplaza el wizard scripted de chips predefinidos.
+  @Post('onboarding-turn')
+  @HttpCode(HttpStatus.OK)
+  async onboardingTurn(
+    @Request() req: any,
+    @Body() body: { messages: OnboardingTurnMessage[] },
+  ) {
+    // Capabilities del plan para que la IA sepa qué estilos ofrecer.
+    let canUsePremium3D = false;
+    let isPaid = false;
+    let planName = 'Plia Studio Free';
+    try {
+      const caps = await this.studioPlans.getCapabilities(req.user.id);
+      canUsePremium3D = !!caps.tools?.tripo3d;
+      isPaid = !!caps.isPaid;
+      planName = caps.planName;
+    } catch {
+      /* sin caps: defaults conservadores (free) */
+    }
+
+    const result = await onboardingTurn(
+      Array.isArray(body.messages) ? body.messages : [],
+      { planName, isPaid, canUsePremium3D },
+    );
+
+    // Si la IA decidió construir, generamos el richPrompt aquí (el front
+    // no necesita conocer el formato [META]).
+    if (result.done && result.brief) {
+      return {
+        done: true,
+        reply: result.reply,
+        richPrompt: briefToRichPrompt(result.brief),
+        brief: result.brief,
+      };
+    }
+    return { done: false, reply: result.reply };
   }
 
   // ---- CRUD de chats ----

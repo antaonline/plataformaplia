@@ -439,55 +439,16 @@ export default function DashboardPage() {
   };
 
   /**
-   * Disparado cuando el ConversationalOnboarding recolectó todas las
-   * respuestas y el cliente confirmó. Crea el chat en el backend y
-   * comienza a publicar progreso al chat mismo via onboardingRef.
-   * El redirect al /project/<id> ocurre en el useEffect de poll cuando
-   * el preview pasa a 'running'.
+   * Disparado cuando la IA del onboarding decidió construir. Recibe el
+   * richPrompt YA armado por el backend (a partir del brief que la IA
+   * estructuró conversando). Crea el chat y empieza a publicar progreso
+   * al mismo chat via onboardingRef. El redirect al /project/<id> ocurre
+   * en el useEffect de poll cuando el preview pasa a 'running'.
    */
-  const handleOnboardingComplete = async (a: OnboardingAnswers) => {
+  const handleReadyToBuild = async (richPrompt: string, businessName: string) => {
     const token = localStorage.getItem('access_token');
     if (!token) return;
 
-    const typeLabels: Record<string, string> = {
-      landing: 'una landing de servicio',
-      tienda: 'una tienda online',
-      restaurante: 'una web para restaurante/cafetería',
-      portfolio: 'un portfolio personal',
-      corporativa: 'una web corporativa',
-      otro: 'una web',
-    };
-    const styleLabels: Record<string, string> = {
-      simple: 'estilo simple, directo y limpio, sin efectos pesados.',
-      modern: 'estilo moderno con microinteracciones y animaciones suaves.',
-      clean:
-        'estilo Apple/Stripe: tipografía cuidada, espacios amplios, animaciones sutiles muy pulidas.',
-      premium:
-        'estilo PREMIUM con elementos 3D, video hero cinematográfico y scroll-triggered animations nivel agencia top.',
-    };
-    const assetHint = a.hasOwnAssets
-      ? 'El cliente va a subir sus propias fotos en el siguiente turno.'
-      : 'No tiene fotos propias — generá imágenes profesionales con IA que encajen con el rubro.';
-
-    const richPrompt = [
-      `Quiero ${typeLabels[a.projectType] || 'una web'} para mi negocio.`,
-      `Nombre del negocio: ${a.businessName}`,
-      `Descripción: ${a.description}`,
-      ``,
-      `Estilo visual: ${styleLabels[a.complexity]}`,
-      assetHint,
-      ``,
-      `[META]${JSON.stringify({
-        projectType: a.projectType,
-        businessName: a.businessName,
-        complexity: a.complexity,
-        hasOwnAssets: a.hasOwnAssets,
-      })}[/META]`,
-    ].join('\n');
-
-    // En el nuevo flujo, NO cerramos ningun dialog ni mostramos transición
-    // aparte: el ConversationalOnboarding SIGUE visible publicando progreso
-    // como mensajes del assistant. Solo cambiamos a "fase generating".
     setIsLoading(true);
     onboardingRef.current?.appendProgress?.('Conectando con el motor de PLIA…');
     try {
@@ -912,73 +873,39 @@ export default function DashboardPage() {
         currentPlan={credits?.plan}
       />
 
-      {/* VISTA CHAT CONVERSACIONAL — se monta encima de la landing con un
-          fade-in. La transición visual desde el textarea grande hacia
-          este layout la maneja AnimatePresence + framer-motion en la
-          propia landing (los elementos con layoutId se animan solos).
-          No es un cambio de URL, es solo otro modo de visualización del
-          mismo route. */}
+      {/* VISTA CHAT CONVERSACIONAL CENTRADA (estilo Lovable). Cuando el
+          cliente submitea el textarea grande, la landing se cubre con un
+          fade + scale suave que da sensación de que toda la página se
+          "transforma" en el chat. El fondo es el MISMO de la landing
+          (#0d1117) para que la continuidad visual sea total. El chat vive
+          en una columna central, sin paneles laterales. No cambia la URL. */}
       <AnimatePresence>
         {chatViewActive && (
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.4 }}
-            className="fixed inset-0 z-[90] bg-[#0d1117] flex"
+            initial={{ opacity: 0, scale: 1.04 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.98 }}
+            transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+            className="fixed inset-0 z-[90] bg-[#0d1117] overflow-hidden"
           >
-            {/* Halo decorativo */}
-            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_30%_50%,rgba(191,255,0,0.08),transparent_55%),radial-gradient(ellipse_at_85%_50%,rgba(99,102,241,0.06),transparent_55%)] pointer-events-none" />
+            {/* Halo decorativo — mismo lenguaje visual de la landing */}
+            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(191,255,0,0.10),transparent_45%),radial-gradient(ellipse_at_bottom_left,rgba(30,41,59,0.8),transparent_55%)] pointer-events-none" />
 
-            {/* Chat panel izquierdo — animado desde abajo. */}
-            <motion.div
-              initial={{ x: -40, opacity: 0 }}
-              animate={{ x: 0, opacity: 1 }}
-              transition={{ delay: 0.15, duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-              className="relative z-10 w-[400px] flex-shrink-0 border-r border-white/5 bg-black/30 backdrop-blur-sm"
-            >
+            {/* Chat centrado en columna */}
+            <div className="relative z-10 h-full">
               <ConversationalOnboarding
                 ref={onboardingRef}
                 capabilities={studioCaps}
                 initialPrompt={chatInitialPrompt}
-                onConfirm={handleOnboardingComplete}
-                onClose={() => setChatViewActive(false)}
+                apiBase={apiBase}
+                authToken={
+                  typeof window !== 'undefined'
+                    ? localStorage.getItem('access_token') || ''
+                    : ''
+                }
+                onReadyToBuild={handleReadyToBuild}
               />
-            </motion.div>
-
-            {/* Canvas placeholder derecho — slide-in desde abajo */}
-            <motion.div
-              initial={{ y: 40, opacity: 0, scale: 0.98 }}
-              animate={{ y: 0, opacity: 1, scale: 1 }}
-              transition={{ delay: 0.25, duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-              className="relative z-10 flex-1 m-4 rounded-3xl bg-white/[0.02] border border-white/5 overflow-hidden flex items-center justify-center"
-            >
-              {!pendingChatId ? (
-                <div className="text-center text-white/30 max-w-md px-8">
-                  <div className="w-16 h-16 rounded-2xl bg-white/5 flex items-center justify-center mx-auto mb-4">
-                    <Sparkles className="w-8 h-8 text-white/20" />
-                  </div>
-                  <p className="text-sm font-medium leading-relaxed">
-                    Tu sitio va a aparecer aquí.<br />
-                    Respondé las preguntas y construimos juntos.
-                  </p>
-                </div>
-              ) : (
-                <div className="text-center text-white/40 max-w-md px-8">
-                  <motion.div
-                    animate={{ rotate: 360 }}
-                    transition={{ repeat: Infinity, duration: 3, ease: 'linear' }}
-                    className="w-16 h-16 rounded-2xl bg-cta/10 border border-cta/30 flex items-center justify-center mx-auto mb-4"
-                  >
-                    <Sparkles className="w-8 h-8 text-cta" />
-                  </motion.div>
-                  <p className="text-sm font-medium leading-relaxed">
-                    Construyendo tu sitio…<br />
-                    Esto puede tomar 1-2 minutos.
-                  </p>
-                </div>
-              )}
-            </motion.div>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
