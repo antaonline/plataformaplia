@@ -246,13 +246,44 @@ export async function writeGeneratedFiles(
     // Anti path-traversal y proteccion de configs/UI base.
     const target = join(projectPath, rel);
     if (!target.startsWith(projectPath)) continue;
-    if (/^src\/components\/ui\//.test(rel)) continue; // shadcn intocable
+
+    // Archivos CORE del scaffold que NO se pueden sobreescribir. Si la IA
+    // intenta pisarlos rompe la app entera (caso clasico: src/lib/utils.ts
+    // tiene la funcion `cn` que TODOS los componentes shadcn usan — si la
+    // IA lo pisa con sus propias constantes, todos los shadcn revientan
+    // con TypeError y la pantalla queda en blanco silencioso).
+    //
+    // Si la IA realmente necesita constantes/helpers, los pone en otro
+    // archivo (src/lib/constants.ts, src/lib/<otro>.ts, etc.).
+    if (/^src\/components\/ui\//.test(rel)) {
+      this.logger?.warn?.(`[scaffold] bloqueado intento de pisar shadcn: ${rel}`);
+      continue;
+    }
+    const CORE_PROTECTED = new Set([
+      'src/lib/utils.ts',     // funcion cn — la usan TODOS los shadcn
+      'src/main.tsx',         // entry point del bundle Vite
+      'src/vite-env.d.ts',    // tipos Vite
+      'src/globals.css',      // gestionado via __design__.json
+      'src/index.css',        // gestionado via __design__.json
+    ]);
+    if (CORE_PROTECTED.has(rel)) {
+      // Solo logueamos a stdout via console.warn — sin logger inyectado
+      // aqui para no romper la signature del helper.
+      console.warn(
+        `[scaffold] bloqueado intento de pisar archivo CORE: ${rel}. ` +
+          `Si la IA queria poner constantes ahi, deberia usar ` +
+          `src/lib/constants.ts o src/lib/<otro-nombre>.ts.`,
+      );
+      continue;
+    }
     if (
       rel === 'package.json' ||
       rel === 'vite.config.ts' ||
       rel === 'tsconfig.json' ||
       rel === 'tailwind.config.ts' ||
-      rel === 'postcss.config.js'
+      rel === 'postcss.config.js' ||
+      rel === 'index.html' ||
+      rel === 'components.json'
     ) {
       continue;
     }

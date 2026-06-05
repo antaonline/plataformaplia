@@ -69,6 +69,11 @@ ARQUITECTURA DEL PROYECTO (estructura Vite estandar):
 REGLAS DURAS:
 - Imports con alias @/ (ej: import { Button } from "@/components/ui/button"). NUNCA rutas relativas como "../components/..." salvo entre archivos del mismo subdir.
 - PROHIBIDO modificar archivos en @/components/ui/* (es shadcn base). Si necesitas variantes, crea archivos NUEVOS en @/components/.
+- ARCHIVOS CORE PROHIBIDOS DE PISAR (el scaffold ya los provee, si los pisas la app entera queda en blanco):
+   * src/lib/utils.ts  -> exporta la funcion "cn" que TODOS los shadcn usan. Si necesitas guardar constantes/helpers tuyos, USA OTRO NOMBRE: src/lib/constants.ts, src/lib/helpers.ts, src/lib/<nombre-descriptivo>.ts.
+   * src/main.tsx       -> entry point del bundle Vite. NO lo emitas en tu respuesta.
+   * src/index.css / src/globals.css -> gestionados automaticamente por __design__.json.
+   * src/vite-env.d.ts, package.json, vite.config.ts, tsconfig.json, tailwind.config.ts, components.json, index.html -> infraestructura del scaffold. NO los emitas.
 - Cada pagina nueva debe estar registrada en src/App.tsx con su <Route>. Sin esto NO se ve.
 - src/pages/Index.tsx es la home: DEBE incluir/montar las secciones que generes (Hero, Features, etc.). Si no se monta, el cliente no ve nada.
 - Tailwind puro para estilos. NUNCA crear archivos .css adicionales ni etiquetas <style>. El globals.css y tailwind.config ya estan.
