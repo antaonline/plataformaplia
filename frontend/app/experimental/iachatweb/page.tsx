@@ -40,6 +40,11 @@ import { useRouter } from 'next/navigation';
 import { DeepParticleField } from "@/components/shared/DeepParticleField";
 import { AnimatedSection } from "@/components/shared/AnimatedSection";
 import { UpsellModal } from "@/components/experimental/UpsellModal";
+import {
+  OnboardingChat,
+  StudioCapabilities,
+  OnboardingAnswers,
+} from "@/components/experimental/OnboardingChat";
 
 
 
@@ -90,6 +95,15 @@ export default function DashboardPage() {
   const [upsellOpen, setUpsellOpen] = useState(false);
   const [upsellReason, setUpsellReason] = useState<string | undefined>(undefined);
 
+  // Onboarding conversacional: cuando el cliente submitea el textarea
+  // principal con su prompt, NO creamos el chat al toque. Primero abrimos
+  // el OnboardingChat para refinar el prompt (tipo, complexity, assets...).
+  // Solo al completar las preguntas creamos el chat y transicionamos al
+  // canvas con un prompt rico que incluye las respuestas.
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [onboardingInitialDesc, setOnboardingInitialDesc] = useState('');
+  const [studioCaps, setStudioCaps] = useState<StudioCapabilities | null>(null);
+
   const fetchHistory = async (token: string, customBase?: string) => {
     const base = customBase || apiBase;
     try {
@@ -102,6 +116,27 @@ export default function DashboardPage() {
       }
     } catch (e) {
       console.error('Error fetching history', e);
+    }
+  };
+
+  /**
+   * Carga las capabilities del plan del usuario. El OnboardingChat las
+   * necesita para mostrar/bloquear las opciones premium de complexity
+   * (Premium 3D requiere Pro, Clean estilo Apple requiere plan pagado, etc.).
+   * Si falla, el onboarding sigue funcionando con defaults (todo abierto).
+   */
+  const fetchStudioCaps = async (token: string, customBase?: string) => {
+    const base = customBase || apiBase;
+    try {
+      const res = await fetch(`${base}/experimental/studio-plans/me`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setStudioCaps(data);
+      }
+    } catch (e) {
+      console.error('Error fetching studio capabilities', e);
     }
   };
 
@@ -228,34 +263,19 @@ export default function DashboardPage() {
       await fetchUser(token, currentApiBase);
       await fetchCredits(token, currentApiBase);
       await fetchHistory(token, currentApiBase);
+      // Pre-cargamos capabilities al loguear para tener el dialog de
+      // onboarding listo apenas el cliente submitee su primer prompt.
+      fetchStudioCaps(token, currentApiBase);
 
-      // Ejecutar el prompt diferido (venido de /tu-web-con-ia) tras login.
+      // Prompt diferido (venido de /tu-web-con-ia tras login). Antes
+      // creabamos el chat directo. Ahora abrimos el onboarding con el
+      // prompt como descripción inicial — el cliente decide ahí complexity,
+      // tipo y assets antes de gastar tokens en una generación a ciegas.
       const pending = sessionStorage.getItem('plia_pending_prompt');
       if (pending && pending.trim()) {
         sessionStorage.removeItem('plia_pending_prompt');
-        try {
-          const res = await fetch(`${currentApiBase}/experimental/iachat`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({ initialPrompt: pending.trim() }),
-          });
-          if (res.ok) {
-            const data = await res.json();
-            router.push(`/experimental/iachatweb/project/${data.id}`);
-          } else if (res.status === 403) {
-            const err = await res.json().catch(() => ({}));
-            setUpsellReason(
-              err?.message ||
-                'No tienes créditos disponibles en tu plan actual.',
-            );
-            setUpsellOpen(true);
-          }
-        } catch (e) {
-          console.error('Error ejecutando prompt diferido', e);
-        }
+        setOnboardingInitialDesc(pending.trim());
+        setShowOnboarding(true);
       }
     };
 
@@ -326,6 +346,18 @@ export default function DashboardPage() {
     }
   };
 
+  /**
+   * Submit del textarea principal. NO crea el chat al toque — abre el
+   * OnboardingChat con el prompt como descripción inicial pre-rellenada.
+   * El chat se crea recién en handleOnboardingComplete cuando el cliente
+   * pasa por todos los pasos.
+   *
+   * Por qué no crear directo: el cliente escribe "una web para mi pizzería"
+   * sin decir si quiere LANDING, TIENDA o RESTAURANTE, sin precisar
+   * complexity (simple/moderno/premium 3D), sin decir si tiene fotos
+   * propias. Si lo mandamos directo a Claude, Claude tiene que adivinar
+   * y la calidad baja. El onboarding refina antes de gastar tokens.
+   */
   const handleCreate = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!input.trim() || isLoading) return;
@@ -333,20 +365,77 @@ export default function DashboardPage() {
     const token = localStorage.getItem('access_token');
     if (!token) return;
 
+    // Pre-cargamos capabilities si todavía no las tenemos (race condition
+    // raro: cliente súper rápido). No bloqueamos: el onboarding funciona
+    // con caps=null usando defaults (todo abierto).
+    if (!studioCaps) {
+      fetchStudioCaps(token);
+    }
+    setOnboardingInitialDesc(input.trim());
+    setShowOnboarding(true);
+  };
+
+  /**
+   * Convierte las respuestas del onboarding en un prompt rico y AHORA SÍ
+   * crea el chat. Mismo flujo de transición que tenía handleCreate antes:
+   * fade-in del prompt + redirect a /project/[id] tras 1100ms.
+   */
+  const handleOnboardingComplete = async (a: OnboardingAnswers) => {
+    const token = localStorage.getItem('access_token');
+    if (!token) return;
+
+    const typeLabels: Record<string, string> = {
+      landing: 'una landing de servicio',
+      tienda: 'una tienda online',
+      restaurante: 'una web para restaurante/cafetería',
+      portfolio: 'un portfolio personal',
+      corporativa: 'una web corporativa',
+      otro: 'una web',
+    };
+    const styleLabels: Record<string, string> = {
+      simple: 'estilo simple, directo y limpio, sin efectos pesados.',
+      modern: 'estilo moderno con microinteracciones y animaciones suaves.',
+      clean:
+        'estilo Apple/Stripe: tipografía cuidada, espacios amplios, animaciones sutiles muy pulidas.',
+      premium:
+        'estilo PREMIUM con elementos 3D, video hero cinematográfico y scroll-triggered animations nivel agencia top.',
+    };
+    const assetHint = a.hasOwnAssets
+      ? 'El cliente va a subir sus propias fotos en el siguiente turno.'
+      : 'No tiene fotos propias — generá imágenes profesionales con IA que encajen con el rubro.';
+
+    const richPrompt = [
+      `Quiero ${typeLabels[a.projectType] || 'una web'} para mi negocio.`,
+      `Nombre del negocio: ${a.businessName}`,
+      `Descripción: ${a.description}`,
+      ``,
+      `Estilo visual: ${styleLabels[a.complexity]}`,
+      assetHint,
+      ``,
+      `[META]${JSON.stringify({
+        projectType: a.projectType,
+        businessName: a.businessName,
+        complexity: a.complexity,
+        hasOwnAssets: a.hasOwnAssets,
+      })}[/META]`,
+    ].join('\n');
+
+    setShowOnboarding(false);
     setIsLoading(true);
     try {
       const res = await fetch(`${apiBase}/experimental/iachat`, {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}` 
+          Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ initialPrompt: input })
+        body: JSON.stringify({ initialPrompt: richPrompt }),
       });
-
       if (res.ok) {
         const data = await res.json();
-        setTransitionPrompt(input.trim());
+        // Mostramos el nombre del negocio en la pantalla de transición —
+        // mas cinematográfico que mostrar el prompt completo de 500+ chars.
+        setTransitionPrompt(`Construyendo ${a.businessName}...`);
         setTransitioning(true);
         setTimeout(() => {
           router.push(`/experimental/iachatweb/project/${data.id}`);
@@ -798,6 +887,18 @@ export default function DashboardPage() {
         onClose={() => setUpsellOpen(false)}
         reason={upsellReason}
         currentPlan={credits?.plan}
+      />
+
+      {/* Conversational Onboarding: aparece cuando el cliente submitea el
+          textarea principal (o llega con un prompt diferido). Hace 5
+          preguntas para refinar el prompt antes de gastar tokens.
+          Al completar -> crea el chat y dispara la transición al canvas. */}
+      <OnboardingChat
+        open={showOnboarding}
+        capabilities={studioCaps}
+        initialDescription={onboardingInitialDesc}
+        onComplete={handleOnboardingComplete}
+        onClose={() => setShowOnboarding(false)}
       />
 
       <style jsx global>{`

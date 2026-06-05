@@ -56,6 +56,12 @@ interface Props {
   capabilities: StudioCapabilities | null;
   onComplete: (answers: OnboardingAnswers) => Promise<void> | void;
   onClose?: () => void;
+  /**
+   * Texto inicial que pre-rellena el campo "descripción". Sirve cuando el
+   * onboarding se abre desde la landing y el cliente ya escribió algo en el
+   * textarea inicial — no le hacemos repetirlo, lo refinamos.
+   */
+  initialDescription?: string;
 }
 
 const PROJECT_TYPES = [
@@ -122,15 +128,24 @@ export function OnboardingChat({
   capabilities,
   onComplete,
   onClose,
+  initialDescription,
 }: Props) {
   const [step, setStep] = useState<Step>('welcome');
   const [answers, setAnswers] = useState<OnboardingAnswers>({
     projectType: '',
     businessName: '',
-    description: '',
+    description: initialDescription || '',
     complexity: 'modern',
     hasOwnAssets: false,
   });
+
+  // Si el dialog se abre con initialDescription, sincronizar el state.
+  // Es util cuando abrimos el onboarding desde un nuevo prompt en la landing.
+  useEffect(() => {
+    if (open && initialDescription) {
+      setAnswers((prev) => ({ ...prev, description: initialDescription }));
+    }
+  }, [open, initialDescription]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 

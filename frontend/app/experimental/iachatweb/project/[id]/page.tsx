@@ -590,15 +590,18 @@ export default function projectPage() {
       if (data.chatMode) setChatMode(data.chatMode);
 
       // ── Decisión: ¿mostrar OnboardingChat o ir directo al canvas? ──
-      // Lo mostramos solo si el proyecto está completamente vacío (sin
-      // mensajes previos y sin archivos generados). Una vez decidido,
-      // no lo volvemos a mostrar en esa sesión aunque el cliente borre todo.
+      // FALLBACK del onboarding. El flujo NORMAL hace que el cliente
+      // pase por el onboarding ANTES de crear el chat (en la landing
+      // /experimental/iachatweb). Cuando llega aquí, ya hay mensajes y este
+      // bloque NO se dispara. Pero si por algún side-channel (admin SQL,
+      // retry post-error) llegamos a /project/[id] sin mensajes, mostramos
+      // el onboarding como red de seguridad para que el usuario no se
+      // quede mirando un canvas en blanco.
       if (!onboardingCheckedRef.current) {
         onboardingCheckedRef.current = true;
         const hasMessages = Array.isArray(data.messages) && data.messages.length > 0;
         const hasGeneratedFiles = Object.keys(allPages).length > 0;
         if (!hasMessages && !hasGeneratedFiles) {
-          // Proyecto vacío → cargar capabilities y mostrar onboarding
           try {
             const token = localStorage.getItem('access_token');
             if (token) {
