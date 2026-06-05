@@ -281,8 +281,56 @@ const Bubble: React.FC<{ msg: ChatMsg }> = ({ msg }) => {
         }`}
       >
         {msg.isProgress && <Check className="w-3.5 h-3.5 text-cta mt-0.5 flex-shrink-0" />}
-        <span>{msg.text}</span>
+        {/* Las preguntas/respuestas conversacionales de la IA (no progreso)
+            aparecen con efecto typewriter estilo ChatGPT. El progreso y el
+            usuario aparecen instantáneos. */}
+        {msg.isProgress ? (
+          <span>{msg.text}</span>
+        ) : (
+          <Typewriter text={msg.text} />
+        )}
       </div>
     </motion.div>
+  );
+};
+
+/**
+ * Efecto typewriter estilo ChatGPT: revela el texto carácter por carácter.
+ * Solo se anima la PRIMERA vez que se monta (cada mensaje de la IA es un
+ * componente nuevo, así que esto corre una vez por mensaje). El cursor
+ * parpadeante se muestra mientras escribe.
+ */
+const Typewriter: React.FC<{ text: string }> = ({ text }) => {
+  const [shown, setShown] = useState('');
+  const doneRef = useRef(false);
+
+  useEffect(() => {
+    if (doneRef.current) return;
+    let i = 0;
+    // Velocidad: ~18ms por carácter (rápido pero legible, como ChatGPT).
+    // Para textos largos aceleramos un poco para no aburrir.
+    const speed = text.length > 200 ? 10 : 18;
+    const tick = () => {
+      i += 1;
+      setShown(text.slice(0, i));
+      if (i < text.length) {
+        timer = setTimeout(tick, speed);
+      } else {
+        doneRef.current = true;
+      }
+    };
+    let timer = setTimeout(tick, speed);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const isTyping = shown.length < text.length;
+  return (
+    <span>
+      {shown}
+      {isTyping && (
+        <span className="inline-block w-[2px] h-[1em] align-middle bg-cta ml-0.5 animate-pulse" />
+      )}
+    </span>
   );
 };

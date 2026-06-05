@@ -245,6 +245,44 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 /**
+ * Convierte cualquier uso de BrowserRouter real (de react-router-dom) en
+ * HashRouter aliased. El preview corre bajo un subpath del proxy, donde
+ * BrowserRouter no resuelve la ruta "/" -> NotFound. HashRouter sí funciona.
+ *
+ * Casos cubiertos:
+ *   import { BrowserRouter } from "react-router-dom"
+ *   import { BrowserRouter as Router } from "react-router-dom"
+ *   import { Routes, Route, BrowserRouter } from "react-router-dom"
+ * Y los usos <BrowserRouter> en el JSX quedan intactos porque mantenemos el
+ * nombre local "BrowserRouter" via alias (HashRouter as BrowserRouter).
+ */
+function forceHashRouter(content: string): string {
+  if (!content || !/react-router-dom/.test(content)) return content;
+  if (!/\bBrowserRouter\b/.test(content)) return content;
+  // Si ya usa HashRouter as BrowserRouter, no tocar.
+  if (/HashRouter\s+as\s+BrowserRouter/.test(content)) return content;
+
+  let out = content;
+  // Dentro de los imports de react-router-dom, reemplazar el specifier.
+  out = out.replace(
+    /import\s*\{([^}]*)\}\s*from\s*(["'])react-router-dom\2/g,
+    (match, inner: string) => {
+      if (!/\bBrowserRouter\b/.test(inner)) return match;
+      // Reemplazar "BrowserRouter" o "BrowserRouter as X" por
+      // "HashRouter as BrowserRouter" (o "HashRouter as X").
+      const newInner = inner
+        .replace(
+          /\bBrowserRouter\s+as\s+(\w+)/g,
+          'HashRouter as $1',
+        )
+        .replace(/\bBrowserRouter\b(?!\s+as)/g, 'HashRouter as BrowserRouter');
+      return `import {${newInner}} from "react-router-dom"`;
+    },
+  );
+  return out;
+}
+
+/**
  * Vuelca los archivos generados por la IA en el workspace.
  * - Soporta paths con o sin prefijo `src/` (la IA usa `src/...` en Sprint 1+).
  * - Bloquea path-traversal (../).
@@ -296,6 +334,17 @@ export async function writeGeneratedFiles(
     }
 
     normalized.push({ rel, content });
+  }
+
+  // Forzar HashRouter en cualquier archivo que importe BrowserRouter real.
+  // El preview se sirve bajo /api/experimental/preview/<id>/serve/, así que
+  // BrowserRouter (que lee window.location.pathname) NUNCA matchea la ruta
+  // "/" -> el sitio muestra su propia NotFound (404). HashRouter pone las
+  // rutas en el hash (#/), que funciona bajo cualquier base path. El
+  // scaffold ya lo hace, pero la IA regenera App.tsx con BrowserRouter real
+  // y pierde el truco. Esto lo reaplica a TODO archivo generado.
+  for (const item of normalized) {
+    item.content = forceHashRouter(item.content);
   }
 
   // Normalizar exports cruzados: si A.tsx solo exporta default pero B.tsx
