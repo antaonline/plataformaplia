@@ -602,24 +602,29 @@ export class CodegenService {
       files[entryFile.path] = this.stripCodeFences(code);
     }
 
-    // ─── VALIDADOR POST-CODEGEN ─────────────────────────────────────────
+    // ─── VALIDADOR POST-CODEGEN (hasta 2 reintentos + stubs garantía) ──
     // Escaneamos los archivos generados buscando imports a "@/..." que NO
     // resuelvan a un archivo+export real. Si la IA prometió secciones que
-    // no entregó (ej: importa { menuData } from "@/data/menu" pero nunca
-    // creó ese archivo), el preview queda en blanco con "does not provide
-    // an export named 'X'".
+    // no entregó o le erró el nombre del export (ej: importa { pizzas }
+    // pero exportó menuData), el preview queda en blanco con "does not
+    // provide an export named 'X'".
     //
-    // Si encontramos rotos, hacemos UN reintento: prompt corto y específico
-    // pidiendo SOLO los archivos faltantes. Si vuelve a fallar, los stubs
-    // que generamos abajo (BASE_UTILS_FILE pattern) cubren el caso peor
-    // sin pantalla blanca.
+    // Algoritmo:
+    //   1. Validar.
+    //   2. Si hay rotos -> reintento #1 con prompt específico.
+    //   3. Re-validar lo que quedó.
+    //   4. Si AÚN hay rotos -> reintento #2 con prompt más estricto.
+    //   5. Re-validar.
+    //   6. Si AÚN hay rotos (rate limit, IA confundida, etc.) ->
+    //      generar STUBS automáticos con los exports requeridos y datos
+    //      placeholder. Garantiza que la app renderice aunque sea minima.
     try {
-      const missing = validateImports(files, params.existingFiles);
-      if (missing.length > 0) {
+      let missing = validateImports(files, params.existingFiles);
+      for (let attempt = 1; attempt <= 2 && missing.length > 0; attempt++) {
         this.logger.warn(
-          `[validator] ${missing.length} imports rotos detectados: ` +
+          `[validator] attempt=${attempt} ${missing.length} imports rotos: ` +
             missing
-              .map((m) => `${m.importerPath}->${m.importSource}`)
+              .map((m) => `${m.importerPath}->${m.importSource}(${m.reason})`)
               .slice(0, 5)
               .join(', ') +
             (missing.length > 5 ? '...' : ''),
@@ -630,26 +635,109 @@ export class CodegenService {
             fileModels,
             fileSystem,
             [{ role: 'user', content: fixPrompt }],
-            { json: true, maxTokens: 8000, temperature: 0.5, onUsage },
+            { json: true, maxTokens: 8000, temperature: 0.4, onUsage },
             phase,
           );
-          // Parseamos { "files": { ... } } y mergeamos.
           const parsed = this.parseFixerResponse(raw);
           if (parsed && Object.keys(parsed).length > 0) {
             Object.assign(files, parsed);
             this.logger.log(
-              `[validator] auto-fix añadió ${Object.keys(parsed).length} archivos: ${Object.keys(parsed).join(', ')}`,
+              `[validator] attempt=${attempt} añadió/sobrescribió ${Object.keys(parsed).length} archivos: ${Object.keys(parsed).join(', ')}`,
             );
           } else {
             this.logger.warn(
-              `[validator] auto-fix devolvió JSON vacío o malformado. El cliente verá un error específico en el preview con AUTO-FIX disponible.`,
+              `[validator] attempt=${attempt} JSON vacío/malformado.`,
             );
+            break; // no tiene caso reintentar si la IA no respondió en formato.
           }
         } catch (e: any) {
           this.logger.warn(
-            `[validator] auto-fix falló: ${e?.message || e}. El cliente verá el error con AUTO-FIX disponible.`,
+            `[validator] attempt=${attempt} falló: ${e?.message || e}`,
           );
+          break; // rate limit / 503 — no insistir.
         }
+        // Re-validar para próximo loop o salida.
+        missing = validateImports(files, params.existingFiles);
+      }
+
+      // STUBS DE GARANTÍA: si DESPUÉS de los reintentos siguen faltando
+      // imports, fabricamos archivos placeholder. La app renderiza con
+      // datos vacíos en vez de pantalla blanca. El cliente puede pedir
+      // "completá el menú" en el chat y la IA lo enriquece.
+      if (missing.length > 0) {
+        this.logger.warn(
+          `[validator] post-reintentos siguen rotos ${missing.length}. Generando stubs de garantía.`,
+        );
+        // Agrupar por path para no escribir 2 veces el mismo archivo.
+        const stubsByPath = new Map<
+          string,
+          { needsDefault: boolean; named: Set<string> }
+        >();
+        for (const m of missing) {
+          let s = stubsByPath.get(m.expectedPath);
+          if (!s) {
+            s = { needsDefault: false, named: new Set() };
+            stubsByPath.set(m.expectedPath, s);
+          }
+          if (m.missingDefault) s.needsDefault = true;
+          for (const sym of m.missingNamedSymbols) s.named.add(sym);
+        }
+        for (const [path, spec] of stubsByPath.entries()) {
+          const lines: string[] = [
+            `// AUTO-STUB generado por el validador post-codegen.`,
+            `// La IA importó símbolos de aquí pero no entregó este archivo`,
+            `// (o le erró al nombre de los exports). Lo rellenamos con`,
+            `// placeholders para que la app renderice; podés pedir en el`,
+            `// chat "completá <path>" y la IA lo enriquece.`,
+            '',
+          ];
+          // Decidir extensión: si el path no termina en .ts/.tsx, asumimos
+          // .ts para data files.
+          const isTsx = /\.tsx$/i.test(path);
+          for (const sym of spec.named) {
+            // Heurística simple: si el nombre sugiere array de algo
+            // (pizzas, items, menus, gallery, faqs, testimonios), exportar []
+            // Si sugiere objeto (config, brand, theme), exportar {}
+            // Caso default: string vacío.
+            const lower = sym.toLowerCase();
+            let value = '""';
+            if (
+              lower.endsWith('s') ||
+              lower.includes('list') ||
+              lower.includes('items') ||
+              lower.includes('data')
+            ) {
+              value = '[]';
+            } else if (
+              lower.includes('config') ||
+              lower.includes('theme') ||
+              lower.includes('brand') ||
+              lower.includes('settings') ||
+              lower.endsWith('info')
+            ) {
+              value = '{}';
+            }
+            lines.push(`export const ${sym} = ${value};`);
+          }
+          if (spec.needsDefault) {
+            if (isTsx) {
+              lines.push(
+                '',
+                'export default function Placeholder() {',
+                '  return null;',
+                '}',
+              );
+            } else {
+              lines.push('', 'export default null;');
+            }
+          }
+          files[path] = lines.join('\n') + '\n';
+        }
+        this.logger.log(
+          `[validator] generados ${stubsByPath.size} stubs: ${[...stubsByPath.keys()].join(', ')}`,
+        );
+      } else if (missing.length === 0) {
+        this.logger.log(`[validator] todos los imports resuelven OK.`);
       }
     } catch (e: any) {
       // El validador NUNCA debe romper la generación entera. Si falla,
