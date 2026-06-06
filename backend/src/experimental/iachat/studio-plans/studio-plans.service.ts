@@ -90,25 +90,39 @@ export class StudioPlansService {
    * el plan Free como fallback (igual al freemium actual).
    */
   async getCapabilities(userId: number): Promise<StudioPlanCapabilities> {
-    // Buscar la suscripción activa más reciente del usuario que sea
-    // STUDIO_SUBSCRIPTION. El schema de hostingSubscription usa startDate
-    // como fecha de inicio (no createdAt — pifié al asumirlo cuando armé
-    // este service). Si el usuario no tiene suscripción Studio activa,
-    // cae al fallback de studio-free abajo.
-    const sub = await (this.prisma as any).hostingSubscription.findFirst({
-      where: {
+    // Buscar el slug del plan Studio activo del usuario via SQL crudo.
+    // NO usamos el query builder de Prisma con `plan: { serviceType:
+    // 'STUDIO_SUBSCRIPTION' }` porque si el cliente Prisma local no fue
+    // regenerado tras la migration, valida el enum estrictamente y tira
+    // "Value '' not found in enum PlanServiceType". El SQL crudo evita
+    // por completo la validación de enum del cliente.
+    let activeSlug: string | null = null;
+    try {
+      const rows: any[] = await (this.prisma as any).$queryRawUnsafe(
+        `SELECT p.slug AS slug
+           FROM hostingsubscription hs
+           JOIN plan p ON p.id = hs.planId
+          WHERE hs.userId = ?
+            AND p.serviceType = 'STUDIO_SUBSCRIPTION'
+            AND hs.status IN ('ACTIVE','TRIAL')
+          ORDER BY hs.startDate DESC
+          LIMIT 1`,
         userId,
-        plan: { serviceType: 'STUDIO_SUBSCRIPTION' },
-        status: { in: ['ACTIVE', 'TRIAL'] },
-      },
-      include: {
-        plan: { include: { studioLimits: true } },
-      },
-      orderBy: { startDate: 'desc' },
-    });
+      );
+      activeSlug = rows?.[0]?.slug || null;
+    } catch {
+      activeSlug = null;
+    }
 
-    let plan = sub?.plan;
-    if (!plan) {
+    // Cargar el plan + sus límites por slug (slug es String, no toca enum).
+    // Si no hay suscripción activa, fallback a studio-free.
+    const targetSlug = activeSlug || 'studio-free';
+    let plan = await (this.prisma as any).plan.findFirst({
+      where: { slug: targetSlug },
+      include: { studioLimits: true },
+    });
+    // Defensa: si por alguna razón el plan activo no existe, caer a free.
+    if (!plan && targetSlug !== 'studio-free') {
       plan = await (this.prisma as any).plan.findFirst({
         where: { slug: 'studio-free' },
         include: { studioLimits: true },
@@ -336,8 +350,10 @@ export class StudioPlansService {
    * Devuelve la lista pública de planes para mostrar en /planes.
    */
   async listPublicPlans() {
+    // Filtramos por slug (String, no enum) en vez de serviceType para no
+    // depender de que el cliente Prisma tenga STUDIO_SUBSCRIPTION regenerado.
     return (this.prisma as any).plan.findMany({
-      where: { serviceType: 'STUDIO_SUBSCRIPTION' },
+      where: { slug: { startsWith: 'studio-' } },
       include: { studioLimits: true },
       orderBy: { price: 'asc' },
     });
@@ -381,10 +397,10 @@ export class StudioPlansService {
     }
 
     // IDs de TODOS los planes Studio (para filtrar por planId — updateMany
-    // de Prisma NO soporta filtrar por relación `plan: { serviceType }`,
-    // solo por campos escalares como planId).
+    // de Prisma NO soporta filtrar por relación, y filtramos por slug en
+    // vez de serviceType para no tocar el enum del cliente Prisma).
     const studioPlans = await (this.prisma as any).plan.findMany({
-      where: { serviceType: 'STUDIO_SUBSCRIPTION' },
+      where: { slug: { startsWith: 'studio-' } },
       select: { id: true },
     });
     const studioPlanIds = studioPlans.map((p: any) => p.id);
