@@ -1009,13 +1009,35 @@ Todo en un solo HTML con anchors.`;
       siteRoot = join(root, domain, publicDir);
 
       if (publishImmediately) {
-        // Admin test project: publicar directamente sin esperar el plazo
-        this.logger.log(`[ADMIN INSTANT PUBLISH] Publicando directamente en ${siteRoot} para ${domain}.`);
-        const maxAttempts = 30;
+        this.logger.log(`[ADMIN INSTANT PUBLISH] Esperando que CyberPanel termine su setup para ${domain}...`);
+        const maxAttempts = 45;
         const pollIntervalMs = 2000;
         let success = false;
         for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+          const indexPath = join(siteRoot, 'index.html');
+          if (fs.existsSync(siteRoot) && fs.existsSync(indexPath)) {
+            // Esperar a que CyberPanel haya escrito su página por defecto antes de reemplazarla
+            const currentContent = fs.readFileSync(indexPath, 'utf-8');
+            if (currentContent.includes('CyberPanel Installed') || currentContent.includes('CyberPanel')) {
+              this.logger.log(`[ADMIN INSTANT PUBLISH] CyberPanel listo. Publicando HTML en ${siteRoot}.`);
+              fs.writeFileSync(indexPath, html, 'utf-8');
+              if (pages?.length) {
+                for (const page of pages) {
+                  const fileName = page.slug === 'index' ? 'index.html' : `${page.slug}.html`;
+                  fs.writeFileSync(join(siteRoot, fileName), page.html, 'utf-8');
+                }
+              }
+              success = true;
+              break;
+            }
+          }
+          this.logger.log(`[ADMIN INSTANT PUBLISH] Esperando CyberPanel setup (intento ${attempt}/${maxAttempts})...`);
+          await this.sleep(pollIntervalMs);
+        }
+        if (!success) {
+          // Último recurso: escribir aunque no haya detectado el default de CyberPanel
           if (fs.existsSync(siteRoot)) {
+            this.logger.warn(`[ADMIN INSTANT PUBLISH] Timeout esperando CyberPanel default. Forzando escritura.`);
             fs.writeFileSync(join(siteRoot, 'index.html'), html, 'utf-8');
             if (pages?.length) {
               for (const page of pages) {
@@ -1023,14 +1045,9 @@ Todo en un solo HTML con anchors.`;
                 fs.writeFileSync(join(siteRoot, fileName), page.html, 'utf-8');
               }
             }
-            success = true;
-            break;
+          } else {
+            this.logger.warn(`[ADMIN INSTANT PUBLISH] No se pudo escribir: ${siteRoot} no existe tras ${maxAttempts} intentos.`);
           }
-          this.logger.log(`[ADMIN INSTANT PUBLISH] Esperando que CyberPanel cree ${siteRoot} (intento ${attempt}/${maxAttempts})...`);
-          await this.sleep(pollIntervalMs);
-        }
-        if (!success) {
-          this.logger.warn(`[ADMIN INSTANT PUBLISH] No se pudo escribir en ${siteRoot} tras ${maxAttempts} intentos. Se usará solo el preview.`);
         }
       } else {
         this.logger.log(`[DELAYED PUBLISH] Se omite escritura inmediata en ${siteRoot} para ${domain}. Se realizara al cumplirse el plazo.`);
