@@ -74,12 +74,24 @@ FORMULARIOS:
 - NUNCA uses mailto: como fallback. NUNCA hagas window.location.href = mailtoLink.
 - El form action lo recibis explicitamente en el prompt; usalo tal cual con POST.
 
-ANIMACIÓN SEGURA (incluir SIEMPRE en el <head> o antes de </body>):
-<style>.reveal{opacity:0;transform:translateY(28px);transition:opacity .7s ease,transform .7s ease}.reveal.in{opacity:1;transform:none}</style>
-<script>document.addEventListener('DOMContentLoaded',function(){var o=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting)e.target.classList.add('in')})},{threshold:.12});document.querySelectorAll('.reveal').forEach(function(el){o.observe(el)});});</script>
-Para animar una seccion al scroll, agrega class="reveal" al elemento. NUNCA uses opacity:0 de otra forma — si el observer no corre, .reveal igual se ve por el fallback. Es la ÚNICA forma de animar permitida.
+ANIMACIÓN AL SCROLL (única forma permitida — NO uses GSAP con opacity:0):
+Agrega class="reveal" a los bloques que quieras animar. El sistema ya incluye el CSS y el observer que los hace aparecer. Si el JS no corre, igual se ven (fallback). Para microinteracciones extra usa transiciones CSS de Tailwind (hover:scale, transition).
 
-Cada seccion debe ser VISUALMENTE DISTINTA: alterna fondos claro/oscuro, alterna layouts (centrado/split/grid). El sitio fluye verticalmente, secciones apiladas, sin solapamientos.`;
+CATALOGO DE SECCIONES — UNA LANDING DEBE TENER 8 O MÁS DE ESTAS (ricas, detalladas, NO planas):
+1. Nav sticky con backdrop-blur, logo + items + CTA primario.
+2. Hero min-h-screen, imagen de fondo con gradient overlay COMPLEJO (3+ stops), h1 huge (5xl-7xl) + subtitulo + 2 CTAs + chip/badge de ubicacion o sector.
+3. Stats / proof bar: 3-4 numeros grandes (clientes, años, productos, regiones) con etiqueta.
+4. Servicios / caracteristicas en grid 3-col o 4-col, cada uno con icono SVG inline + titulo + descripcion real.
+5. Menu / catalogo / productos (si aplica al negocio): cards o lista elegante con precios reales.
+6. Galeria de fotos/productos/portfolio: grid masonry o asimetrico con hover scale.
+7. Bloque storytelling/nosotros: split 2-col texto + imagen lateral grande (NO card centrada).
+8. Testimonios: 2-3 cards con avatar (inicial), nombre, rol, comilla decorativa grande, estrellas SVG.
+9. FAQ accordion (details/summary HTML5 con chevron animado).
+10. CTA final full-width con fondo de color/imagen + boton grande.
+11. Mapa + contacto (si es negocio local): iframe keyless + formulario.
+12. Footer multi-columna: marca, enlaces, redes sociales SVG, contacto, copyright.
+
+ROMPE EL RITMO: alterna fondos (claro var(--bg) / oscuro var(--primary) / gradient), alterna layouts (grid / split asimetrico / full-width), alterna alignment. Si dos secciones consecutivas se ven iguales, está MAL. El sitio fluye verticalmente, secciones apiladas, SIN solapamientos (solo la imagen del hero usa position:absolute, dentro de un hero relative overflow-hidden).`;
 
 @Injectable()
 export class WebsiteGenService {
