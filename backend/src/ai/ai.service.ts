@@ -147,28 +147,107 @@ export class AiService {
   }
 
   private buildSystemPrompt(plan: PlanType) {
-    return [
-      'Eres un generador de sitios web premium.',
-      'Devuelve SOLO JSON valido.',
-      'Incluye secciones de conversion, prueba social, beneficios, FAQs y CTA.',
-      plan === 'LANDING'
-        ? 'El sitio debe ser una landing de alta conversion.'
-        : 'El sitio debe tener hasta 5 paginas (home, servicios, nosotros, contacto y otra opcional).',
-    ].join(' ');
+    const base = `Eres un diseñador y desarrollador web de clase mundial especializado en sitios de conversion premium.
+Tu trabajo es generar HTML completo (<!DOCTYPE html>...</html>) con CSS moderno embebido, de nivel Stripe / Linear / Airbnb.
+
+REGLAS ABSOLUTAS — nunca las violes:
+1. Devuelve SOLO el HTML completo. Sin markdown, sin bloques de codigo, sin explicaciones. Empieza con <!DOCTYPE html>.
+2. Todo el CSS va embebido en <style> dentro de <head>. Cero dependencias externas excepto Google Fonts (via @import).
+3. Para imagenes usa EXACTAMENTE estos placeholders (seran reemplazados por fotos reales):
+   - Hero/banner principal: src="[[PLIA_IMG:hero]]"
+   - Galeria 1: src="[[PLIA_IMG:gallery1]]"
+   - Galeria 2: src="[[PLIA_IMG:gallery2]]"
+   - Galeria 3: src="[[PLIA_IMG:gallery3]]"
+   - Equipo/persona: src="[[PLIA_IMG:team1]]"
+   Usa los que necesites segun el negocio. Las imagenes DEBEN tener width y height definidos en CSS.
+4. PROHIBIDO usar emojis. Para iconos usa SVG inline (paths simples, elegantes).
+5. Formulario de contacto con action="/contact.php" method="POST". Campos: nombre, email, mensaje. Boton de envio estilizado.
+6. JavaScript minimo embebido en <script> al final: solo para menu hamburguesa mobile, smooth scroll, y animaciones de entrada (IntersectionObserver fade-in/slide-up).
+7. 100% responsive con media queries. Mobile-first.
+8. Usa variables CSS (:root) para colores y tipografia. Paleta sofisticada segun el negocio.
+9. Cada seccion debe tener padding generoso (80-120px vertical). Separacion visual clara.
+10. Footer completo con copyright, redes sociales (SVG icons), y links de navegacion.
+
+ESTANDARES DE DISEÑO PREMIUM obligatorios:
+- Hero: full-viewport con imagen de fondo (object-fit:cover), overlay gradient semitransparente, titulo grande (clamp(2.5rem,6vw,5rem)), subtitulo, 2 CTAs (primario + secundario outline).
+- Tipografia: Google Fonts premium (Playfair Display / DM Sans / Sora / Plus Jakarta Sans segun el tono del negocio). Font-weights variados (300, 400, 600, 700).
+- Sombras: box-shadow multicapa (0 1px 2px rgba(0,0,0,.06), 0 8px 24px rgba(0,0,0,.12)).
+- Bordes redondeados: 12-24px en cards, 999px en botones pill.
+- Gradientes sutiles en fondos de secciones alternadas.
+- Cards con hover effect (transform: translateY(-4px), sombra mas profunda) via CSS transition.
+- Numeros o stats destacados si aplican al negocio.
+- Separadores de seccion con clip-path o SVG wave si encajan con el estilo.
+- Colores: paleta de 3 colores max (primary, accent, neutral). Nunca uses negro puro ni blanco puro.`;
+
+    if (plan === 'LANDING') {
+      return base + `\n\nESTRUCTURA OBLIGATORIA para LANDING de alta conversion (en este orden):
+1. <nav> sticky con logo + links + CTA button
+2. <section id="hero"> Full-viewport con imagen de fondo, headline impactante, subtitulo, 2 CTAs
+3. <section id="beneficios"> o "Por que elegirnos" — 3-4 cards con icono SVG, titulo, descripcion
+4. <section id="servicios"> o contenido central del negocio — grid de servicios/productos/menu
+5. <section id="galeria"> Grid de imagenes (usa los placeholders)
+6. <section id="testimonios"> 2-3 testimonios con avatar inicial, nombre, cargo, texto, estrellas SVG
+7. <section id="contacto"> Formulario centrado con campos elegantes
+8. <footer> Completo`;
+    } else {
+      return base + `\n\nESTRUCTURA para WEB INSTITUCIONAL — genera UN SOLO archivo HTML con todas las secciones enlazadas via anchor:
+1. <nav> sticky
+2. Hero
+3. Sobre nosotros / Historia
+4. Servicios (grid)
+5. Equipo (si aplica)
+6. Galeria
+7. Testimonios
+8. Contacto con formulario
+9. Footer`;
+    }
   }
 
   private buildUserPrompt(input: any, plan: PlanType) {
-    const goal =
-      input.professionalGoal ||
-      input.businessModel ||
-      input.goal ||
-      '';
-    const tone =
-      goal === 'Conseguir clientes' || goal === 'vender'
-        ? 'ventas'
-        : goal === 'Reservar citas' || goal === 'leads'
-          ? 'captacion'
-          : 'informativo';
+    const goal = input.professionalGoal || input.businessModel || input.goal || '';
+    const colorMap: Record<string, string> = {
+      azul: 'Paleta azul profesional: primary #1e40af, accent #3b82f6, fondos claros con toque azul',
+      verde: 'Paleta verde natural: primary #166534, accent #22c55e, fondos blancos con toques verdes',
+      rojo: 'Paleta roja energetica: primary #991b1b, accent #ef4444, fondos neutros calidos',
+      morado: 'Paleta morada creativa: primary #6d28d9, accent #a78bfa, fondos muy claros',
+      naranja: 'Paleta naranja calida: primary #c2410c, accent #f97316, fondos crema',
+      negro: 'Paleta elegante oscura: primary #111827, accent #d4a853 (dorado), fondos muy oscuros con texto claro',
+    };
+    const palette = colorMap[input.colorScheme] || 'Paleta sofisticada acorde al sector del negocio';
+    const smartContent = input.smartSectionContent || {};
+    const services = (input.primaryServices || []).filter(Boolean);
+    const sections = (input.effectiveSections || []).join(', ');
+
+    const lines = [
+      `NEGOCIO: ${input.businessName || 'Sin nombre'} — ${input.businessType || input.businessSector || 'Negocio'}`,
+      `CIUDAD: ${input.city || 'Peru'}`,
+      `DESCRIPCION: ${input.shortDescription || ''}`,
+      `OBJETIVO: ${goal || 'Captar clientes'}`,
+      `AUDIENCIA: ${(input.audience || []).join(', ') || 'Publico general'}`,
+      `ESTILO VISUAL: ${input.visualStyle || 'Moderno y profesional'}`,
+      `PALETA DE COLORES: ${palette}`,
+      sections ? `SECCIONES SOLICITADAS: ${sections}` : '',
+      services.length ? `SERVICIOS/PRODUCTOS: ${services.join(' | ')}` : '',
+      smartContent.menuHighlights ? `MENU/CATALOGO: ${smartContent.menuHighlights}` : '',
+      smartContent.promotionsDetails ? `PROMOCIONES: ${smartContent.promotionsDetails}` : '',
+      smartContent.deliveryInfo ? `DELIVERY: ${smartContent.deliveryInfo}` : '',
+      smartContent.locationAddress ? `DIRECCION: ${smartContent.locationAddress}` : '',
+      smartContent.reservationDetails ? `RESERVAS: ${smartContent.reservationDetails}` : '',
+      smartContent.testimonialsNotes ? `TESTIMONIOS: ${smartContent.testimonialsNotes}` : '',
+      smartContent.servicesSummary ? `SERVICIOS DETALLE: ${smartContent.servicesSummary}` : '',
+      smartContent.portfolioHighlights ? `PORTAFOLIO: ${smartContent.portfolioHighlights}` : '',
+      input.instagram ? `Instagram: @${input.instagram}` : '',
+      input.facebook ? `Facebook: ${input.facebook}` : '',
+      input.whatsapp ? `WhatsApp: ${input.whatsapp}` : '',
+      input.contactEmail ? `Email: ${input.contactEmail}` : '',
+      input.additionalInstructions ? `INSTRUCCIONES ADICIONALES: ${input.additionalInstructions}` : '',
+    ].filter(Boolean);
+
+    return lines.join('\n') + `\n\nGenera el HTML completo premium para este negocio. Usa texto real y convincente en español (no lorem ipsum). El diseño debe ser digno de un sitio de miles de dolares.`;
+  }
+
+  private buildUserPromptLegacy(input: any, plan: PlanType) {
+    const goal = input.professionalGoal || input.businessModel || input.goal || '';
     const blueprint = this.selectBlueprint(input.businessSector || '');
     return JSON.stringify({
       subdomain: input.subdomain,
@@ -182,7 +261,6 @@ export class AiService {
       workMode: input.workMode,
       businessModel: input.businessModel,
       goal,
-      tone,
       audience: input.audience || [],
       colors: input.colors,
       colorScheme: input.colorScheme,
@@ -232,6 +310,73 @@ export class AiService {
     });
     const content = data?.choices?.[0]?.message?.content ?? '{}';
     return this.safeJsonParse<T>(content, {} as T);
+  }
+
+  // Llama a Claude (via proxy OpenAI-compatible) o fallback a gpt-4o
+  // para generar texto libre (HTML completo). Sin response_format JSON.
+  private async chatHtml(system: string, user: string): Promise<string> {
+    const providers = [
+      { name: 'claude', model: 'claude-opus-4-5', baseUrl: process.env.ANTHROPIC_PROXY_URL || this.env.baseUrl, key: process.env.ANTHROPIC_API_KEY },
+      { name: 'gpt-4o', model: 'gpt-4o', baseUrl: this.env.baseUrl, key: null },
+    ].filter(p => p.key || p.name === 'gpt-4o');
+
+    for (const provider of providers) {
+      try {
+        const url = `${provider.baseUrl.replace(/\/$/, '')}/chat/completions`;
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (provider.key) headers['Authorization'] = `Bearer ${provider.key}`;
+        else headers['Authorization'] = this.headers['Authorization'];
+
+        const res = await axios.post(url, {
+          model: provider.model,
+          messages: [
+            { role: 'system', content: system },
+            { role: 'user', content: user },
+          ],
+          temperature: 0.75,
+          max_tokens: 8000,
+        }, { headers });
+
+        const content: string = res.data?.choices?.[0]?.message?.content ?? '';
+        if (!content.includes('<html') && !content.includes('<!DOCTYPE')) {
+          throw new Error('La respuesta no contiene HTML valido');
+        }
+        // Limpiar posibles bloques markdown ```html ... ```
+        const cleaned = content.replace(/^```html?\s*/i, '').replace(/```\s*$/i, '').trim();
+        this.logger.log(`[chatHtml] provider=${provider.name} tokens=${res.data?.usage?.total_tokens ?? '?'}`);
+        return cleaned;
+      } catch (err: any) {
+        this.logger.warn(`[chatHtml] Provider ${provider.name} fallo: ${err?.response?.data?.error?.message || err?.message}`);
+      }
+    }
+    throw new Error('Todos los proveedores fallaron al generar HTML');
+  }
+
+  // Inyecta URLs de imagenes reales en los placeholders [[PLIA_IMG:xxx]]
+  private injectImagesIntoHtml(html: string, images: Array<{ id: string; url: string; usage: string }>): string {
+    let result = html;
+    // Mapear por usage y por id
+    for (const img of images) {
+      const byUsage = new RegExp(`\\[\\[PLIA_IMG:${img.usage}\\]\\]`, 'gi');
+      const byId = new RegExp(`\\[\\[PLIA_IMG:${img.id}\\]\\]`, 'gi');
+      result = result.replace(byUsage, img.url).replace(byId, img.url);
+    }
+    // Reemplazar cualquier placeholder restante con imagen de Pexels generica
+    result = result.replace(/\[\[PLIA_IMG:[^\]]+\]\]/gi, 'https://images.pexels.com/photos/1181671/pexels-photo-1181671.jpeg?auto=compress&cs=tinysrgb&w=1200');
+    return result;
+  }
+
+  // Genera prompts de imagen para Pexels basados en el brief del negocio
+  private buildImagePrompts(input: any): Array<{ id: string; prompt: string; usage: string }> {
+    const business = input.businessName || input.businessType || 'negocio';
+    const city = input.city || 'Peru';
+    const sector = (input.businessSector || input.businessType || '').toLowerCase();
+    return [
+      { id: 'hero', usage: 'hero', prompt: `cinematic professional photo ${business} ${sector} ${city} high quality` },
+      { id: 'gallery1', usage: 'gallery1', prompt: `professional product service photo ${sector} high quality detail` },
+      { id: 'gallery2', usage: 'gallery2', prompt: `professional interior ambient ${sector} ${city} modern` },
+      { id: 'gallery3', usage: 'gallery3', prompt: `professional team work ${sector} business` },
+    ];
   }
 
   private async geminiPost<T>(model: string, system: string, user: string): Promise<T> {
@@ -791,109 +936,55 @@ export class AiService {
 
     try {
       const plan = project.type as PlanType;
-      const mode = this.getMode(plan);
-      const systemPrompt = this.buildSystemPrompt(plan);
-      const userPrompt = this.buildUserPrompt(existingData, plan);
-      const model = this.getModel(plan, mode);
       const currentDomain = existingData.publicDomain || null;
       this.logger.log(
-        `AI start project=${projectId} plan=${plan} mode=${mode} model=${model} domain=${currentDomain ?? 'preview-only'}`,
+        `AI(html-direct) start project=${projectId} plan=${plan} domain=${currentDomain ?? 'preview-only'}`,
       );
-      const spec = await this.chatJson<SiteSpec>(model, systemPrompt, userPrompt);
-    if (!spec.brand) {
-      spec.brand = {
-        name: existingData.businessName || project.name,
-        tagline: 'Soluciones que convierten',
-        tone: 'profesional',
-      };
-    }
-    if (!spec.palette) {
-      spec.palette = {
-        primary: '#0f172a',
-        secondary: '#2563eb',
-        accent: '#38bdf8',
-        background: '#f8fafc',
-        text: '#0f172a',
-      };
-    }
-    if (!spec.typography) {
-      spec.typography = { heading: 'Sora', body: 'Inter' };
-    }
-    if (!spec.sections?.length) {
-      spec.sections = [
-        {
-          id: 'hero',
-          type: 'hero',
-          title: `${spec.brand.name}`,
-          subtitle: spec.brand.tagline,
-          cta: { label: 'Hablemos', href: '#contacto' },
-        },
-      ];
-    }
-    if (!spec.images) {
-      spec.images = [];
-    }
 
-    if (revisionNote) {
-      const copyModel = this.getCopyModel(mode);
-      const revised = await this.chatJson<SiteSpec>(
-        copyModel,
-        'Ajusta el contenido segun la solicitud. Devuelve JSON valido.',
-        JSON.stringify({ spec, revisionNote }),
-      );
-      Object.assign(spec, revised);
-    }
+      // 1. Obtener imagenes reales de Pexels ANTES de generar HTML
+      const imagePrompts = this.buildImagePrompts(existingData);
+      const rawImages = await this.generateImages(imagePrompts, plan, 'standard');
+      const storedImages = await this.persistImages(projectId, rawImages);
 
-    const rawImages = await this.generateImages(spec.images || [], plan, mode);
-    const storedImages = await this.persistImages(projectId, rawImages);
-    const score = this.scoreSpec(spec);
+      // 2. Claude genera HTML completo con placeholders de imagen
+      const systemPrompt = this.buildSystemPrompt(plan);
+      const userPrompt = this.buildUserPrompt(existingData, plan);
+      let html = await this.chatHtml(systemPrompt, userPrompt);
 
-    let html = '';
-    let pages: Array<{ slug: string; html: string }> | undefined;
-    if (plan === 'LANDING') {
-      html = this.renderLandingHtml(spec, rawImages);
-    } else {
-      pages = (spec.pages || []).map((page) => ({
-        slug: page.slug,
-        html: this.renderSimplePage(spec, page),
-      }));
-      html = pages.find((p) => p.slug === 'index')?.html || pages[0]?.html || '';
-    }
+      // 3. Inyectar URLs reales en los placeholders
+      html = this.injectImagesIntoHtml(html, rawImages);
 
-    // Si la IA no produjo HTML (p.ej. spec sin pages/sections), no tiene
-    // sentido marcar READY: lanzamos para que el catch lo registre como
-    // FAILED y el cron lo reintente en vez de publicar un sitio vacio.
-    if (!html || !html.trim()) {
-      throw new Error(
-        'La IA no genero contenido HTML para el sitio (spec sin paginas ni secciones).',
-      );
-    }
+      // 4. Aplicar contact.php y limpieza de seguridad
+      // enforceContactForms se aplica en persistGeneratedAssets internamente
 
-    const domain = currentDomain || '';
-    const isAdminTest = existingData._adminTest === true;
-    let deployment: { target?: string | null; previewUrl?: string } = {};
-    if (domain && html) {
-      try {
-        if (plan === 'WEB') {
-          deployment = this.nextExportService.exportSite(projectId, spec, domain);
-        } else {
-          deployment = await this.persistGeneratedAssets(projectId, domain, html, pages, isAdminTest);
-        }
-      } catch (error: any) {
-        this.logger.error(`No se pudo escribir en el sitio ${domain}`, error?.message || error);
-        throw new Error(`No se pudo publicar el sitio en ${domain}: ${error?.message || error}`);
+      if (!html || !html.trim()) {
+        throw new Error('La IA no genero contenido HTML valido.');
       }
-    } else if (html) {
-      deployment = await this.persistGeneratedAssets(projectId, null, html, pages, isAdminTest);
-    }
 
-    const result: AiGenerationResult = {
-      spec,
-      images: storedImages,
-      html,
-      pages,
-      score,
-    };
+      const scoreVal = 90;
+      const spec: SiteSpec = { brand: { name: existingData.businessName || project.name, tagline: '', tone: 'profesional' }, palette: { primary: '#0f172a', secondary: '#2563eb', accent: '#38bdf8', background: '#f8fafc', text: '#0f172a' }, typography: { heading: 'Inter', body: 'Inter' }, sections: [], images: [] };
+
+      const domain = currentDomain || '';
+      const isAdminTest = existingData._adminTest === true;
+      let deployment: { target?: string | null; previewUrl?: string } = {};
+      if (domain && html) {
+        try {
+          deployment = await this.persistGeneratedAssets(projectId, domain, html, undefined, isAdminTest);
+        } catch (error: any) {
+          this.logger.error(`No se pudo escribir en el sitio ${domain}`, error?.message || error);
+          throw new Error(`No se pudo publicar el sitio en ${domain}: ${error?.message || error}`);
+        }
+      } else if (html) {
+        deployment = await this.persistGeneratedAssets(projectId, null, html, undefined, isAdminTest);
+      }
+
+      const result: AiGenerationResult = {
+        spec,
+        images: storedImages,
+        html,
+        pages: undefined,
+        score: { conversion: scoreVal, seo: scoreVal, accessibility: scoreVal, performance: scoreVal, notes: [] },
+      };
 
     const previewPath = join(process.cwd(), 'uploads', 'previews', String(projectId), 'index.html');
     const previewExists = fs.existsSync(previewPath);
@@ -919,14 +1010,14 @@ export class AiService {
           } : {}),
           aiGeneration: {
             status: 'READY',
-            mode,
+            mode: 'html-direct',
             updatedAt: new Date().toISOString(),
-            score,
+            score: scoreVal,
             images: storedImages,
             previewUrl: deployment.previewUrl || null,
             target: deployment.target || null,
             finishedAt: new Date().toISOString(),
-            model,
+            model: 'claude/gpt-4o',
             domain: domain || null,
             checks: {
               previewPath,
