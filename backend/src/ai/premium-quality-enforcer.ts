@@ -38,9 +38,12 @@ const GSAP_BUNDLE_SCRIPT = `<script data-plia-premium-libs>
   }).then(function(){
     if (!window.gsap || !window.gsap.registerPlugin) return;
     window.gsap.registerPlugin(window.ScrollTrigger);
-    // Reveal-on-scroll automatico para cualquier elemento con [data-reveal]
-    // o las secciones <section> que no esten ya animadas.
-    document.querySelectorAll('[data-reveal], section > *:not([data-no-reveal])').forEach(function(el, i){
+    // Reveal-on-scroll SOLO para elementos que OPTARON explicitamente con
+    // [data-reveal]. NO aplicamos opacity:0 masivo a "section > *" porque si
+    // el trigger no dispara (elementos sobre el fold, layout shift) las
+    // secciones quedan invisibles y superpuestas. La animacion principal del
+    // sitio es la clase .reveal con IntersectionObserver (segura, con fallback).
+    document.querySelectorAll('[data-reveal]:not([data-no-reveal])').forEach(function(el, i){
       if (el.dataset.pliaRevealed) return;
       el.dataset.pliaRevealed = '1';
       window.gsap.from(el, {
