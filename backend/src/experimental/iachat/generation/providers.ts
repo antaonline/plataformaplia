@@ -171,6 +171,7 @@ export class ClaudeProvider implements CodegenProvider {
             headers: {
               'x-api-key': this.key,
               'anthropic-version': '2023-06-01',
+              'anthropic-beta': 'output-128k-2025-02-19',
               'content-type': 'application/json',
             },
             timeout: 180_000,
@@ -299,6 +300,7 @@ export class OpenAiProvider implements CodegenProvider {
               ...messages.map((m) => ({ role: m.role, content: m.content })),
             ],
             temperature: opts.temperature ?? 0.7,
+            max_tokens: opts.maxTokens ?? 16000,
             ...(opts.json ? { response_format: { type: 'json_object' } } : {}),
           },
           {
