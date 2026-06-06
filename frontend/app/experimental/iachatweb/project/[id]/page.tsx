@@ -10,7 +10,7 @@ import {
   Paperclip, Image as ImageIcon, Trash2, ChevronDown, Sidebar,
   Zap, FileText, Clock, Plus, Layout, Settings, LogOut, Search,
   MoreVertical, Eye, Code, Download, Copy, User, Bot, Save, Trash, ExternalLink,
-  MousePointer2
+  MousePointer2, Workflow
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -24,6 +24,7 @@ import {
 } from '@/components/experimental/OnboardingChat';
 import { Templates3DDialog } from '@/components/experimental/Templates3DDialog';
 import { CreativeStudioDialog } from '@/components/experimental/CreativeStudioDialog';
+import { NodeCanvasDialog } from '@/components/experimental/NodeCanvasDialog';
 import { CanvasViewport, CanvasViewportHandle } from '@/components/experimental/CanvasViewport';
 import { CanvasAssetDock } from '@/components/experimental/CanvasAssetDock';
 import type { CreativeAsset } from '@/components/experimental/CreativeStudioDialog';
@@ -83,6 +84,7 @@ export default function projectPage() {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showTemplates3D, setShowTemplates3D] = useState(false);
   const [showCreative, setShowCreative] = useState(false);
+  const [showNodeCanvas, setShowNodeCanvas] = useState(false);
   const onboardingCheckedRef = useRef(false);
   const [input, setInput] = useState('');
   const [viewport, setViewport] = useState<'desktop' | 'tablet' | 'mobile'>('desktop');
@@ -1611,6 +1613,17 @@ export default function projectPage() {
                           <span className="hidden sm:inline">Estudio</span>
                         </button>
 
+                        {/* Botón Workflow: canvas de nodos creativos */}
+                        <button
+                          type="button"
+                          onClick={() => setShowNodeCanvas(true)}
+                          title="Workflow Creativo — nodos imagen→video"
+                          className="h-9 px-3 flex items-center gap-1.5 rounded-xl hover:bg-slate-200/50 transition-colors text-slate-600 text-xs font-semibold"
+                        >
+                          <Workflow className="h-3.5 w-3.5 text-fuchsia-500" />
+                          <span className="hidden sm:inline">Workflow</span>
+                        </button>
+
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button variant="ghost" className="h-9 px-3 text-xs font-semibold text-slate-600 gap-2 hover:bg-slate-200/50 rounded-xl">
@@ -2010,6 +2023,23 @@ export default function projectPage() {
               `Insértalo donde mejor quede (hero, galería, o donde tenga sentido para ${kind === 'video' ? 'un fondo cinematográfico' : 'mostrar el producto/ambiente'}). ` +
               (asset.prompt ? `Contexto: "${asset.prompt}".` : ''),
           );
+        }}
+      />
+      {/* Workflow Creativo: canvas de nodos imagen→video (Fase D). */}
+      <NodeCanvasDialog
+        open={showNodeCanvas}
+        apiBase={apiBase}
+        authToken={typeof window !== 'undefined' ? localStorage.getItem('access_token') || '' : ''}
+        onClose={() => setShowNodeCanvas(false)}
+        onUseAsset={(url, kind) => {
+          setShowNodeCanvas(false);
+          // El resultado del workflow se agrega al dock de assets para
+          // arrastrarlo, y se anuncia por chat.
+          setCreativeAssets((prev) => [
+            { id: `wf-${Date.now()}`, kind, url, createdAt: Date.now() },
+            ...prev,
+          ]);
+          toast.success(`${kind === 'video' ? 'Video' : 'Imagen'} agregado al dock de assets`);
         }}
       />
       <Toaster />
