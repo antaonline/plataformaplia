@@ -147,60 +147,136 @@ export class AiService {
   }
 
   private buildSystemPrompt(plan: PlanType) {
-    const base = `Eres un diseñador y desarrollador web de clase mundial especializado en sitios de conversion premium.
-Tu trabajo es generar HTML completo (<!DOCTYPE html>...</html>) con CSS moderno embebido, de nivel Stripe / Linear / Airbnb.
+    const base = `Eres el mejor diseñador y desarrollador frontend del mundo. Creas sitios web que ganan premios Awwwards, que valen millones de dólares. Tu código es impecable, tu diseño es de lujo.
 
-REGLAS ABSOLUTAS — nunca las violes:
-1. Devuelve SOLO el HTML completo. Sin markdown, sin bloques de codigo, sin explicaciones. Empieza con <!DOCTYPE html>.
-2. Todo el CSS va embebido en <style> dentro de <head>. Cero dependencias externas excepto Google Fonts (via @import).
-3. Para imagenes usa EXACTAMENTE estos placeholders como atributo src= de etiquetas <img> (NUNCA como CSS background-image):
-   - Hero: <img src="[[PLIA_IMG:hero]]" alt="hero" class="hero-bg">
-   - Galeria 1: <img src="[[PLIA_IMG:gallery1]]" alt="imagen 1">
-   - Galeria 2: <img src="[[PLIA_IMG:gallery2]]" alt="imagen 2">
-   - Galeria 3: <img src="[[PLIA_IMG:gallery3]]" alt="imagen 3">
-   Para el efecto hero full-bleed: pon la imagen dentro del section con position:absolute, inset:0, width:100%, height:100%, object-fit:cover, z-index:0. El contenido va en un div con position:relative, z-index:1.
-   NUNCA uses background-image:url() para estos placeholders. Siempre <img src="[[PLIA_IMG:xxx]]">.
-4. PROHIBIDO usar emojis. Para iconos usa SVG inline (paths simples, elegantes).
-5. Formulario de contacto con action="/contact.php" method="POST". Campos: nombre, email, mensaje. Boton de envio estilizado.
-6. JavaScript minimo embebido en <script> al final: solo para menu hamburguesa mobile, smooth scroll, y animaciones de entrada (IntersectionObserver fade-in/slide-up).
-7. 100% responsive con media queries. Mobile-first.
-8. Usa variables CSS (:root) para colores y tipografia. Paleta sofisticada segun el negocio.
-9. Cada seccion debe tener padding generoso (80-120px vertical). Separacion visual clara.
-10. Footer completo con copyright, redes sociales (SVG icons), y links de navegacion.
+SALIDA: SOLO el HTML completo (<!DOCTYPE html> hasta </html>). Cero markdown. Cero explicaciones. El primer caracter es "<".
 
-ESTANDARES DE DISEÑO PREMIUM obligatorios:
-- Hero: full-viewport con imagen de fondo (object-fit:cover), overlay gradient semitransparente, titulo grande (clamp(2.5rem,6vw,5rem)), subtitulo, 2 CTAs (primario + secundario outline).
-- Tipografia: Google Fonts premium (Playfair Display / DM Sans / Sora / Plus Jakarta Sans segun el tono del negocio). Font-weights variados (300, 400, 600, 700).
-- Sombras: box-shadow multicapa (0 1px 2px rgba(0,0,0,.06), 0 8px 24px rgba(0,0,0,.12)).
-- Bordes redondeados: 12-24px en cards, 999px en botones pill.
-- Gradientes sutiles en fondos de secciones alternadas.
-- Cards con hover effect (transform: translateY(-4px), sombra mas profunda) via CSS transition.
-- Numeros o stats destacados si aplican al negocio.
-- Separadores de seccion con clip-path o SVG wave si encajan con el estilo.
-- Colores: paleta de 3 colores max (primary, accent, neutral). Nunca uses negro puro ni blanco puro.`;
+═══════════════════════════════════════════
+REGLAS DE IMÁGENES — CRÍTICO — NUNCA VIOLAR
+═══════════════════════════════════════════
+Las imágenes se inyectan DESPUÉS. Usa EXACTAMENTE estos placeholders como atributo src:
+  Hero de fondo:  src="[[PLIA_IMG:hero]]"
+  Galería foto 1: src="[[PLIA_IMG:gallery1]]"
+  Galería foto 2: src="[[PLIA_IMG:gallery2]]"
+  Galería foto 3: src="[[PLIA_IMG:gallery3]]"
 
-    if (plan === 'LANDING') {
-      return base + `\n\nESTRUCTURA OBLIGATORIA para LANDING de alta conversion (en este orden):
-1. <nav> sticky con logo + links + CTA button
-2. <section id="hero"> Full-viewport con imagen de fondo, headline impactante, subtitulo, 2 CTAs
-3. <section id="beneficios"> o "Por que elegirnos" — 3-4 cards con icono SVG, titulo, descripcion
-4. <section id="servicios"> o contenido central del negocio — grid de servicios/productos/menu
-5. <section id="galeria"> Grid de imagenes (usa los placeholders)
-6. <section id="testimonios"> 2-3 testimonios con avatar inicial, nombre, cargo, texto, estrellas SVG
-7. <section id="contacto"> Formulario centrado con campos elegantes
-8. <footer> Completo`;
-    } else {
-      return base + `\n\nESTRUCTURA para WEB INSTITUCIONAL — genera UN SOLO archivo HTML con todas las secciones enlazadas via anchor:
-1. <nav> sticky
-2. Hero
-3. Sobre nosotros / Historia
-4. Servicios (grid)
-5. Equipo (si aplica)
-6. Galeria
-7. Testimonios
-8. Contacto con formulario
-9. Footer`;
-    }
+Para el hero full-bleed con imagen:
+<section class="hero">
+  <img src="[[PLIA_IMG:hero]]" class="hero-bg" alt="" aria-hidden="true" fetchpriority="high">
+  <div class="hero-overlay"></div>
+  <div class="hero-content">...</div>
+</section>
+
+CSS obligatorio para el hero:
+.hero { position:relative; min-height:100vh; display:flex; align-items:center; overflow:hidden; }
+.hero-bg { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; object-position:center; z-index:0; }
+.hero-overlay { position:absolute; inset:0; background:linear-gradient(135deg,rgba(0,0,0,.65) 0%,rgba(0,0,0,.25) 100%); z-index:1; }
+.hero-content { position:relative; z-index:2; max-width:900px; margin:0 auto; padding:0 24px; }
+
+Para imágenes de galería: <img src="[[PLIA_IMG:gallery1]]" loading="lazy" alt="descripcion" class="gallery-img">
+NUNCA uses background-image:url() con estos placeholders.
+
+═══════════════════════════════════════════
+CSS PREMIUM — PATRONES OBLIGATORIOS
+═══════════════════════════════════════════
+@import url('https://fonts.googleapis.com/css2?family=FONT_HEADING:wght@400;600;700;800&family=FONT_BODY:wght@300;400;500;600&display=swap');
+
+:root {
+  --primary: #HEX;       /* color principal de la marca */
+  --primary-dark: #HEX;  /* versión oscura para hovers */
+  --accent: #HEX;        /* color de acento/CTA */
+  --surface: #HEX;       /* fondo de cards (blanco cálido o gris muy claro) */
+  --bg: #HEX;            /* fondo general de la página */
+  --text: #HEX;          /* texto principal (nunca #000 puro) */
+  --text-muted: #HEX;    /* texto secundario */
+  --border: rgba(0,0,0,.08);
+  --shadow-sm: 0 1px 3px rgba(0,0,0,.06), 0 4px 12px rgba(0,0,0,.08);
+  --shadow-md: 0 4px 6px rgba(0,0,0,.05), 0 10px 30px rgba(0,0,0,.12);
+  --shadow-lg: 0 10px 15px rgba(0,0,0,.04), 0 20px 50px rgba(0,0,0,.16);
+  --radius-sm: 8px;
+  --radius-md: 16px;
+  --radius-lg: 24px;
+  --radius-full: 9999px;
+  --transition: all .25s cubic-bezier(.4,0,.2,1);
+}
+
+Botones:
+.btn-primary { display:inline-flex; align-items:center; gap:8px; padding:14px 32px; background:var(--accent); color:#fff; border:none; border-radius:var(--radius-full); font-weight:600; font-size:1rem; text-decoration:none; cursor:pointer; transition:var(--transition); }
+.btn-primary:hover { transform:translateY(-2px); box-shadow:var(--shadow-md); filter:brightness(1.08); }
+.btn-outline { display:inline-flex; align-items:center; gap:8px; padding:13px 31px; border:2px solid rgba(255,255,255,.7); color:#fff; border-radius:var(--radius-full); font-weight:600; font-size:1rem; text-decoration:none; cursor:pointer; transition:var(--transition); backdrop-filter:blur(4px); }
+.btn-outline:hover { background:rgba(255,255,255,.15); border-color:#fff; }
+
+Cards:
+.card { background:var(--surface); border-radius:var(--radius-md); padding:32px; box-shadow:var(--shadow-sm); border:1px solid var(--border); transition:var(--transition); }
+.card:hover { transform:translateY(-6px); box-shadow:var(--shadow-lg); }
+
+Nav sticky:
+nav { position:sticky; top:0; z-index:100; background:rgba(255,255,255,.92); backdrop-filter:blur(12px); border-bottom:1px solid var(--border); padding:16px 24px; display:flex; align-items:center; justify-content:space-between; }
+
+Animaciones de entrada (incluir este JS al final):
+const observer=new IntersectionObserver(entries=>entries.forEach(e=>{if(e.isIntersecting){e.target.classList.add('visible');}}),{threshold:.12});
+document.querySelectorAll('.fade-up').forEach(el=>observer.observe(el));
+CSS: .fade-up{opacity:0;transform:translateY(32px);transition:opacity .7s ease,transform .7s ease;} .fade-up.visible{opacity:1;transform:none;}
+
+Inputs de formulario:
+input,textarea { width:100%; padding:14px 18px; border:2px solid var(--border); border-radius:var(--radius-sm); font-size:1rem; font-family:inherit; transition:var(--transition); background:var(--surface); }
+input:focus,textarea:focus { outline:none; border-color:var(--accent); box-shadow:0 0 0 4px rgba(VAR_ACCENT_RGB,.12); }
+
+═══════════════════════════════════════════
+ICONOS SVG — obligatorio en lugar de emojis
+═══════════════════════════════════════════
+Usa SVGs inline de 24x24px. Ejemplos:
+Checkmark: <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+Flecha: <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+Teléfono: <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.81a19.79 19.79 0 01-3.07-8.68A2 2 0 012 .18h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 7.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>
+Crea SVGs apropiados para el sector del negocio.
+
+═══════════════════════════════════════════
+TIPOGRAFÍA PREMIUM según el sector
+═══════════════════════════════════════════
+Gastronómico/elegante: Playfair Display (heading) + DM Sans (body)
+Tecnología/startup: Sora (heading) + Inter (body)
+Salud/bienestar: Plus Jakarta Sans (heading) + Nunito (body)
+Profesional/corporativo: Manrope (heading) + Inter (body)
+Creativo/artístico: Fraunces (heading) + DM Sans (body)
+Local/amigable: Poppins (heading) + Lato (body)
+
+REGLAS tipográficas:
+- Heading hero: font-size: clamp(2.8rem, 6vw, 5.5rem); line-height:1.1; font-weight:800; letter-spacing:-0.02em;
+- Subheading secciones: font-size: clamp(1.8rem, 4vw, 3rem); font-weight:700;
+- Body: font-size: clamp(1rem, 1.5vw, 1.125rem); line-height:1.7;
+- Nunca uses menos de 16px para texto de contenido.`;
+
+    const landingStructure = `
+
+═══════════════════════════════════════════
+ESTRUCTURA LANDING DE ALTA CONVERSIÓN
+═══════════════════════════════════════════
+1. <nav> — sticky, logo + links de navegacion + CTA button verde/accent
+2. <section class="hero"> — min-height:100vh, imagen de fondo con overlay, headline IMPACTANTE (clamp grande), subtitulo, 2 CTAs lado a lado, scroll-down indicator SVG
+3. <section class="stats"> — 3-4 números destacados (stats/logros del negocio) con línea separadora superior. Fondo ligeramente diferente.
+4. <section class="benefits"> — "¿Por qué elegirnos?" — 3-4 cards con icono SVG grande (48px), título, descripción. Grid responsivo.
+5. <section class="services"> — Servicios/productos/menú específicos del negocio. Cards con imagen o icono, nombre, descripción corta, precio si aplica.
+6. <section class="gallery"> — Mosaico de 3 imágenes con los placeholders. Layout asimétrico si es posible (CSS Grid con diferentes tamaños).
+7. <section class="testimonials"> — 2-3 testimonios. Cards con comilla SVG decorativa, texto entrecomillado, avatar circular (inicial del nombre con color de fondo), nombre en bold, cargo/tipo de cliente, 5 estrellas SVG.
+8. <section class="cta-banner"> — Banner de llamada a acción final. Fondo con gradiente del color primario. Texto grande + botón contrastante.
+9. <section class="contact"> — Formulario: nombre, email, teléfono, mensaje. Layout 2 columnas en desktop (info de contacto izq + form der). action="/contact.php" method="POST".
+10. <footer> — Logo, descripción corta, links de navegación en columnas, redes sociales con SVG icons, copyright. Fondo oscuro contrastante.
+
+IMPORTANTE: añade class="fade-up" a cada section para las animaciones de entrada.`;
+
+    const webStructure = `
+
+═══════════════════════════════════════════
+ESTRUCTURA WEB INSTITUCIONAL
+═══════════════════════════════════════════
+Mismas secciones que landing pero añade:
+- Sección "Sobre nosotros" con historia/misión/visión y foto del equipo
+- Sección "Equipo" si aplica (cards con foto circular, nombre, cargo)
+- Navbar con más links de navegación
+Todo en un solo HTML con anchors.`;
+
+    return base + (plan === 'LANDING' ? landingStructure : webStructure);
   }
 
   private buildUserPrompt(input: any, plan: PlanType) {
@@ -323,8 +399,8 @@ ESTANDARES DE DISEÑO PREMIUM obligatorios:
         { role: 'system', content: system },
         { role: 'user', content: user },
       ],
-      temperature: 0.72,
-      max_tokens: 10000,
+      temperature: 0.68,
+      max_tokens: 16000,
     });
     const content: string = data?.choices?.[0]?.message?.content ?? '';
     this.logger.log(`[chatHtml] tokens=${data?.usage?.total_tokens ?? '?'}`);
@@ -348,16 +424,36 @@ ESTANDARES DE DISEÑO PREMIUM obligatorios:
     return result;
   }
 
-  // Genera prompts de imagen para Pexels basados en el brief del negocio
-  private buildImagePrompts(input: any): Array<{ id: string; prompt: string; usage: string }> {
-    const business = input.businessName || input.businessType || 'negocio';
+  // Modelo híbrido de imágenes: Pexels para ambientales, IA para únicas/específicas
+  // strategy: 'pexels' = solo Pexels | 'ai' = solo IA generativa | 'hybrid' = Pexels primero, IA fallback
+  private buildImagePrompts(input: any): Array<{ id: string; prompt: string; usage: string; strategy: 'pexels' | 'ai' | 'hybrid' }> {
+    const business = input.businessName || input.businessType || 'negocio profesional';
     const city = input.city || 'Peru';
-    const sector = (input.businessSector || input.businessType || '').toLowerCase();
+    const sector = (input.businessSector || input.businessType || 'business').toLowerCase();
+    const style = (input.visualStyle || '').toLowerCase();
+    const isLuxury = style.includes('elegante') || style.includes('sofisticado') || style.includes('lujo');
+
     return [
-      { id: 'hero', usage: 'hero', prompt: `cinematic professional photo ${business} ${sector} ${city} high quality` },
-      { id: 'gallery1', usage: 'gallery1', prompt: `professional product service photo ${sector} high quality detail` },
-      { id: 'gallery2', usage: 'gallery2', prompt: `professional interior ambient ${sector} ${city} modern` },
-      { id: 'gallery3', usage: 'gallery3', prompt: `professional team work ${sector} business` },
+      // Hero: Pexels (foto real cinematic de fondo, gratis y de alta calidad)
+      {
+        id: 'hero', usage: 'hero', strategy: 'pexels',
+        prompt: `cinematic ${isLuxury ? 'luxury elegant' : 'modern professional'} ${sector} ${city} high quality wide shot`,
+      },
+      // Gallery 1: Pexels (foto de producto/servicio real)
+      {
+        id: 'gallery1', usage: 'gallery1', strategy: 'pexels',
+        prompt: `professional high quality close detail ${sector} product service photo`,
+      },
+      // Gallery 2: IA generativa (imagen única y branded del negocio)
+      {
+        id: 'gallery2', usage: 'gallery2', strategy: 'ai',
+        prompt: `Professional photorealistic image for ${business}, a ${sector} business in ${city}. High quality, modern, elegant. Suitable for a premium website.`,
+      },
+      // Gallery 3: Pexels (ambiente/interior)
+      {
+        id: 'gallery3', usage: 'gallery3', strategy: 'pexels',
+        prompt: `beautiful interior ambient ${sector} ${city} modern lifestyle professional`,
+      },
     ];
   }
 
@@ -509,24 +605,40 @@ ESTANDARES DE DISEÑO PREMIUM obligatorios:
     return url;
   }
 
-  private async generateImages(prompts: Array<{ id: string; prompt: string; usage: string }>, plan: PlanType, mode: AiMode) {
+  private async generateImages(prompts: Array<{ id: string; prompt: string; usage: string; strategy?: string }>, plan: PlanType, mode: AiMode) {
     const limit = this.getImageLimit(plan, mode);
     const selected = prompts.slice(0, limit);
     const images: Array<{ id: string; url: string; usage: string; source?: 'ai' | 'pexels' }> = [];
 
     const isGptImage = /^gpt-image/i.test(this.env.imageModel);
     for (const prompt of selected) {
-      // 1) Pexels primero: gratis, rapido, real. Solo si no es graphic-design.
-      const pex = await this.tryPexelsForPrompt(prompt);
-      if (pex) {
-        images.push({
-          id: prompt.id,
-          url: pex.sourceUrl, // URL original de Pexels (para referencia)
-          usage: prompt.usage,
-          source: 'pexels',
-          buffer: pex.buffer, // buffer real para persistImages
-        } as any);
-        continue;
+      const strategy = (prompt as any).strategy || 'hybrid';
+
+      // Pexels para estrategias 'pexels' o 'hybrid'
+      if (strategy !== 'ai') {
+        const pex = await this.tryPexelsForPrompt(prompt);
+        if (pex) {
+          images.push({
+            id: prompt.id,
+            url: pex.sourceUrl,
+            usage: prompt.usage,
+            source: 'pexels',
+            buffer: pex.buffer,
+          } as any);
+          continue;
+        }
+        // Si strategy es 'pexels' y Pexels falló, usar fallback genérico en vez de gastar IA
+        if (strategy === 'pexels') {
+          this.logger.warn(`[images] Pexels fallo para ${prompt.id}, usando imagen de reserva`);
+          images.push({
+            id: prompt.id,
+            url: `https://images.pexels.com/photos/1181671/pexels-photo-1181671.jpeg?auto=compress&cs=tinysrgb&w=1200`,
+            usage: prompt.usage,
+            source: 'pexels',
+            isPexelsFallback: true,
+          } as any);
+          continue;
+        }
       }
       // 2) Fallback: generar con IA.
       try {
@@ -844,6 +956,12 @@ ESTANDARES DE DISEÑO PREMIUM obligatorios:
     for (let idx = 0; idx < images.length; idx++) {
       const img = images[idx];
       try {
+        // Pexels fallback URL directa (sin buffer): usar la URL de Pexels directamente
+        if (img.source === 'pexels' && (img as any).isPexelsFallback) {
+          results.push({ ...img });
+          continue;
+        }
+
         // Pexels: tiene buffer real (JPEG/PNG descargado). Guardarlo directamente.
         if (img.source === 'pexels' && img.buffer) {
           let savedBuf: Buffer = img.buffer;
