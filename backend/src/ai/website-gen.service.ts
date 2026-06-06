@@ -94,7 +94,10 @@ seccion asimetrica, alguna con imagen grande de un lado, alguna con fondo oscuro
 @Injectable()
 export class WebsiteGenService {
   private readonly logger = new Logger(WebsiteGenService.name);
-  private provider = new FallbackProvider([PROVIDERS.claude, PROVIDERS.openai]);
+  // Plan: Claude primero (creativo, 3k tokens, rápido)
+  private planProvider = new FallbackProvider([PROVIDERS.claude, PROVIDERS.openai]);
+  // Render: GPT-4o primero (16k tokens, sin timeout), Claude como respaldo
+  private renderProvider = new FallbackProvider([PROVIDERS.openai, PROVIDERS.claude]);
 
   private stripFences(s: string): string {
     let out = (s || '').trim();
@@ -150,7 +153,7 @@ productos, no generes prompts adicionales para productos — usa las del cliente
     // El logo va primero en el array de imagenes multimodales para que la
     // IA lo VEA y pueda identificarlo (por su forma/transparencia/copy).
     const multimodalImages = clientLogo ? [clientLogo, ...clientImages] : clientImages;
-    const raw = await this.provider.complete(
+    const raw = await this.planProvider.complete(
       system,
       [
         {
@@ -295,17 +298,12 @@ SALIDA: devuelve SOLO el HTML completo de la pagina pedida. Sin explicaciones, s
       : validClientImages;
     for (const page of plan.pages) {
       const user = `Brief del negocio:\n${brief}\n\nGenera AHORA la pagina: ${page.file}\nProposito: ${page.purpose}${hasLogo ? '\nNota: la PRIMERA imagen adjunta es el LOGO del cliente.' : ''}\nDevuelve solo el HTML completo.`;
-      const raw = await this.provider.complete(
+      const raw = await this.renderProvider.complete(
         system,
         [{ role: 'user', content: user }],
         {
           model: MODEL_SONNET,
-          // 16k es el máximo que acepta GPT-4o (fallback). Claude con beta
-          // header intenta más, pero si no funciona cae a 8192 que con
-          // Tailwind CDN es suficiente para una landing completa.
-          maxTokens: 16000,
-          // 0.55 es mas calibrado: variedad creativa pero menos drift
-          // hacia errores tipo JSX literal o Place IDs inventados.
+          maxTokens: 16000, // GPT-4o soporta hasta 16384, Claude hasta 8192
           temperature: 0.55,
           images: multimodalImages,
         },
@@ -385,13 +383,13 @@ ${revisionNote.trim()}
 
 Devuelve el HTML completo de la pagina con el cambio aplicado. Si esta solicitud no aplica a esta pagina (porque trata de otra seccion/pagina), devuelve el mismo HTML sin modificar.`;
 
-      const raw = await this.provider.complete(
+      const raw = await this.renderProvider.complete(
         system,
         [{ role: 'user', content: userMsg }],
         {
           model: MODEL_SONNET,
-          maxTokens: 32000, // mas alto: el HTML de entrada puede ser grande
-          temperature: 0.3, // baja temperatura = ediciones predecibles
+          maxTokens: 16000,
+          temperature: 0.3,
           images: multimodalImages,
         },
       );
