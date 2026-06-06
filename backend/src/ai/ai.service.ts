@@ -220,10 +220,12 @@ Cards:
 Nav sticky:
 nav { position:sticky; top:0; z-index:100; background:rgba(255,255,255,.92); backdrop-filter:blur(12px); border-bottom:1px solid var(--border); padding:16px 24px; display:flex; align-items:center; justify-content:space-between; }
 
-Animaciones de entrada (incluir este JS al final):
-const observer=new IntersectionObserver(entries=>entries.forEach(e=>{if(e.isIntersecting){e.target.classList.add('visible');}}),{threshold:.12});
-document.querySelectorAll('.fade-up').forEach(el=>observer.observe(el));
-CSS: .fade-up{opacity:0;transform:translateY(32px);transition:opacity .7s ease,transform .7s ease;} .fade-up.visible{opacity:1;transform:none;}
+Animaciones de entrada — IMPORTANTE: los elementos deben ser VISIBLES por defecto. La animación es opcional:
+CSS: .fade-up{opacity:1;transform:none;transition:opacity .7s ease,transform .7s ease;}
+JS al final del body (opcional, mejora si el JS carga):
+document.querySelectorAll('.fade-up').forEach(el=>{el.style.opacity='0';el.style.transform='translateY(28px)';});
+const obs=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.style.opacity='1';e.target.style.transform='none';}}),{threshold:.1});
+document.querySelectorAll('.fade-up').forEach(el=>obs.observe(el));
 
 Inputs de formulario:
 input,textarea { width:100%; padding:14px 18px; border:2px solid var(--border); border-radius:var(--radius-sm); font-size:1rem; font-family:inherit; transition:var(--transition); background:var(--surface); color:var(--text); }
@@ -252,7 +254,20 @@ REGLAS tipográficas:
 - Heading hero: font-size: clamp(2.8rem, 6vw, 5.5rem); line-height:1.1; font-weight:800; letter-spacing:-0.02em;
 - Subheading secciones: font-size: clamp(1.8rem, 4vw, 3rem); font-weight:700;
 - Body: font-size: clamp(1rem, 1.5vw, 1.125rem); line-height:1.7;
-- Nunca uses menos de 16px para texto de contenido.`;
+- Nunca uses menos de 16px para texto de contenido.
+
+═══════════════════════════════════════════
+EFECTOS VISUALES NIVEL AWWWARDS
+═══════════════════════════════════════════
+- Hero: palabra clave en color accent con font-style:italic (contraste dramático)
+- Stats section: números grandes (font-size:4rem, font-weight:900) con línea decorativa arriba
+- Cards de servicios: borde izquierdo de 3px en color accent, no cuadradas sino con padding asimétrico
+- Galería: CSS Grid con grid-template-areas para layout asimétrico (imagen hero grande + 2 pequeñas)
+- Testimonios: comilla decorativa gigante (font-size:8rem, opacity:.08) en posición absoluta detrás del texto
+- Separadores de sección: usar <div class="divider"> con clip-path:polygon(0 0,100% 0,100% 60%,0 100%) en el color de la sección siguiente
+- Footer: columnas bien espaciadas, línea superior sutil, copyright centrado abajo
+- CSS para glassmorphism en la nav al hacer scroll: ya está en el nav sticky con backdrop-filter:blur(12px)
+- NO uses emojis. Cada icono SVG debe ser único y apropiado para el contenido que acompaña.`;
 
     const landingStructure = `
 
@@ -426,7 +441,7 @@ Todo en un solo HTML con anchors.`;
           'https://api.anthropic.com/v1/messages',
           {
             model: anthropicModel,
-            max_tokens: 8000,
+            max_tokens: 16000,
             temperature: 0.68,
             system,
             messages: [{ role: 'user', content: userContent }],
@@ -435,6 +450,7 @@ Todo en un solo HTML con anchors.`;
             headers: {
               'x-api-key': anthropicKey,
               'anthropic-version': '2023-06-01',
+              'anthropic-beta': 'output-128k-2025-02-19',
               'Content-Type': 'application/json',
             },
             timeout: 180000,
@@ -508,6 +524,31 @@ Todo en un solo HTML con anchors.`;
   }
 
   // Inyecta meta tags SEO básicos en el <head>
+  // Reemplaza hrefs de redes sociales inventados por Claude con los reales del cliente
+  private injectSocialLinks(html: string, data: any): string {
+    let result = html;
+    const socials: Record<string, string> = {
+      instagram: data.instagram ? `https://instagram.com/${data.instagram.replace('@', '')}` : '',
+      facebook: data.facebook ? (data.facebook.startsWith('http') ? data.facebook : `https://facebook.com/${data.facebook}`) : '',
+      whatsapp: data.whatsapp ? `https://wa.me/${data.whatsapp.replace(/\D/g, '')}` : '',
+      tiktok: data.tiktok ? `https://tiktok.com/@${data.tiktok.replace('@', '')}` : '',
+    };
+    // Reemplazar hrefs genéricos que Claude suele inventar
+    const genericPatterns: Record<string, RegExp[]> = {
+      instagram: [/href="https?:\/\/(www\.)?instagram\.com\/[^"]*"/g],
+      facebook: [/href="https?:\/\/(www\.)?facebook\.com\/[^"]*"/g],
+      whatsapp: [/href="https?:\/\/(wa\.me|api\.whatsapp\.com|whatsapp\.com)\/[^"]*"/g],
+      tiktok: [/href="https?:\/\/(www\.)?tiktok\.com\/[^"]*"/g],
+    };
+    for (const [network, url] of Object.entries(socials)) {
+      if (!url) continue;
+      for (const pattern of genericPatterns[network] || []) {
+        result = result.replace(pattern, `href="${url}"`);
+      }
+    }
+    return result;
+  }
+
   private injectSeoMeta(html: string, data: any): string {
     const title = `${data.businessName || 'Bienvenidos'} — ${data.city || 'Peru'}`;
     const description = (data.shortDescription || `${data.businessName} en ${data.city}`).slice(0, 160);
@@ -1195,25 +1236,32 @@ Todo en un solo HTML con anchors.`;
       const userPrompt = this.buildUserPrompt(existingData, plan);
       let html = await this.chatHtml(systemPrompt, userPrompt, clientLogoUrl, clientImages);
 
-      // Validar que el HTML esté completo
+      // Si el HTML fue truncado, cerrar limpiamente desde el último tag completo
       if (!html.includes('</html>')) {
-        this.logger.warn(`[html-direct] HTML truncado (${html.length} chars, sin </html>). Completando...`);
-        // Estrategia: pedir a Claude que complete el HTML truncado — mucho más barato que regenerar todo
-        const truncated = html.slice(-2000); // últimas 2000 chars como contexto
-        const completionPrompt = `El siguiente HTML fue truncado por límite de tokens. Continúa exactamente desde donde se cortó y cierra todos los tags abiertos terminando con </body></html>. NO repitas lo que ya está. Solo escribe la continuación:\n\n...${truncated}`;
-        const completion = await this.chatHtml(
-          'Eres un experto en HTML. Continúa y cierra el HTML truncado que te dan. Devuelve SOLO la continuación del código, sin repetir lo anterior.',
-          completionPrompt,
-        );
-        // Unir el HTML original con la continuación, evitando duplicar el overlap
-        const overlapEnd = completion.trimStart().slice(0, 100);
-        const overlapIdx = html.lastIndexOf(overlapEnd.slice(0, 30));
-        html = (overlapIdx > html.length - 500 ? html.slice(0, overlapIdx) : html) + '\n' + completion;
-        this.logger.log(`[html-direct] HTML completado: ${html.length} chars`);
+        this.logger.warn(`[html-direct] HTML truncado (${html.length} chars). Cerrando limpiamente...`);
+        // Encontrar el último punto de cierre seguro
+        const candidates = ['</footer>', '</section>', '</main>', '</article>', '</div>'];
+        let cutPoint = -1;
+        for (const tag of candidates) {
+          const idx = html.lastIndexOf(tag);
+          if (idx > html.length * 0.3) { // al menos 30% del HTML
+            cutPoint = idx + tag.length;
+            break;
+          }
+        }
+        if (cutPoint > 0) {
+          html = html.slice(0, cutPoint) + '\n</body>\n</html>';
+          this.logger.log(`[html-direct] HTML cerrado limpiamente en ${cutPoint} chars`);
+        } else {
+          html = html + '\n</body>\n</html>';
+        }
       }
 
       // 3. Inyectar URLs absolutas reales de imágenes
       html = this.injectImagesIntoHtml(html, storedImages);
+
+      // Inyectar redes sociales reales del cliente (reemplaza cualquier href inventado por Claude)
+      html = this.injectSocialLinks(html, existingData);
 
       // 4. Enforcer de contact form (PHP handler real)
       html = enforceContactForms(html, existingData.subdomain || '');
