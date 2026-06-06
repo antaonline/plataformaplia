@@ -14,6 +14,9 @@ export interface SitePlan {
   };
   pages: { file: string; purpose: string }[];
   imagePrompts: { id: string; prompt: string; usage: string }[];
+  // Secciones de la landing decididas por la IA según el brief del cliente.
+  // Cada una: id (anchor), title (nombre visible), brief (qué debe contener/narrar).
+  sections?: { id: string; title: string; brief: string }[];
 }
 
 const MODEL_SONNET =
@@ -116,13 +119,35 @@ export class WebsiteGenService {
       mode === 'LANDING'
         ? `Es una LANDING PREMIUM: EXACTAMENTE 1 pagina de ventas (index.html), pero con 8-11 secciones distintas y ricas (hero, stats, servicios, galeria, storytelling, testimonios, FAQ, CTA final, ubicacion/mapa, contacto, footer). PROHIBIDO paginas internas.`
         : `Es una WEB INSTITUCIONAL PREMIUM: entre 2 y 5 paginas internas (index.html + p.ej. nosotros.html, servicios.html, proyectos.html, contacto.html). Cada pagina debe tener 5-8 secciones ricas. Se enlazan entre si.`;
+    const sectionsRule = mode === 'LANDING'
+      ? `"sections": ARRAY DE 7 A 10 SECCIONES que narren y vendan. Eres un experto en landing pages de alto rendimiento. DECIDE las secciones óptimas para ESTE negocio específico, en orden de storytelling persuasivo.
+   Catálogo de secciones disponibles (elige y ORDENA las que mejor vendan para este negocio):
+   - hero (SIEMPRE primera, obligatoria): impacto visual + propuesta de valor + CTAs
+   - stats / logros: números que generan confianza (años, clientes, productos)
+   - servicios / beneficios: qué ofrece y por qué importa
+   - menu / catalogo: SI el cliente lo pidió (mira MENU/CATALOGO, SERVICIOS en el brief)
+   - galeria: SI el cliente pidió galería de imágenes
+   - promociones / oferta: SI el cliente mencionó PROMOCIONES
+   - proceso / como-funciona: pasos numerados si aplica
+   - storytelling / nosotros: historia emocional de la marca (split texto+imagen)
+   - testimonios: prueba social (SIEMPRE recomendada, mínimo 2-3)
+   - faq: preguntas frecuentes (accordion)
+   - cta-banner: llamada a acción intermedia full-width
+   - ubicacion / mapa: SI es negocio local con dirección física
+   - contacto (SIEMPRE penúltima): formulario + datos
+   - footer (SIEMPRE última, obligatoria)
+   Cada seccion: { "id":"anchor-kebab", "title":"Nombre Visible", "brief":"qué contenido específico va aquí según el brief del cliente, qué debe narrar/mostrar" }.
+   IMPORTANTE: adapta a lo que el cliente REALMENTE pidió en su brief. Si no pidió galería, no la pongas. Si pidió catálogo PDF, agrega seccion que lo enlace. La landing debe CONTAR UNA HISTORIA que lleve al usuario del interés a la acción.`
+      : `"sections": para web institucional, 5-7 secciones por la pagina principal.`;
     const system = `${STATIC_RULES}\n\nDevuelve SOLO este JSON valido (sin texto fuera):
 {
  "projectName":"...",
  "design":{"vibe":"...","palette":{"primary":"#hex","secondary":"#hex","accent":"#hex","bg":"#hex","text":"#hex"},"fonts":{"heading":"Google Font","body":"Google Font"}},
  "pages":[{"file":"index.html","purpose":"que contiene"}],
+ "sections":[{"id":"hero","title":"...","brief":"..."}],
  "imagePrompts":[{"id":"hero","prompt":"prompt en ingles para DALL-E, fotorealista, alta calidad","usage":"hero"}]
 }
+${sectionsRule}
 ${pageRule}
 imagePrompts: 5-9 imagenes necesarias para el sitio (hero cinematografico, banners de
 secciones, fotos de productos, ambientes, detalles de textura, etc). Calidad
@@ -182,6 +207,9 @@ productos, no generes prompts adicionales para productos — usa las del cliente
             })(),
       imagePrompts: Array.isArray(parsed?.imagePrompts)
         ? parsed!.imagePrompts.filter((x) => x && x.prompt).slice(0, 9)
+        : [],
+      sections: Array.isArray(parsed?.sections)
+        ? parsed!.sections.filter((s) => s && s.id && s.brief).slice(0, 11)
         : [],
     };
     return safe;
@@ -273,40 +301,65 @@ SALIDA: solo el HTML de esas secciones. Sin <!DOCTYPE>, sin <head>, sin <body>, 
     const files: Record<string, string> = {};
 
     for (const page of plan.pages) {
-      // 2 bloques balanceados — cada uno cabe holgado en 8192 tokens.
       const isLanding = mode === 'LANDING' || page.file === 'index.html';
       const img0 = Object.values(imageUrls)[0] || '';
-      const imgRest = Object.values(imageUrls).slice(1).join(', ');
-      const sectionGroups = isLanding ? [
-        // BLOQUE 1: nav + hero + servicios (la mitad superior, lo más visible)
-        [
-          '<nav> sticky top-0 z-50 backdrop-blur bg-[var(--primary)]/80: logo/marca izquierda, links de navegacion centro (Inicio, Servicios, Galeria, Contacto), CTA pill color accent derecha. Hamburguesa en mobile.',
-          `<section id="hero"> min-h-screen relative flex items-center. Imagen de fondo absolute inset-0 object-cover (URL: ${img0}) con div overlay de gradient oscuro 3 stops encima. Contenido z-10 relative: badge de ubicacion/sector arriba, titulo clamp(3rem,7vw,6rem) font-black tracking-tight text-white, subtitulo grande, 2 CTAs (primario sólido accent + outline blanco). data-gsap en el contenido.`,
-          `<section id="servicios"> py-24 bg-[var(--primary)] text-white. Titulo de seccion grande centrado. Grid 3 columnas (md:grid-cols-3 gap-8). Cada card: icono SVG Lucide 48px color accent, titulo bold, descripcion real del negocio del brief. Cards con hover:-translate-y-1 transition. data-gsap en cada card.`,
-        ],
-        // BLOQUE 2: galeria + contacto + footer (la mitad inferior)
-        [
-          `<section id="galeria"> py-24 bg-[var(--bg)]. Titulo. Grid 2x2 o 3 col con imagenes (${imgRest || img0}). Cada img: rounded-2xl object-cover h-72 w-full hover:scale-105 transition duration-500 overflow-hidden. data-gsap.`,
-          `<section id="contacto"> py-24 bg-[var(--primary)] text-white. Grid 2 col en desktop: IZQUIERDA texto motivacional + datos de contacto (direccion, telefono, email del brief) + iconos SVG de redes sociales; DERECHA formulario${formEndpoint ? ` action="${formEndpoint}" method="POST" data-plia-contact` : ''} con campos nombre/email/telefono/mensaje estilizados (bg-white/10 border rounded-lg p-4), boton submit accent.${formEndpoint ? ' Incluir input honeypot oculto name="_honeypot" y <p data-plia-msg style="display:none"></p>.' : ''} data-gsap.`,
-          `<footer> py-16 bg-[#0a0a0a] text-gray-400. Grid multi-columna: marca+descripcion, links navegacion, redes sociales SVG (Instagram/Facebook/WhatsApp/TikTok del brief), contacto. Linea divisoria. Copyright ${new Date().getFullYear()} centrado abajo.`,
-        ],
-      ] : [
-        [
-          '<nav> sticky backdrop-blur con logo + links + CTA accent.',
-          `Secciones principales superiores de la pagina segun su proposito: ${page.purpose}`,
-        ],
-        [
-          `Secciones inferiores/contenido restante de: ${page.purpose}`,
-          `<footer> multi-columna con marca, links, redes SVG, copyright ${new Date().getFullYear()}.`,
-        ],
-      ];
+
+      // Secciones dinámicas decididas por la IA según el brief del cliente.
+      const planSections = (isLanding && plan.sections?.length) ? plan.sections : [];
+      const sectionInstructions: string[] = [];
+
+      // NAV siempre primero
+      sectionInstructions.push(
+        '<nav> sticky top-0 z-50 backdrop-blur: logo/marca izquierda, links de navegacion al centro (anclas a las secciones), CTA pill color accent derecha. Hamburguesa en mobile.',
+      );
+
+      if (planSections.length) {
+        for (const s of planSections) {
+          const id = (s.id || '').toLowerCase();
+          if (id === 'nav' || id === 'footer' || id === 'header') continue;
+          if (id === 'hero') {
+            sectionInstructions.push(
+              `<section id="hero"> min-h-screen relative flex items-center overflow-hidden. Imagen fondo absolute inset-0 w-full h-full object-cover con overlay gradient oscuro 3 stops. Contenido relative z-10: badge superior, titulo clamp(3rem,7vw,6rem) font-black tracking-tight text-white, subtitulo max-w-2xl, 2 CTAs (accent sólido + outline). data-gsap. CONTENIDO: ${s.brief}`,
+            );
+          } else {
+            sectionInstructions.push(
+              `<section id="${id}"> py-24, fondo alternado (var(--bg) o var(--primary), distinto a la seccion anterior). SECCION "${s.title}". NARRATIVA Y CONTENIDO: ${s.brief}. Layout apropiado (grid/split/cards), iconos SVG Lucide, imagenes disponibles donde aplique, data-gsap. Diseño nivel Awwwards.`,
+            );
+          }
+        }
+      } else {
+        sectionInstructions.push(
+          `<section id="hero"> min-h-screen con imagen fondo (${img0}), overlay, titulo huge, 2 CTAs. data-gsap.`,
+          `<section id="beneficios"> py-24 grid 3 col con iconos SVG.`,
+          `<section id="servicios"> py-24 servicios/productos en cards.`,
+          `<section id="galeria"> py-24 grid de imagenes con hover scale.`,
+          `<section id="testimonios"> py-24 3 testimonios con avatar y estrellas.`,
+        );
+      }
+
+      // CONTACTO (si la IA no lo incluyó) + FOOTER siempre al final
+      if (!sectionInstructions.some((s) => /id="contacto"/.test(s))) {
+        sectionInstructions.push(
+          `<section id="contacto"> py-24 bg-[var(--primary)] text-white. Grid 2 col: izquierda texto + datos contacto + redes SVG; derecha formulario${formEndpoint ? ` action="${formEndpoint}" method="POST" data-plia-contact` : ''} con campos nombre/email/telefono/mensaje.${formEndpoint ? ' Honeypot oculto name="_honeypot" + <p data-plia-msg style="display:none"></p>.' : ''} data-gsap.`,
+        );
+      }
+      sectionInstructions.push(
+        `<footer> py-16 bg-[#0a0a0a] text-gray-400. Multi-columna: marca+descripcion, links navegacion, redes sociales SVG (Instagram/Facebook/WhatsApp/TikTok del brief), contacto. Copyright ${new Date().getFullYear()}.`,
+      );
+
+      // Repartir en bloques de 3 secciones (cada bloque cabe en 8192 tokens)
+      const PER_BLOCK = 3;
+      const groups: string[][] = [];
+      for (let i = 0; i < sectionInstructions.length; i += PER_BLOCK) {
+        groups.push(sectionInstructions.slice(i, i + PER_BLOCK));
+      }
 
       const blocks: string[] = [];
-      for (let i = 0; i < sectionGroups.length; i++) {
+      for (let i = 0; i < groups.length; i++) {
         const block = await this.renderBlock(
-          sectionGroups[i],
+          groups[i],
           i === 0,
-          i === sectionGroups.length - 1,
+          i === groups.length - 1,
           plan.design,
           brief,
           imageUrls,
