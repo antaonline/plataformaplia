@@ -173,7 +173,7 @@ export class ClaudeProvider implements CodegenProvider {
               'anthropic-version': '2023-06-01',
               'content-type': 'application/json',
             },
-            timeout: 120_000,
+            timeout: 150_000,
           },
         ),
       'claude',

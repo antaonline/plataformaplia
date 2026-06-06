@@ -75,29 +75,21 @@ FORMULARIOS:
 - NUNCA uses mailto: como fallback. NUNCA hagas window.location.href = mailtoLink.
 - El form action lo recibis explicitamente en el prompt; usalo tal cual con POST.
 
-CATALOGO MINIMO DE SECCIONES (LANDING debe tener 8+ de estas; WEB usa segun pagina):
-1. Nav sticky con backdrop-blur, logo + items + CTA primario.
-2. Hero con altura min-h-screen, gradient overlay complejo, parallax, h1 huge + sub + 2 CTAs + chip de ubicacion/badge.
-3. Logos/proof bar o stats (3-4 numeros grandes con counter animado: clientes, anos, productos, etc).
-4. Caracteristicas/servicios en grid 3-col o 4-col con iconos SVG inline y descripciones reales.
-5. Galeria de productos/proyectos/portfolio (grid masonry o carousel con hover scale).
-6. Bloque emocional/storytelling: split 2-col texto + imagen lateral grande, NO centered text card.
-7. Testimonios con foto/avatar, nombre, rol, comilla grande decorativa. Minimo 2-3.
-8. FAQ accordion (details/summary HTML5 + arrow animated chevron).
-9. CTA final full-width con fondo de color o imagen + botones grandes.
-10. Mapa + bloque de contacto (si aplica al rubro).
-11. Footer multi-columna con marca, enlaces, redes, contacto, y legal.
+ESTRUCTURA OBLIGATORIA — EXACTAMENTE ESTAS 5 SECCIONES (ni más, ni menos):
+1. <nav> sticky backdrop-blur, logo izquierda + links centro + CTA pill derecha.
+2. <section id="hero"> min-h-screen, imagen fondo con overlay gradient 3 stops, titulo clamp(3rem,7vw,6rem) bold, subtitulo, 2 CTAs, badge de ubicacion.
+3. <section id="servicios"> grid 2-3 col, cada item: icono SVG 48px + titulo + descripcion real. Fondo alternado (claro u oscuro segun paleta).
+4. <section id="galeria-contacto"> layout split 2 col: izquierda galeria de imagenes (usa las URLs entregadas), derecha formulario de contacto completo con campos elegantes.
+5. <footer> logo + descripcion + links + redes sociales SVG + copyright.
 
-Cada seccion: si dejas todas planas y "centradas", se ve barato. ROMPE el ritmo: alguna
-seccion asimetrica, alguna con imagen grande de un lado, alguna con fondo oscuro, alguna con gradient.`;
+IMPORTANTE: 5 secciones completas y ricas valen MAS que 10 secciones a medias. Cada seccion debe ser VISUALMENTE DISTINTA: alterna fondos claro/oscuro, alterna layouts (centrado/split/grid), usa GSAP para reveal al scroll.`;
 
 @Injectable()
 export class WebsiteGenService {
   private readonly logger = new Logger(WebsiteGenService.name);
-  // Plan: Claude primero (creativo, 3k tokens, rápido)
+  // Plan y render: Claude primero (mejor diseño), GPT-4o como respaldo
   private planProvider = new FallbackProvider([PROVIDERS.claude, PROVIDERS.openai]);
-  // Render: GPT-4o primero (16k tokens, sin timeout), Claude como respaldo
-  private renderProvider = new FallbackProvider([PROVIDERS.openai, PROVIDERS.claude]);
+  private renderProvider = new FallbackProvider([PROVIDERS.claude, PROVIDERS.openai]);
 
   private stripFences(s: string): string {
     let out = (s || '').trim();
@@ -303,7 +295,7 @@ SALIDA: devuelve SOLO el HTML completo de la pagina pedida. Sin explicaciones, s
         [{ role: 'user', content: user }],
         {
           model: MODEL_SONNET,
-          maxTokens: 16000, // GPT-4o soporta hasta 16384, Claude hasta 8192
+          maxTokens: 8000, // Claude: 8192 max real. GPT-4o fallback usará su propio max.
           temperature: 0.55,
           images: multimodalImages,
         },
