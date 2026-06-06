@@ -317,32 +317,60 @@ Todo en un solo HTML con anchors.`;
     const sections = (input.effectiveSections || []).join(', ');
 
     const lines = [
+      // Identidad del negocio
       `NEGOCIO: ${input.businessName || 'Sin nombre'} — ${input.businessType || input.businessSector || 'Negocio'}`,
+      input.businessIdentity ? `TIPO DE CLIENTE: ${input.businessIdentity === 'local-business' ? 'Negocio local con atención al público' : input.businessIdentity === 'professional' ? 'Profesional independiente' : 'Empresa o proyecto digital'}` : '',
       `CIUDAD: ${input.city || 'Peru'}`,
       `DESCRIPCION: ${input.shortDescription || ''}`,
-      `OBJETIVO: ${goal || 'Captar clientes'}`,
+
+      // Modelo de negocio y operación
+      input.salesType ? `MODELO DE VENTA: ${input.salesType}` : '',
+      input.workMode ? `MODO DE TRABAJO: ${input.workMode}` : '',
+      input.businessModel ? `MODELO DE NEGOCIO: ${input.businessModel}` : '',
+      `OBJETIVO WEB: ${goal || 'Captar clientes'}`,
       `AUDIENCIA: ${(input.audience || []).join(', ') || 'Publico general'}`,
+
+      // Qué necesita la web
+      (input.smartNeeds || []).length ? `QUÉ NECESITA LA WEB: ${(input.smartNeeds || []).join(', ')}` : '',
+      (input.features || []).length ? `FUNCIONALIDADES: ${(input.features || []).join(', ')}` : '',
+      sections ? `SECCIONES REQUERIDAS: ${sections}` : '',
+
+      // Servicios y contenido específico
+      services.length ? `SERVICIOS/PRODUCTOS PRINCIPALES: ${services.join(' | ')}` : '',
+      smartContent.menuHighlights ? `MENÚ/CATÁLOGO: ${smartContent.menuHighlights}` : '',
+      smartContent.promotionsDetails ? `PROMOCIONES VIGENTES: ${smartContent.promotionsDetails}` : '',
+      smartContent.deliveryInfo ? `INFO DELIVERY: ${smartContent.deliveryInfo}` : '',
+      smartContent.locationAddress ? `DIRECCIÓN FÍSICA: ${smartContent.locationAddress}` : '',
+      smartContent.reservationDetails ? `SISTEMA DE RESERVAS: ${smartContent.reservationDetails}` : '',
+      smartContent.servicesSummary ? `DETALLE DE SERVICIOS: ${smartContent.servicesSummary}` : '',
+      smartContent.portfolioHighlights ? `PORTAFOLIO/TRABAJOS: ${smartContent.portfolioHighlights}` : '',
+      smartContent.testimonialsNotes ? `TESTIMONIOS REALES: ${smartContent.testimonialsNotes}` : '',
+      smartContent.agendaDetails ? `AGENDA/CITAS: ${smartContent.agendaDetails}` : '',
+      smartContent.teamInfo ? `EQUIPO: ${smartContent.teamInfo}` : '',
+      smartContent.contactPrompt ? `CTA DE CONTACTO: ${smartContent.contactPrompt}` : '',
+      smartContent.benefitsList ? `BENEFICIOS: ${smartContent.benefitsList}` : '',
+      smartContent.ctaText ? `TEXTO CTA PRINCIPAL: ${smartContent.ctaText}` : '',
+
+      // Estilo visual
       `ESTILO VISUAL: ${input.visualStyle || 'Moderno y profesional'}`,
       `PALETA DE COLORES: ${palette}`,
-      sections ? `SECCIONES SOLICITADAS: ${sections}` : '',
-      services.length ? `SERVICIOS/PRODUCTOS: ${services.join(' | ')}` : '',
-      smartContent.menuHighlights ? `MENU/CATALOGO: ${smartContent.menuHighlights}` : '',
-      smartContent.promotionsDetails ? `PROMOCIONES: ${smartContent.promotionsDetails}` : '',
-      smartContent.deliveryInfo ? `DELIVERY: ${smartContent.deliveryInfo}` : '',
-      smartContent.locationAddress ? `DIRECCION: ${smartContent.locationAddress}` : '',
-      smartContent.reservationDetails ? `RESERVAS: ${smartContent.reservationDetails}` : '',
-      smartContent.testimonialsNotes ? `TESTIMONIOS: ${smartContent.testimonialsNotes}` : '',
-      smartContent.servicesSummary ? `SERVICIOS DETALLE: ${smartContent.servicesSummary}` : '',
-      smartContent.portfolioHighlights ? `PORTAFOLIO: ${smartContent.portfolioHighlights}` : '',
+      input.colors ? `COLORES ESPECÍFICOS DEL CLIENTE: ${input.colors}` : '',
+      input.references ? `SITIOS DE REFERENCIA (inspiración): ${input.references}` : '',
+      input.imageInstructions ? `INSTRUCCIONES DE IMÁGENES: ${input.imageInstructions}` : '',
+      input.hasLogo === 'si' ? 'TIENE LOGO PROPIO: Sí — úsalo en nav y footer' : '',
+
+      // Contacto y redes sociales
       input.instagram ? `Instagram: @${input.instagram}` : '',
       input.facebook ? `Facebook: ${input.facebook}` : '',
       input.whatsapp ? `WhatsApp: ${input.whatsapp}` : '',
       input.tiktok ? `TikTok: @${input.tiktok}` : '',
       input.contactEmail ? `Email de contacto: ${input.contactEmail}` : '',
-      input.additionalInstructions ? `INSTRUCCIONES ADICIONALES: ${input.additionalInstructions}` : '',
+
+      // Instrucciones adicionales del cliente (máxima prioridad)
+      input.additionalInstructions ? `⚡ INSTRUCCIONES ESPECIALES DEL CLIENTE (RESPETAR AL PIE DE LA LETRA): ${input.additionalInstructions}` : '',
     ].filter(Boolean);
 
-    return lines.join('\n') + `\n\nGenera el HTML completo premium para este negocio. Usa texto real y convincente en español (no lorem ipsum). El diseño debe ser digno de un sitio de miles de dolares.`;
+    return lines.join('\n') + `\n\nGenera el HTML completo premium. Texto real y convincente en español (CERO lorem ipsum). Incorpora TODA la información anterior en las secciones correspondientes. Diseño ganador de premios Awwwards.`;
   }
 
   private buildUserPromptLegacy(input: any, plan: PlanType) {
