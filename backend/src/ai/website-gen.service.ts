@@ -75,14 +75,7 @@ FORMULARIOS:
 - NUNCA uses mailto: como fallback. NUNCA hagas window.location.href = mailtoLink.
 - El form action lo recibis explicitamente en el prompt; usalo tal cual con POST.
 
-ESTRUCTURA OBLIGATORIA — EXACTAMENTE ESTAS 5 SECCIONES (ni más, ni menos):
-1. <nav> sticky backdrop-blur, logo izquierda + links centro + CTA pill derecha.
-2. <section id="hero"> min-h-screen, imagen fondo con overlay gradient 3 stops, titulo clamp(3rem,7vw,6rem) bold, subtitulo, 2 CTAs, badge de ubicacion.
-3. <section id="servicios"> grid 2-3 col, cada item: icono SVG 48px + titulo + descripcion real. Fondo alternado (claro u oscuro segun paleta).
-4. <section id="galeria-contacto"> layout split 2 col: izquierda galeria de imagenes (usa las URLs entregadas), derecha formulario de contacto completo con campos elegantes.
-5. <footer> logo + descripcion + links + redes sociales SVG + copyright.
-
-IMPORTANTE: 5 secciones completas y ricas valen MAS que 10 secciones a medias. Cada seccion debe ser VISUALMENTE DISTINTA: alterna fondos claro/oscuro, alterna layouts (centrado/split/grid), usa GSAP para reveal al scroll.`;
+NOTA: Recibirás instrucciones específicas de QUÉ secciones generar en cada llamada. Genera SOLO esas secciones, completas y ricas. Cada seccion debe ser VISUALMENTE DISTINTA de las demás: alterna fondos claro/oscuro usando las variables CSS, alterna layouts (centrado/split/grid), añade data-gsap a los elementos para reveal animado al scroll.`;
 
 @Injectable()
 export class WebsiteGenService {
@@ -194,7 +187,79 @@ productos, no generes prompts adicionales para productos — usa las del cliente
     return safe;
   }
 
-  /** Fase 2: genera el HTML completo de cada pagina (sin JSON, calidad alta). */
+  /** Genera el HTML de un bloque de secciones (máx ~3500 tokens output). */
+  private async renderBlock(
+    sections: string[],
+    isFirst: boolean,
+    isLast: boolean,
+    design: SitePlan['design'],
+    brief: string,
+    imageUrls: Record<string, string>,
+    hasLogo: boolean,
+    clientLogo: string | undefined,
+    clientImages: string[],
+    formEndpoint: string | undefined,
+    mode: WebMode,
+  ): Promise<string> {
+    const ds = design;
+    const imgList = Object.entries(imageUrls).map(([u, url]) => `- ${u}: ${url}`).join('\n');
+    const validClientImages = clientImages.filter((s) => /^https?:\/\//.test(s));
+    const multimodalImages = hasLogo ? [clientLogo as string, ...validClientImages] : validClientImages;
+
+    const headFragment = isFirst ? `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=${encodeURIComponent(ds.fonts.heading)}:wght@400;600;700;800;900&family=${encodeURIComponent(ds.fonts.body)}:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root { --primary: ${ds.palette.primary}; --accent: ${ds.palette.accent}; --bg: ${ds.palette.bg}; --text: ${ds.palette.text}; }
+    body { font-family: '${ds.fonts.body}', sans-serif; background: var(--bg); color: var(--text); margin: 0; }
+    h1,h2,h3,h4 { font-family: '${ds.fonts.heading}', sans-serif; }
+  </style>
+</head>
+<body>` : '';
+
+    const closingFragment = isLast ? `
+<script>
+gsap.registerPlugin(ScrollTrigger);
+${formEndpoint ? `document.querySelectorAll('form[data-plia-contact]').forEach(function(f){f.addEventListener('submit',async function(e){e.preventDefault();var msg=f.querySelector('[data-plia-msg]');var btn=f.querySelector('button[type="submit"]');var orig=btn?btn.innerHTML:null;if(btn){btn.disabled=true;btn.innerHTML='Enviando...';}try{var res=await fetch(f.action,{method:'POST',body:new FormData(f),headers:{'Accept':'application/json'}});var d=await res.json().catch(function(){return{};});if(msg){msg.style.display='block';msg.textContent=d.message||(res.ok?'¡Recibido! Te contactaremos pronto.':'No se pudo enviar.');msg.style.color=res.ok?'#16a34a':'#dc2626';}if(res.ok)f.reset();}catch(err){if(msg){msg.style.display='block';msg.textContent='Error de red.';msg.style.color='#dc2626';}}finally{if(btn){btn.disabled=false;btn.innerHTML=orig;}}});});` : ''}
+gsap.utils.toArray('[data-gsap]').forEach(function(el){gsap.from(el,{opacity:0,y:30,duration:0.7,scrollTrigger:{trigger:el,start:'top 85%'}});});
+</script>
+</body></html>` : '';
+
+    const sectionsList = sections.join('\n');
+    const system = `${STATIC_RULES}
+
+DESIGN SYSTEM:
+- Paleta: primary ${ds.palette.primary}, accent ${ds.palette.accent}, bg ${ds.palette.bg}, text ${ds.palette.text}
+- Fuentes: titulos "${ds.fonts.heading}", cuerpo "${ds.fonts.body}"
+- Vibe: ${ds.vibe || 'moderno premium'}
+${hasLogo ? `- Logo cliente URL: ${clientLogo} — usarlo en nav y footer` : ''}
+IMAGENES DISPONIBLES (usa estas URLs exactas):
+${imgList || '(sin imagenes IA)'}
+${formEndpoint ? `FORMULARIO: action="${formEndpoint}" method="POST" data-plia-contact` : ''}
+
+TAREA: Genera SOLO el HTML de las siguientes secciones (sin <html>, sin <head>, sin <body>, sin scripts globales — solo el contenido de las secciones):
+${sectionsList}
+
+Cada seccion: usa clases Tailwind + add data-gsap en elementos para animacion al scroll. Contenido REAL del brief. Visualmente distinto de las otras secciones.
+SALIDA: solo el HTML de esas secciones. Sin <!DOCTYPE>, sin <head>, sin <body>, sin scripts. Solo los tags de las secciones.`;
+
+    const raw = await this.renderProvider.complete(
+      system,
+      [{ role: 'user', content: `Brief:\n${brief}\n\nGenera el HTML de las secciones indicadas.${hasLogo ? '\nPrimera imagen = logo del cliente.' : ''}` }],
+      { model: MODEL_SONNET, maxTokens: 8000, temperature: 0.55, images: multimodalImages },
+    );
+    const cleaned = this.stripFences(raw);
+    return headFragment + '\n' + cleaned + '\n' + closingFragment;
+  }
+
+  /** Fase 2: genera HTML por bloques de secciones — nunca se trunca. */
   async renderAll(
     plan: SitePlan,
     brief: string,
@@ -204,114 +269,62 @@ productos, no generes prompts adicionales para productos — usa las del cliente
     clientLogo?: string,
     formEndpoint?: string,
   ): Promise<Record<string, string>> {
-    const ds = plan.design;
-    const imgList = Object.entries(imageUrls)
-      .map(([usage, url]) => `- ${usage}: ${url}`)
-      .join('\n');
-    const clientImgList = clientImages
-      .filter((s) => /^https?:\/\//.test(s))
-      .map((u, i) => `- imagen_cliente_${i + 1}: ${u}`)
-      .join('\n');
     const hasLogo = !!clientLogo && /^https?:\/\//.test(clientLogo);
-    const system = `${STATIC_RULES}
-
-DESIGN SYSTEM (respetar al pie de la letra):
-- Vibe: ${ds.vibe}
-- Paleta: primary ${ds.palette.primary}, secondary ${ds.palette.secondary}, accent ${ds.palette.accent}, bg ${ds.palette.bg}, text ${ds.palette.text}
-- Tipografia: titulos "${ds.fonts.heading}", cuerpo "${ds.fonts.body}" (cargar via Google Fonts <link> y aplicar)
-ARQUITECTURA (${mode}):
-${plan.pages.map((p) => `- ${p.file}: ${p.purpose}`).join('\n')}
-${mode === 'WEB' ? 'Enlaza las paginas entre si con <a href="archivo.html"> (mismo directorio).' : 'Una sola pagina, sin navegacion a otras paginas.'}
-${hasLogo ? `LOGO OFICIAL DEL CLIENTE (es EL logo de la marca, OBLIGATORIO usarlo):
-- imagen_cliente_logo: ${clientLogo}
-INSTRUCCIONES DURAS PARA EL LOGO:
-1. Colocalo en el HEADER/NAV de la pagina (esquina superior izquierda, tamano apropiado tipo h-8 o h-10 Tailwind).
-2. Tambien puede ir en el FOOTER como brand mark.
-3. El logo se ve en este mensaje (multimodal): respeta su forma original.
-4. Si el logo tiene fondo transparente (PNG sin fondo), lucira limpio sobre cualquier color del header.
-5. NO lo reemplaces por iconos genericos, texto, ni imagenes IA aunque el plan sugiera otra cosa para el header.
-` : ''}
-IMAGENES GENERADAS POR IA (usa estas URLs reales, NO inventes):
-${imgList || '(sin imagenes IA generadas)'}
-${clientImgList ? `IMAGENES DEL CLIENTE (CONTENIDO REAL DEL NEGOCIO — son OBLIGATORIAS):
-${clientImgList}
-INSTRUCCIONES DURAS PARA LAS IMAGENES DEL CLIENTE:
-1. Las puedes VER en este mensaje (son multimodales). Analiza qué muestra cada una: ¿es un logo? ¿el interior del local? ¿productos? ¿el equipo? ¿una foto promocional?
-2. USALAS en la web final con las URLs imagen_cliente_N exactas. NO inventes URLs.
-3. Si imagen_cliente_1 es un logo -> ponlo en el header/nav y/o como brand mark.
-4. Si son fotos de productos/figuras/objetos -> usalas en la galeria o seccion de productos.
-5. Si son fotos del local/espacio -> hero o seccion de ubicacion/ambiente.
-6. Si son fotos del equipo/personas -> seccion equipo o testimonios.
-7. Las imagenes del cliente TIENEN PRIORIDAD sobre las generadas por IA en su categoria.
-8. Si NO hay imagen IA para un slot Y hay imagen cliente apropiada -> usa la del cliente.
-` : ''}
-${formEndpoint ? `FORMULARIOS DE CONTACTO (OBLIGATORIO si el brief pide contacto/reservas/consulta/cotizacion):
-- Si la pagina necesita un formulario, su accion DEBE ser:
-    <form action="${formEndpoint}" method="POST" data-plia-contact>
-- NUNCA uses formsubmit.co, getform.io, mailto:, ni ningun servicio externo.
-- Campos minimos obligatorios: name (required), email (required, type=email), message (required, textarea).
-- Campos opcionales segun rubro: phone, subject, business, date, time, party_size, etc.
-- INCLUYE SIEMPRE este campo honeypot oculto (anti-spam, no quitar):
-    <input type="text" name="_honeypot" tabindex="-1" autocomplete="off" style="position:absolute;left:-9999px;top:-9999px;" aria-hidden="true">
-- Coloca DENTRO del form un elemento para mensajes:
-    <p data-plia-msg style="margin-top:12px;font-size:14px;display:none;"></p>
-- Al final de la pagina (justo antes de </body>), INCLUYE EXACTAMENTE este script para UX inline sin recargar:
-<script>
-document.querySelectorAll('form[data-plia-contact]').forEach(function(f){
-  f.addEventListener('submit', async function(e){
-    e.preventDefault();
-    var msg = f.querySelector('[data-plia-msg]');
-    var btn = f.querySelector('button[type="submit"], input[type="submit"]');
-    var origBtn = btn ? btn.innerHTML : null;
-    if(btn){ btn.disabled = true; btn.innerHTML = 'Enviando...'; }
-    try {
-      var res = await fetch(f.action, { method:'POST', body:new FormData(f), headers:{'Accept':'application/json'} });
-      var data = await res.json().catch(function(){return {};});
-      if(msg){ msg.style.display='block'; msg.textContent = data.message || (res.ok?'¡Recibido! Te contactaremos pronto.':'No se pudo enviar.'); msg.style.color = res.ok ? '#16a34a' : '#dc2626'; }
-      if(res.ok){ f.reset(); }
-    } catch(err){
-      if(msg){ msg.style.display='block'; msg.textContent = 'Error de red. Intenta de nuevo.'; msg.style.color = '#dc2626'; }
-    } finally {
-      if(btn){ btn.disabled = false; btn.innerHTML = origBtn; }
-    }
-  });
-});
-</script>
-` : ''}
-SALIDA: devuelve SOLO el HTML completo de la pagina pedida. Sin explicaciones, sin cercas \`\`\`. Empieza por <!DOCTYPE html>.`;
-
     const files: Record<string, string> = {};
-    // Pasamos las imagenes del cliente como multimodales tambien en el
-    // render para que Claude/Gemini VEA su contenido (no solo el URL) y
-    // pueda decidir donde encajan visualmente. El logo va primero.
-    const validClientImages = clientImages.filter((s) => /^https?:\/\//.test(s));
-    const multimodalImages = hasLogo
-      ? [clientLogo as string, ...validClientImages]
-      : validClientImages;
+
     for (const page of plan.pages) {
-      const user = `Brief del negocio:\n${brief}\n\nGenera AHORA la pagina: ${page.file}\nProposito: ${page.purpose}${hasLogo ? '\nNota: la PRIMERA imagen adjunta es el LOGO del cliente.' : ''}\nDevuelve solo el HTML completo.`;
-      const raw = await this.renderProvider.complete(
-        system,
-        [{ role: 'user', content: user }],
-        {
-          model: MODEL_SONNET,
-          maxTokens: 8000, // Claude: 8192 max real. GPT-4o fallback usará su propio max.
-          temperature: 0.55,
-          images: multimodalImages,
-        },
-      );
-      // Pipeline de post-procesado en orden:
-      //  1. Quitar cercas ``` que a veces se cuelan.
-      //  2. enforcePremiumQuality: limpia JSX literal, neutraliza mailto:,
-      //     inyecta GSAP+ScrollTrigger si Claude los olvido, arregla embeds
-      //     de mapa con Place ID inventado.
-      //  3. enforceContactForms: garantiza que todo <form> de contacto
-      //     tenga action correcto, honeypot, mensaje inline, submit AJAX.
-      let html = this.stripFences(raw);
+      // 2 bloques balanceados — cada uno cabe holgado en 8192 tokens.
+      const isLanding = mode === 'LANDING' || page.file === 'index.html';
+      const img0 = Object.values(imageUrls)[0] || '';
+      const imgRest = Object.values(imageUrls).slice(1).join(', ');
+      const sectionGroups = isLanding ? [
+        // BLOQUE 1: nav + hero + servicios (la mitad superior, lo más visible)
+        [
+          '<nav> sticky top-0 z-50 backdrop-blur bg-[var(--primary)]/80: logo/marca izquierda, links de navegacion centro (Inicio, Servicios, Galeria, Contacto), CTA pill color accent derecha. Hamburguesa en mobile.',
+          `<section id="hero"> min-h-screen relative flex items-center. Imagen de fondo absolute inset-0 object-cover (URL: ${img0}) con div overlay de gradient oscuro 3 stops encima. Contenido z-10 relative: badge de ubicacion/sector arriba, titulo clamp(3rem,7vw,6rem) font-black tracking-tight text-white, subtitulo grande, 2 CTAs (primario sólido accent + outline blanco). data-gsap en el contenido.`,
+          `<section id="servicios"> py-24 bg-[var(--primary)] text-white. Titulo de seccion grande centrado. Grid 3 columnas (md:grid-cols-3 gap-8). Cada card: icono SVG Lucide 48px color accent, titulo bold, descripcion real del negocio del brief. Cards con hover:-translate-y-1 transition. data-gsap en cada card.`,
+        ],
+        // BLOQUE 2: galeria + contacto + footer (la mitad inferior)
+        [
+          `<section id="galeria"> py-24 bg-[var(--bg)]. Titulo. Grid 2x2 o 3 col con imagenes (${imgRest || img0}). Cada img: rounded-2xl object-cover h-72 w-full hover:scale-105 transition duration-500 overflow-hidden. data-gsap.`,
+          `<section id="contacto"> py-24 bg-[var(--primary)] text-white. Grid 2 col en desktop: IZQUIERDA texto motivacional + datos de contacto (direccion, telefono, email del brief) + iconos SVG de redes sociales; DERECHA formulario${formEndpoint ? ` action="${formEndpoint}" method="POST" data-plia-contact` : ''} con campos nombre/email/telefono/mensaje estilizados (bg-white/10 border rounded-lg p-4), boton submit accent.${formEndpoint ? ' Incluir input honeypot oculto name="_honeypot" y <p data-plia-msg style="display:none"></p>.' : ''} data-gsap.`,
+          `<footer> py-16 bg-[#0a0a0a] text-gray-400. Grid multi-columna: marca+descripcion, links navegacion, redes sociales SVG (Instagram/Facebook/WhatsApp/TikTok del brief), contacto. Linea divisoria. Copyright ${new Date().getFullYear()} centrado abajo.`,
+        ],
+      ] : [
+        [
+          '<nav> sticky backdrop-blur con logo + links + CTA accent.',
+          `Secciones principales superiores de la pagina segun su proposito: ${page.purpose}`,
+        ],
+        [
+          `Secciones inferiores/contenido restante de: ${page.purpose}`,
+          `<footer> multi-columna con marca, links, redes SVG, copyright ${new Date().getFullYear()}.`,
+        ],
+      ];
+
+      const blocks: string[] = [];
+      for (let i = 0; i < sectionGroups.length; i++) {
+        const block = await this.renderBlock(
+          sectionGroups[i],
+          i === 0,
+          i === sectionGroups.length - 1,
+          plan.design,
+          brief,
+          imageUrls,
+          hasLogo,
+          clientLogo,
+          clientImages,
+          formEndpoint,
+          mode,
+        );
+        blocks.push(block);
+      }
+
+      let html = blocks.join('\n');
       html = enforcePremiumQuality(html, formEndpoint);
-      html = enforceContactForms(html, formEndpoint);
+      if (formEndpoint) html = enforceContactForms(html, formEndpoint);
       files[page.file] = html;
     }
+
     if (!files['index.html']) {
       const firstKey = Object.keys(files)[0];
       if (firstKey) files['index.html'] = files[firstKey];
