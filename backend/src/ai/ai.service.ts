@@ -1036,18 +1036,27 @@ Todo en un solo HTML con anchors.`;
           this.logger.log(`[ADMIN INSTANT PUBLISH] Escribiendo HTML en ${siteRoot}.`);
           writeAll();
           // 3. Defender contra la race condition: CyberPanel puede sobreescribir
-          //    su index.html default unos segundos después. Re-verificamos 3 veces.
-          for (let check = 1; check <= 3; check++) {
-            await this.sleep(4000);
+          //    su index.html default unos segundos/minutos después. Vigilamos
+          //    durante 2 minutos (24 checks × 5s) y reescribimos si hace falta.
+          const TOTAL_CHECKS = 24; // 24 × 5s = 120s = 2 minutos
+          let confirmedStreak = 0;
+          for (let check = 1; check <= TOTAL_CHECKS; check++) {
+            await this.sleep(5000);
             const current = fs.existsSync(join(siteRoot, 'index.html'))
               ? fs.readFileSync(join(siteRoot, 'index.html'), 'utf-8')
               : '';
             if (!current.includes(MARKER)) {
-              this.logger.warn(`[ADMIN INSTANT PUBLISH] CyberPanel sobreescribió (check ${check}), reescribiendo...`);
+              this.logger.warn(`[ADMIN INSTANT PUBLISH] CyberPanel sobreescribió (check ${check}/${TOTAL_CHECKS}), reescribiendo...`);
               writeAll();
+              confirmedStreak = 0;
             } else {
-              this.logger.log(`[ADMIN INSTANT PUBLISH] HTML confirmado en ${siteRoot} (check ${check}).`);
-              break;
+              confirmedStreak++;
+              // Si se mantuvo nuestro HTML por 5 checks seguidos (25s), CyberPanel
+              // ya terminó — no tiene sentido seguir vigilando los 2 min completos.
+              if (confirmedStreak >= 5) {
+                this.logger.log(`[ADMIN INSTANT PUBLISH] HTML estable en ${siteRoot} (confirmado ${confirmedStreak} checks). Publicación exitosa.`);
+                break;
+              }
             }
           }
         }
