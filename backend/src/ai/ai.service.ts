@@ -1009,44 +1009,46 @@ Todo en un solo HTML con anchors.`;
       siteRoot = join(root, domain, publicDir);
 
       if (publishImmediately) {
-        this.logger.log(`[ADMIN INSTANT PUBLISH] Esperando que CyberPanel termine su setup para ${domain}...`);
-        const maxAttempts = 45;
-        const pollIntervalMs = 2000;
-        let success = false;
-        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-          const indexPath = join(siteRoot, 'index.html');
-          if (fs.existsSync(siteRoot) && fs.existsSync(indexPath)) {
-            // Esperar a que CyberPanel haya escrito su página por defecto antes de reemplazarla
-            const currentContent = fs.readFileSync(indexPath, 'utf-8');
-            if (currentContent.includes('CyberPanel Installed') || currentContent.includes('CyberPanel')) {
-              this.logger.log(`[ADMIN INSTANT PUBLISH] CyberPanel listo. Publicando HTML en ${siteRoot}.`);
-              fs.writeFileSync(indexPath, html, 'utf-8');
-              if (pages?.length) {
-                for (const page of pages) {
-                  const fileName = page.slug === 'index' ? 'index.html' : `${page.slug}.html`;
-                  fs.writeFileSync(join(siteRoot, fileName), page.html, 'utf-8');
-                }
-              }
-              success = true;
-              break;
+        // Helper que escribe el index + páginas extra
+        const writeAll = () => {
+          fs.writeFileSync(join(siteRoot!, 'index.html'), html, 'utf-8');
+          if (pages?.length) {
+            for (const page of pages) {
+              const fileName = page.slug === 'index' ? 'index.html' : `${page.slug}.html`;
+              fs.writeFileSync(join(siteRoot!, fileName), page.html, 'utf-8');
             }
           }
-          this.logger.log(`[ADMIN INSTANT PUBLISH] Esperando CyberPanel setup (intento ${attempt}/${maxAttempts})...`);
-          await this.sleep(pollIntervalMs);
+        };
+        const MARKER = 'GENERATED_BY_PLIA_IA';
+        const taggedHtml = html.includes(MARKER) ? html : `<!-- ${MARKER} -->\n${html}`;
+        html = taggedHtml;
+
+        // 1. Esperar a que el directorio del sitio exista (CyberPanel lo crea)
+        let dirReady = false;
+        for (let i = 0; i < 30; i++) {
+          if (fs.existsSync(siteRoot)) { dirReady = true; break; }
+          await this.sleep(2000);
         }
-        if (!success) {
-          // Último recurso: escribir aunque no haya detectado el default de CyberPanel
-          if (fs.existsSync(siteRoot)) {
-            this.logger.warn(`[ADMIN INSTANT PUBLISH] Timeout esperando CyberPanel default. Forzando escritura.`);
-            fs.writeFileSync(join(siteRoot, 'index.html'), html, 'utf-8');
-            if (pages?.length) {
-              for (const page of pages) {
-                const fileName = page.slug === 'index' ? 'index.html' : `${page.slug}.html`;
-                fs.writeFileSync(join(siteRoot, fileName), page.html, 'utf-8');
-              }
+        if (!dirReady) {
+          this.logger.warn(`[ADMIN INSTANT PUBLISH] ${siteRoot} no existe. No se pudo publicar.`);
+        } else {
+          // 2. Escribir nuestro HTML
+          this.logger.log(`[ADMIN INSTANT PUBLISH] Escribiendo HTML en ${siteRoot}.`);
+          writeAll();
+          // 3. Defender contra la race condition: CyberPanel puede sobreescribir
+          //    su index.html default unos segundos después. Re-verificamos 3 veces.
+          for (let check = 1; check <= 3; check++) {
+            await this.sleep(4000);
+            const current = fs.existsSync(join(siteRoot, 'index.html'))
+              ? fs.readFileSync(join(siteRoot, 'index.html'), 'utf-8')
+              : '';
+            if (!current.includes(MARKER)) {
+              this.logger.warn(`[ADMIN INSTANT PUBLISH] CyberPanel sobreescribió (check ${check}), reescribiendo...`);
+              writeAll();
+            } else {
+              this.logger.log(`[ADMIN INSTANT PUBLISH] HTML confirmado en ${siteRoot} (check ${check}).`);
+              break;
             }
-          } else {
-            this.logger.warn(`[ADMIN INSTANT PUBLISH] No se pudo escribir: ${siteRoot} no existe tras ${maxAttempts} intentos.`);
           }
         }
       } else {
