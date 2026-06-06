@@ -388,23 +388,57 @@ Todo en un solo HTML con anchors.`;
     return this.safeJsonParse<T>(content, {} as T);
   }
 
-  // Genera HTML premium usando el mismo proxy/modelo configurado en el sistema
+  // Genera HTML premium usando Claude directamente (Anthropic API) con fallback a GPT-4o
   private async chatHtml(system: string, user: string): Promise<string> {
+    const anthropicKey = process.env.ANTHROPIC_API_KEY || '';
+    const anthropicModel = process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-6';
+
+    // 1. Intentar con Claude (Anthropic) — mejor calidad para HTML creativo
+    if (anthropicKey) {
+      try {
+        this.logger.log(`[chatHtml] usando Claude ${anthropicModel} via Anthropic API`);
+        const res = await axios.post(
+          'https://api.anthropic.com/v1/messages',
+          {
+            model: anthropicModel,
+            max_tokens: 8000,
+            temperature: 0.68,
+            system,
+            messages: [{ role: 'user', content: user }],
+          },
+          {
+            headers: {
+              'x-api-key': anthropicKey,
+              'anthropic-version': '2023-06-01',
+              'Content-Type': 'application/json',
+            },
+            timeout: 120000,
+          },
+        );
+        const content: string = res.data?.content?.[0]?.text ?? '';
+        const inputTokens = res.data?.usage?.input_tokens ?? 0;
+        const outputTokens = res.data?.usage?.output_tokens ?? 0;
+        this.logger.log(`[chatHtml] Claude OK — input=${inputTokens} output=${outputTokens} tokens`);
+        return content.replace(/^```html?\s*/i, '').replace(/```\s*$/i, '').trim();
+      } catch (err: any) {
+        this.logger.warn(`[chatHtml] Claude fallo: ${err?.response?.data?.error?.message || err?.message}. Usando GPT-4o como fallback.`);
+      }
+    }
+
+    // 2. Fallback: GPT-4o via proxy OpenAI
+    this.logger.log(`[chatHtml] fallback a GPT-4o`);
     const url = `${this.env.baseUrl}/chat/completions`;
-    const model = this.env.modelPrimary; // usa el mismo modelo que ya funciona
-    this.logger.log(`[chatHtml] usando model=${model}`);
     const data = await this.openAiPost<any>(url, {
-      model,
+      model: this.env.modelPrimary,
       messages: [
         { role: 'system', content: system },
         { role: 'user', content: user },
       ],
       temperature: 0.68,
-      max_tokens: 16000,
+      max_tokens: 14000,
     });
     const content: string = data?.choices?.[0]?.message?.content ?? '';
-    this.logger.log(`[chatHtml] tokens=${data?.usage?.total_tokens ?? '?'}`);
-    // Limpiar bloques markdown si Claude los añade
+    this.logger.log(`[chatHtml] GPT-4o tokens=${data?.usage?.total_tokens ?? '?'}`);
     return content.replace(/^```html?\s*/i, '').replace(/```\s*$/i, '').trim();
   }
 
