@@ -1008,20 +1008,21 @@ Todo en un solo HTML con anchors.`;
       const publicDir = process.env.CYBERPANEL_PUBLIC_DIR || 'public_html';
       siteRoot = join(root, domain, publicDir);
 
+      const MARKER = 'GENERATED_BY_PLIA_IA';
+      const tag = (h: string) => (h.includes(MARKER) ? h : `<!-- ${MARKER} -->\n${h}`);
       if (publishImmediately) {
-        // Helper que escribe el index + páginas extra
+        html = tag(html);
+        // Helper que escribe páginas extra PRIMERO y el index (con marcador) AL FINAL,
+        // para que el marcador siempre gane y la verificación lo detecte.
         const writeAll = () => {
-          fs.writeFileSync(join(siteRoot!, 'index.html'), html, 'utf-8');
           if (pages?.length) {
             for (const page of pages) {
-              const fileName = page.slug === 'index' ? 'index.html' : `${page.slug}.html`;
-              fs.writeFileSync(join(siteRoot!, fileName), page.html, 'utf-8');
+              if (page.slug === 'index') continue; // el index lo escribimos al final
+              fs.writeFileSync(join(siteRoot!, `${page.slug}.html`), tag(page.html), 'utf-8');
             }
           }
+          fs.writeFileSync(join(siteRoot!, 'index.html'), html, 'utf-8');
         };
-        const MARKER = 'GENERATED_BY_PLIA_IA';
-        const taggedHtml = html.includes(MARKER) ? html : `<!-- ${MARKER} -->\n${html}`;
-        html = taggedHtml;
 
         // 1. Esperar a que el directorio del sitio exista (CyberPanel lo crea)
         let dirReady = false;
@@ -1058,6 +1059,15 @@ Todo en un solo HTML con anchors.`;
                 break;
               }
             }
+          }
+          // 4. Recargar LiteSpeed para que el vhost HTTPS del subdominio nuevo
+          //    cargue de inmediato (sin esto, HTTPS da 404 hasta el próximo reload).
+          try {
+            const { execSync } = require('child_process');
+            execSync('/usr/local/lsws/bin/lswsctrl reload', { timeout: 15000, stdio: 'ignore' });
+            this.logger.log(`[ADMIN INSTANT PUBLISH] LiteSpeed recargado — HTTPS listo para ${domain}.`);
+          } catch (e: any) {
+            this.logger.warn(`[ADMIN INSTANT PUBLISH] No se pudo recargar LiteSpeed: ${e?.message}. El HTTPS puede tardar.`);
           }
         }
       } else {

@@ -248,7 +248,96 @@ productos, no generes prompts adicionales para productos — usa las del cliente
     return safe;
   }
 
-  /** Fase 2: genera el HTML completo de cada página en UNA sola llamada coherente. */
+  /** Construye el <head> compartido con Tailwind, fuentes, :root y el observer .reveal seguro. */
+  private buildHead(ds: SitePlan['design'], title: string): string {
+    const hf = encodeURIComponent(ds.fonts.heading);
+    const bf = encodeURIComponent(ds.fonts.body);
+    return `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${title}</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=${hf}:wght@400;600;700;800;900&family=${bf}:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--primary:${ds.palette.primary};--secondary:${ds.palette.secondary};--accent:${ds.palette.accent};--bg:${ds.palette.bg};--text:${ds.palette.text}}
+html{scroll-behavior:smooth}
+body{font-family:'${ds.fonts.body}',sans-serif;background:var(--bg);color:var(--text);margin:0}
+h1,h2,h3,h4{font-family:'${ds.fonts.heading}',sans-serif}
+.reveal{opacity:0;transform:translateY(28px);transition:opacity .7s ease,transform .7s ease}
+.reveal.in{opacity:1;transform:none}
+</style>
+</head>
+<body>`;
+  }
+
+  /** Script final: IntersectionObserver para .reveal + handler de formulario. */
+  private buildClosingScript(formEndpoint?: string): string {
+    const formScript = formEndpoint ? `
+document.querySelectorAll('form[data-plia-contact]').forEach(function(f){f.addEventListener('submit',async function(e){e.preventDefault();var msg=f.querySelector('[data-plia-msg]');var btn=f.querySelector('button[type="submit"],input[type="submit"]');var orig=btn?btn.innerHTML:null;if(btn){btn.disabled=true;btn.innerHTML='Enviando...';}try{var res=await fetch(f.action,{method:'POST',body:new FormData(f),headers:{'Accept':'application/json'}});var d=await res.json().catch(function(){return{};});if(msg){msg.style.display='block';msg.textContent=d.message||(res.ok?'¡Recibido! Te contactaremos pronto.':'No se pudo enviar.');msg.style.color=res.ok?'#16a34a':'#dc2626';}if(res.ok)f.reset();}catch(err){if(msg){msg.style.display='block';msg.textContent='Error de red. Intenta de nuevo.';msg.style.color='#dc2626';}}finally{if(btn){btn.disabled=false;btn.innerHTML=orig;}}});});` : '';
+    return `<script>
+document.addEventListener('DOMContentLoaded',function(){
+var o=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){e.target.classList.add('in');o.unobserve(e.target);}})},{threshold:.12,rootMargin:'0px 0px -40px 0px'});
+document.querySelectorAll('.reveal').forEach(function(el){o.observe(el);});
+// Failsafe: si algo no disparó en 1.2s (sobre el fold), forzar visible.
+setTimeout(function(){document.querySelectorAll('.reveal:not(.in)').forEach(function(el){var r=el.getBoundingClientRect();if(r.top<window.innerHeight)el.classList.add('in');});},1200);
+${formScript}
+});
+</script>
+</body></html>`;
+  }
+
+  /** Genera el HTML de UN grupo de secciones (1-2). Devuelve solo el markup de secciones. */
+  private async renderSectionGroup(
+    sectionsToRender: { id: string; title: string; brief: string }[],
+    ds: SitePlan['design'],
+    brief: string,
+    imageUrls: Record<string, string>,
+    hasLogo: boolean,
+    clientLogo: string | undefined,
+    multimodalImages: string[],
+    formEndpoint: string | undefined,
+    includeNav: boolean,
+    includeFooter: boolean,
+  ): Promise<string> {
+    const imgList = Object.entries(imageUrls).map(([u, url]) => `- ${u}: ${url}`).join('\n');
+    const list = sectionsToRender.map((s, i) => `${i + 1}. <section id="${s.id}"> "${s.title}": ${s.brief}`).join('\n');
+
+    const system = `${STATIC_RULES}
+
+DESIGN SYSTEM (OBLIGATORIO, idéntico en todas las secciones):
+- Colores via variables CSS YA definidas: var(--primary) ${ds.palette.primary}, var(--accent) ${ds.palette.accent}, var(--bg) ${ds.palette.bg}, var(--text) ${ds.palette.text}, var(--secondary) ${ds.palette.secondary}
+- Tipografia ya cargada: titulos '${ds.fonts.heading}', cuerpo '${ds.fonts.body}'
+- Vibe: ${ds.vibe}
+${hasLogo ? `- LOGO del cliente (úsalo en nav y footer): ${clientLogo}` : ''}
+IMAGENES DISPONIBLES (usa SOLO estas URLs, NO inventes):
+${imgList || '(sin imagenes)'}
+${formEndpoint ? `FORMULARIO: <form action="${formEndpoint}" method="POST" data-plia-contact> campos name,email,phone,message + <input type="text" name="_honeypot" tabindex="-1" style="position:absolute;left:-9999px"> + <p data-plia-msg style="display:none"></p>` : ''}
+
+REGLAS ANTI-SOLAPAMIENTO (CRÍTICO):
+- Cada <section> es un bloque de FLUJO NORMAL, ancho completo, apilado verticalmente. Contenido en <div class="max-w-7xl mx-auto px-6">.
+- Padding vertical generoso: py-20 o py-28.
+- PROHIBIDO position:absolute/fixed EXCEPTO la imagen de fondo del hero (absolute inset-0 dentro de un hero "relative overflow-hidden"). Ninguna otra seccion usa absolute.
+- PROHIBIDO margenes negativos, heights fijos que recorten, ni z-index que tape otras secciones.
+- Animacion: agrega class="reveal" a los bloques que quieras animar al entrar (el observer ya existe). NUNCA opacity:0 de otra forma.
+- Fondos alternados entre secciones (claro var(--bg) / oscuro var(--primary)) para ritmo visual.
+
+SALIDA: SOLO el markup de las secciones pedidas. ${includeNav ? 'Incluye el <nav> sticky ANTES de las secciones.' : ''}${includeFooter ? ' Incluye el <footer> DESPUÉS de las secciones.' : ''} NO escribas <!DOCTYPE>, <html>, <head>, <body> ni <script>. Solo <nav>/<section>/<footer>. Sin markdown.`;
+
+    const user = `Brief del negocio:\n${brief}\n\nGENERA EXACTAMENTE ESTAS SECCIONES (contenido real, persuasivo, español):\n${list}${includeNav ? '\n\nAdemás incluye al inicio: <nav> sticky top-0 z-50 backdrop-blur con logo/marca, links de navegación (anclas), y CTA pill accent.' : ''}${includeFooter ? '\n\nAdemás incluye al final: <footer> multi-columna con marca, links, redes sociales SVG y copyright.' : ''}\n\nDiseño nivel Awwwards, sin solapamientos.${hasLogo ? ' La primera imagen adjunta es el logo.' : ''}`;
+
+    const raw = await this.completeClaudeWithRetry(
+      system,
+      [{ role: 'user', content: user }],
+      { model: MODEL_SONNET, maxTokens: 6000, temperature: 0.6, images: multimodalImages },
+      `render-grp-${sectionsToRender.map((s) => s.id).join('+')}`,
+    );
+    return this.stripFences(raw);
+  }
+
+  /** Fase 2: genera la página sección por sección (estilo IaChat) y la ensambla. */
   async renderAll(
     plan: SitePlan,
     brief: string,
@@ -262,59 +351,58 @@ productos, no generes prompts adicionales para productos — usa las del cliente
     const validClientImages = clientImages.filter((s) => /^https?:\/\//.test(s));
     const multimodalImages = hasLogo ? [clientLogo as string, ...validClientImages] : validClientImages;
     const ds = plan.design;
-    const imgList = Object.entries(imageUrls).map(([u, url]) => `- ${u}: ${url}`).join('\n');
     const files: Record<string, string> = {};
 
     for (const page of plan.pages) {
       const isLanding = mode === 'LANDING' || page.file === 'index.html';
 
-      // Las secciones las DECIDIÓ la IA en el plan según el brief. Solo las listamos como guía.
-      const sectionsGuide = (isLanding && plan.sections?.length)
-        ? plan.sections.map((s, i) => `${i + 1}. [${s.id}] ${s.title}: ${s.brief}`).join('\n')
-        : `Decide tú las secciones óptimas para vender este negocio según el brief.`;
-
-      const system = `${STATIC_RULES}
-
-DESIGN SYSTEM (respetar al pie de la letra):
-- Paleta: primary ${ds.palette.primary}, secondary ${ds.palette.secondary}, accent ${ds.palette.accent}, bg ${ds.palette.bg}, text ${ds.palette.text}
-- Tipografia: titulos "${ds.fonts.heading}", cuerpo "${ds.fonts.body}" (cargar via Google Fonts)
-- Vibe: ${ds.vibe}
-${hasLogo ? `\nLOGO DEL CLIENTE (obligatorio en nav y footer): ${clientLogo}` : ''}
-IMAGENES DISPONIBLES (usa SOLO estas URLs, no inventes):
-${imgList || '(sin imagenes IA)'}
-${formEndpoint ? `\nFORMULARIO DE CONTACTO: <form action="${formEndpoint}" method="POST" data-plia-contact> con campos name(required), email(required), phone, message(required, textarea). Incluye <input type="text" name="_honeypot" tabindex="-1" style="position:absolute;left:-9999px"> y <p data-plia-msg style="display:none"></p> dentro del form.` : ''}
-
-REGLAS ANTI-SOLAPAMIENTO (CRÍTICAS — evitan que la web se vea rota):
-- FLUJO NORMAL DE DOCUMENTO: cada <section> es un bloque hermano apilado verticalmente. NADA de position:absolute salvo la imagen de fondo del hero (que va absolute inset-0 DENTRO de un hero relative + overflow-hidden).
-- PROHIBIDO position:absolute/fixed en secciones que no sean el hero. PROHIBIDO margenes negativos grandes. PROHIBIDO height fijo que recorte contenido.
-- Cada seccion: ancho completo, padding vertical generoso (py-20/py-28), contenido en un contenedor max-w-7xl mx-auto px-6.
-- ANIMACIONES SEGURAS: los elementos deben ser VISIBLES por defecto. Para animar al scroll usa SOLO clase "reveal" (definida en el CSS del head: opacity:0→1 vía IntersectionObserver que YA está incluido). NUNCA uses opacity:0 inline sin el observer, ni GSAP que deje elementos invisibles.
-
-ESTRUCTURA: ${isLanding ? 'UNA landing de ventas de UNA pagina, con TODAS las secciones del plan en orden, fluyendo verticalmente. Empieza con <nav> sticky y termina con <footer>.' : `Pagina "${page.file}": ${page.purpose}. Nav sticky + secciones + footer.`}
-
-SALIDA: HTML COMPLETO Y VÁLIDO desde <!DOCTYPE html> hasta </html>. Debe estar COMPLETO — cierra todas las etiquetas. Sin markdown, sin explicaciones.`;
-
-      const user = `Brief del negocio:\n${brief}\n\nSECCIONES A GENERAR (decididas según el brief, respeta el orden y el contenido de cada una):\n${sectionsGuide}\n\nGenera la pagina ${page.file} COMPLETA, coherente, sin solapamientos, nivel Awwwards.${hasLogo ? '\nLa primera imagen adjunta es el logo del cliente.' : ''}`;
-
-      let html = await this.completeClaudeWithRetry(
-        system,
-        [{ role: 'user', content: user }],
-        { model: MODEL_SONNET, maxTokens: 8000, temperature: 0.6, images: multimodalImages },
-        `render-${page.file}`,
-      );
-      html = this.stripFences(html);
-
-      // Si truncó, cerrar limpio desde el último tag de sección/footer completo
-      if (!/<\/html>/i.test(html)) {
-        const candidates = ['</footer>', '</section>', '</main>'];
-        let cut = -1;
-        for (const tag of candidates) {
-          const idx = html.lastIndexOf(tag);
-          if (idx > html.length * 0.4) { cut = idx + tag.length; break; }
-        }
-        if (cut > 0) html = html.slice(0, cut);
-        html += '\n</body>\n</html>';
+      // Lista de secciones decidida por la IA. Garantizamos hero, contacto y footer.
+      let sections = (isLanding && plan.sections?.length)
+        ? plan.sections.filter((s) => s && s.id && !['nav', 'header', 'footer'].includes(s.id.toLowerCase()))
+        : [];
+      if (!sections.length) {
+        sections = [
+          { id: 'hero', title: 'Hero', brief: 'Impacto visual con imagen de fondo, propuesta de valor y 2 CTAs.' },
+          { id: 'beneficios', title: 'Por qué elegirnos', brief: '3-4 razones con iconos SVG.' },
+          { id: 'servicios', title: 'Servicios', brief: 'Productos/servicios del negocio en cards.' },
+          { id: 'galeria', title: 'Galería', brief: 'Grid de imágenes con hover.' },
+          { id: 'testimonios', title: 'Testimonios', brief: '3 reseñas con avatar y estrellas.' },
+        ];
       }
+      if (!sections.some((s) => s.id.toLowerCase() === 'hero')) {
+        sections.unshift({ id: 'hero', title: 'Hero', brief: 'Impacto visual con imagen de fondo y CTAs.' });
+      }
+      if (!sections.some((s) => /contact/.test(s.id.toLowerCase()))) {
+        sections.push({ id: 'contacto', title: 'Contacto', brief: 'Formulario + datos de contacto + redes sociales.' });
+      }
+
+      // Agrupar en pares (2 secciones por llamada). Nav va con el primer grupo, footer con el último.
+      const PER_GROUP = 2;
+      const groups: { id: string; title: string; brief: string }[][] = [];
+      for (let i = 0; i < sections.length; i += PER_GROUP) {
+        groups.push(sections.slice(i, i + PER_GROUP));
+      }
+
+      const bodyParts: string[] = [];
+      for (let i = 0; i < groups.length; i++) {
+        const fragment = await this.renderSectionGroup(
+          groups[i],
+          ds,
+          brief,
+          imageUrls,
+          hasLogo,
+          clientLogo,
+          multimodalImages,
+          formEndpoint,
+          i === 0, // nav en el primer grupo
+          i === groups.length - 1, // footer en el último grupo
+        );
+        bodyParts.push(fragment);
+      }
+
+      let html = this.buildHead(ds, plan.projectName || 'Bienvenidos')
+        + '\n' + bodyParts.join('\n')
+        + '\n' + this.buildClosingScript(formEndpoint);
 
       html = enforcePremiumQuality(html, formEndpoint);
       if (formEndpoint) html = enforceContactForms(html, formEndpoint);
