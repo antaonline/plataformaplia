@@ -521,10 +521,11 @@ ESTANDARES DE DISEÑO PREMIUM obligatorios:
       if (pex) {
         images.push({
           id: prompt.id,
-          url: pex.buffer.toString('base64'),
+          url: pex.sourceUrl, // URL original de Pexels (para referencia)
           usage: prompt.usage,
           source: 'pexels',
-        });
+          buffer: pex.buffer, // buffer real para persistImages
+        } as any);
         continue;
       }
       // 2) Fallback: generar con IA.
@@ -833,37 +834,48 @@ ESTANDARES DE DISEÑO PREMIUM obligatorios:
 
   private async persistImages(
     projectId: number,
-    images: Array<{ id: string; url: string; usage: string }>,
+    images: Array<{ id: string; url: string; usage: string; source?: string; buffer?: Buffer }>,
   ) {
     const baseDir = join(process.cwd(), 'uploads', 'generated', String(projectId));
     fs.mkdirSync(baseDir, { recursive: true });
     const appUrl = (process.env.PREVIEW_PROXY_BASE || 'http://localhost:3002').replace(/\/$/, '');
     const results: Array<{ id: string; url: string; usage: string }> = [];
+
     for (let idx = 0; idx < images.length; idx++) {
       const img = images[idx];
-      const optimized = await this.optimizeImage(img.url, img.usage);
-      if (optimized) {
-        const filename = `${img.id || 'asset'}-${idx}.webp`;
-        const filePath = join(baseDir, filename);
-        fs.writeFileSync(filePath, optimized);
-        const { width, height } = this.getImageDimensions(img.usage);
-        const sizeKb = Math.round(optimized.byteLength / 1024);
-        this.logger.log(
-          `Imagen optimizada id=${img.id} usage=${img.usage} -> ${filename} ${width}x${height} ${sizeKb} KB`,
-        );
-        results.push({
-          ...img,
-          url: `${appUrl}/uploads/generated/${projectId}/${filename}`,
-        });
-      } else {
-        // Fallback: guardar PNG original sin optimizar.
-        const filename = `${img.id || 'asset'}-${idx}.png`;
-        const filePath = join(baseDir, filename);
-        fs.writeFileSync(filePath, Buffer.from(img.url, 'base64'));
-        results.push({
-          ...img,
-          url: `${appUrl}/uploads/generated/${projectId}/${filename}`,
-        });
+      try {
+        // Pexels: tiene buffer real (JPEG/PNG descargado). Guardarlo directamente.
+        if (img.source === 'pexels' && img.buffer) {
+          let savedBuf: Buffer = img.buffer;
+          try {
+            const sharp = (await import('sharp')).default;
+            const { width, height } = this.getImageDimensions(img.usage);
+            savedBuf = await sharp(img.buffer).resize(width, height, { fit: 'cover' }).webp({ quality: 85 }).toBuffer();
+          } catch { /* sharp no disponible, usar original */ }
+          const ext = img.buffer && savedBuf !== img.buffer ? 'webp' : 'jpg';
+          const filename = `${img.id}-${idx}.${ext}`;
+          fs.writeFileSync(join(baseDir, filename), savedBuf);
+          const sizeKb = Math.round(savedBuf.byteLength / 1024);
+          this.logger.log(`Imagen optimizada id=${img.id} usage=${img.usage} -> ${filename} ${sizeKb} KB`);
+          results.push({ ...img, url: `${appUrl}/uploads/generated/${projectId}/${filename}` });
+          continue;
+        }
+
+        // DALL-E / IA: url es base64 string
+        const optimized = await this.optimizeImage(img.url, img.usage);
+        if (optimized) {
+          const filename = `${img.id}-${idx}.webp`;
+          fs.writeFileSync(join(baseDir, filename), optimized);
+          const sizeKb = Math.round(optimized.byteLength / 1024);
+          this.logger.log(`Imagen optimizada id=${img.id} usage=${img.usage} -> ${filename} ${sizeKb} KB`);
+          results.push({ ...img, url: `${appUrl}/uploads/generated/${projectId}/${filename}` });
+        } else {
+          const filename = `${img.id}-${idx}.png`;
+          fs.writeFileSync(join(baseDir, filename), Buffer.from(img.url, 'base64'));
+          results.push({ ...img, url: `${appUrl}/uploads/generated/${projectId}/${filename}` });
+        }
+      } catch (e: any) {
+        this.logger.warn(`persistImages error id=${img.id}: ${e?.message}`);
       }
     }
     return results;
@@ -931,7 +943,8 @@ ESTANDARES DE DISEÑO PREMIUM obligatorios:
       let html = await this.chatHtml(systemPrompt, userPrompt);
 
       // 3. Inyectar URLs reales en los placeholders
-      html = this.injectImagesIntoHtml(html, rawImages);
+      // Usar storedImages (URLs públicas reales) para inyectar en el HTML
+      html = this.injectImagesIntoHtml(html, storedImages);
 
       // 4. Aplicar contact.php y limpieza de seguridad
       // enforceContactForms se aplica en persistGeneratedAssets internamente
