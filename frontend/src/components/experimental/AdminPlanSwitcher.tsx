@@ -36,6 +36,7 @@ export const AdminPlanSwitcher: React.FC<Props> = ({
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState<string | null>(null);
   const [active, setActive] = useState(currentSlug || 'studio-free');
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (currentSlug) setActive(currentSlug);
@@ -44,6 +45,7 @@ export const AdminPlanSwitcher: React.FC<Props> = ({
   const select = async (slug: string) => {
     if (loading) return;
     setLoading(slug);
+    setError(null);
     try {
       const res = await fetch(`${apiBase}/experimental/studio-plans/dev-set-plan`, {
         method: 'POST',
@@ -53,13 +55,21 @@ export const AdminPlanSwitcher: React.FC<Props> = ({
         },
         body: JSON.stringify({ slug }),
       });
+      const data = await res.json().catch(() => ({}));
       if (res.ok) {
         setActive(slug);
         setOpen(false);
         onChanged?.(slug);
+      } else {
+        // Mostrar el motivo real (403 no-admin, 500 plan inexistente, etc).
+        setError(
+          data?.message ||
+            data?.error ||
+            `Error ${res.status}: no se pudo cambiar de plan`,
+        );
       }
-    } catch {
-      /* noop */
+    } catch (e: any) {
+      setError(e?.message || 'Error de red al cambiar de plan');
     } finally {
       setLoading(null);
     }
@@ -110,6 +120,10 @@ export const AdminPlanSwitcher: React.FC<Props> = ({
             </button>
           ))}
         </motion.div>
+      )}
+
+      {error && (
+        <p className="mt-2 text-[11px] text-red-400 leading-snug px-1">{error}</p>
       )}
     </div>
   );

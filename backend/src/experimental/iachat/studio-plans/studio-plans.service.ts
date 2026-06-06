@@ -380,16 +380,27 @@ export class StudioPlansService {
       throw new Error(`Slug de plan inválido: ${slug}`);
     }
 
+    // IDs de TODOS los planes Studio (para filtrar por planId — updateMany
+    // de Prisma NO soporta filtrar por relación `plan: { serviceType }`,
+    // solo por campos escalares como planId).
+    const studioPlans = await (this.prisma as any).plan.findMany({
+      where: { serviceType: 'STUDIO_SUBSCRIPTION' },
+      select: { id: true },
+    });
+    const studioPlanIds = studioPlans.map((p: any) => p.id);
+
     // Cancelar suscripciones Studio activas previas para que getCapabilities
     // no tome una vieja.
-    await (this.prisma as any).hostingSubscription.updateMany({
-      where: {
-        userId,
-        plan: { serviceType: 'STUDIO_SUBSCRIPTION' },
-        status: { in: ['ACTIVE', 'TRIAL'] },
-      },
-      data: { status: 'CANCELLED' },
-    });
+    if (studioPlanIds.length > 0) {
+      await (this.prisma as any).hostingSubscription.updateMany({
+        where: {
+          userId,
+          planId: { in: studioPlanIds },
+          status: { in: ['ACTIVE', 'TRIAL'] },
+        },
+        data: { status: 'CANCELLED' },
+      });
+    }
 
     // studio-free no necesita suscripción (es el fallback).
     if (slug === 'studio-free') {
