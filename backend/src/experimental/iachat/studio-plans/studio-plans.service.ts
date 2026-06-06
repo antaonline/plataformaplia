@@ -407,9 +407,10 @@ export class StudioPlansService {
       return { ok: true, planSlug: 'studio-free' };
     }
 
-    // Crear la nueva suscripción ACTIVE apuntando al plan elegido.
+    // Buscar el plan por slug (sin filtrar por el enum para no depender de
+    // que el cliente Prisma local tenga STUDIO_SUBSCRIPTION regenerado).
     const plan = await (this.prisma as any).plan.findFirst({
-      where: { slug, serviceType: 'STUDIO_SUBSCRIPTION' },
+      where: { slug },
     });
     if (!plan) {
       throw new Error(`Plan ${slug} no existe en la BD. ¿Corriste la migration?`);
@@ -417,19 +418,25 @@ export class StudioPlansService {
 
     const now = new Date();
     const oneYear = new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000);
-    await (this.prisma as any).hostingSubscription.create({
-      data: {
-        userId,
-        planId: plan.id,
-        serviceType: 'STUDIO_SUBSCRIPTION',
-        status: 'ACTIVE',
-        startDate: now,
-        endDate: oneYear,
-        nextBillingAt: oneYear,
-        billingCycleMonths: 12,
-        metadata: JSON.stringify({ devOverride: true, setAt: now.toISOString() }),
-      },
-    });
+
+    // INSERT con SQL crudo: el cliente Prisma local puede no tener
+    // STUDIO_SUBSCRIPTION en el enum PlanServiceType (no se regeneró tras
+    // la migration), y create() valida el enum estrictamente -> error
+    // "Value '' not found in enum". El SQL crudo manda el valor directo a
+    // MariaDB, que sí tiene el enum actualizado por la migration.
+    const fmt = (d: Date) => d.toISOString().slice(0, 19).replace('T', ' ');
+    const metadata = JSON.stringify({ devOverride: true, setAt: now.toISOString() });
+    await (this.prisma as any).$executeRawUnsafe(
+      `INSERT INTO hostingsubscription
+        (userId, planId, serviceType, status, startDate, endDate, nextBillingAt, billingCycleMonths, metadata)
+       VALUES (?, ?, 'STUDIO_SUBSCRIPTION', 'ACTIVE', ?, ?, ?, 12, ?)`,
+      userId,
+      plan.id,
+      fmt(now),
+      fmt(oneYear),
+      fmt(oneYear),
+      metadata,
+    );
 
     return { ok: true, planSlug: slug };
   }
