@@ -929,10 +929,7 @@ ESTANDARES DE DISEÑO PREMIUM obligatorios:
       return null;
     }
 
-    // Motor Claude estatico (detras de feature flag; legacy intacto).
-    if ((process.env.WEBDEV_ENGINE || 'legacy').toLowerCase() === 'claude') {
-      return this.generateStaticWithClaude(project, revisionNote);
-    }
+    // Motor HTML-direct (nuevo): siempre activo. generateStaticWithClaude queda como legacy unused.
 
     try {
       const plan = project.type as PlanType;
