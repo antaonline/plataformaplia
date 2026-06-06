@@ -552,7 +552,7 @@ export class AiService {
 </html>`;
   }
 
-  private async persistGeneratedAssets(projectId: number, domain: string | null, html: string, pages?: Array<{ slug: string; html: string }>) {
+  private async persistGeneratedAssets(projectId: number, domain: string | null, html: string, pages?: Array<{ slug: string; html: string }>, publishImmediately = false) {
     const previewRoot = join(process.cwd(), 'uploads', 'previews', String(projectId));
     fs.mkdirSync(previewRoot, { recursive: true });
     fs.writeFileSync(join(previewRoot, 'index.html'), html, 'utf-8');
@@ -569,8 +569,33 @@ export class AiService {
       const root = process.env.CYBERPANEL_SITES_ROOT || '/home';
       const publicDir = process.env.CYBERPANEL_PUBLIC_DIR || 'public_html';
       siteRoot = join(root, domain, publicDir);
-      
-      this.logger.log(`[DELAYED PUBLISH] Se omite escritura inmediata en ${siteRoot} para ${domain}. Se realizara al cumplirse el plazo.`);
+
+      if (publishImmediately) {
+        // Admin test project: publicar directamente sin esperar el plazo
+        this.logger.log(`[ADMIN INSTANT PUBLISH] Publicando directamente en ${siteRoot} para ${domain}.`);
+        const maxAttempts = 30;
+        const pollIntervalMs = 2000;
+        let success = false;
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+          if (fs.existsSync(siteRoot)) {
+            fs.writeFileSync(join(siteRoot, 'index.html'), html, 'utf-8');
+            if (pages?.length) {
+              for (const page of pages) {
+                const fileName = page.slug === 'index' ? 'index.html' : `${page.slug}.html`;
+                fs.writeFileSync(join(siteRoot, fileName), page.html, 'utf-8');
+              }
+            }
+            success = true;
+            break;
+          }
+          this.logger.log(`[ADMIN INSTANT PUBLISH] Esperando que CyberPanel cree ${siteRoot} (intento ${attempt}/${maxAttempts})...`);
+          await this.sleep(pollIntervalMs);
+        }
+        if (!success) {
+          this.logger.warn(`[ADMIN INSTANT PUBLISH] No se pudo escribir en ${siteRoot} tras ${maxAttempts} intentos. Se usará solo el preview.`);
+        }
+      } else {
+        this.logger.log(`[DELAYED PUBLISH] Se omite escritura inmediata en ${siteRoot} para ${domain}. Se realizara al cumplirse el plazo.`);
       
       /* 
       // LOGICA ANTERIOR: Se escribia inmediatamente si el dominio existia.
@@ -610,6 +635,7 @@ export class AiService {
         throw new Error(`No se pudo persistir el sitio tras varios intentos en ${domain}`);
       }
       */
+      } // end else (delayed publish)
     }
 
     return {
@@ -844,20 +870,21 @@ export class AiService {
     }
 
     const domain = currentDomain || '';
+    const isAdminTest = existingData._adminTest === true;
     let deployment: { target?: string | null; previewUrl?: string } = {};
     if (domain && html) {
       try {
         if (plan === 'WEB') {
           deployment = this.nextExportService.exportSite(projectId, spec, domain);
         } else {
-          deployment = await this.persistGeneratedAssets(projectId, domain, html, pages);
+          deployment = await this.persistGeneratedAssets(projectId, domain, html, pages, isAdminTest);
         }
       } catch (error: any) {
         this.logger.error(`No se pudo escribir en el sitio ${domain}`, error?.message || error);
         throw new Error(`No se pudo publicar el sitio en ${domain}: ${error?.message || error}`);
       }
     } else if (html) {
-      deployment = await this.persistGeneratedAssets(projectId, null, html, pages);
+      deployment = await this.persistGeneratedAssets(projectId, null, html, pages, isAdminTest);
     }
 
     const result: AiGenerationResult = {
@@ -872,17 +899,26 @@ export class AiService {
     const previewExists = fs.existsSync(previewPath);
     
     this.logger.log(
-      `AI done project=${projectId} preview=${previewExists ? previewPath : 'missing'} (Pending auto-publish at deadline)`,
+      isAdminTest
+        ? `AI done project=${projectId} [ADMIN TEST] publicado inmediatamente en ${domain}`
+        : `AI done project=${projectId} preview=${previewExists ? previewPath : 'missing'} (Pending auto-publish at deadline)`,
     );
+
+    const publishedAt = isAdminTest ? new Date().toISOString() : undefined;
 
     await this.prisma.project.update({
       where: { id: projectId },
       data: {
-        status: ProjectStatus.IN_PROGRESS, // Mantener en progreso hasta el deadline
+        status: isAdminTest ? ProjectStatus.DELIVERED : ProjectStatus.IN_PROGRESS,
         onboardingData: JSON.stringify({
           ...existingData,
+          ...(isAdminTest ? {
+            publicUrl: domain ? `https://${domain}` : null,
+            publicDomain: domain || null,
+            publishedAt,
+          } : {}),
           aiGeneration: {
-            status: 'READY', // La IA ya terminó su parte
+            status: 'READY',
             mode,
             updatedAt: new Date().toISOString(),
             score,
