@@ -5,6 +5,7 @@ import {
   Param,
   ParseIntPipe,
   Post,
+  Req,
   UseGuards,
 } from '@nestjs/common';
 import { ProjectsService } from './projects.service';
@@ -47,6 +48,15 @@ export class AdminProjectsController {
     },
   ) {
     return this.projectsService.configureDb(id, body);
+  }
+
+  @Post('create-test')
+  createTest(
+    @Req() req: any,
+    @Body() body: { type?: 'LANDING' | 'WEB'; subdomain?: string },
+  ) {
+    const type = body?.type === 'WEB' ? 'WEB' : 'LANDING';
+    return this.projectsService.createTestProject(req.user.id, type, body?.subdomain);
   }
 
   // Re-aplica enforceContactForms a TODOS los HTML del sitio publicado

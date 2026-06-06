@@ -670,6 +670,43 @@ var timer = setInterval(tick,1000);
   }
 
 
+  async createTestProject(adminUserId: number, type: 'LANDING' | 'WEB', subdomain?: string) {
+    // Buscar el plan correspondiente al tipo (el primero disponible)
+    const planSlug = type === 'LANDING' ? 'landing' : 'web';
+    const plan = await this.prisma.plan.findFirst({
+      where: { OR: [{ slug: { contains: planSlug } }, { name: { contains: planSlug } }] },
+    }) ?? await this.prisma.plan.findFirst();
+
+    if (!plan) throw new BadRequestException('No hay planes configurados en la base de datos.');
+
+    // Crear orden ficticia marcada como ADMIN_TEST para no confundirla con pagos reales
+    const order = await this.prisma.order.create({
+      data: {
+        userId: adminUserId,
+        planId: plan.id,
+        amount: 0,
+        currency: 'PEN',
+        status: 'PAID' as any,
+        metadata: JSON.stringify({ _adminTest: true }),
+      },
+    });
+
+    const name = `Test-${type}-${Date.now()}`;
+    const project = await this.prisma.project.create({
+      data: {
+        name,
+        type,
+        status: ProjectStatus.WAITING_INFO,
+        user: { connect: { id: adminUserId } },
+        order: { connect: { id: order.id } },
+        onboardingData: subdomain
+          ? JSON.stringify({ subdomain, _adminTest: true })
+          : JSON.stringify({ _adminTest: true }),
+      },
+    });
+    return project;
+  }
+
   async listByUser(userId: number) {
     return this.prisma.project.findMany({
       where: { userId },

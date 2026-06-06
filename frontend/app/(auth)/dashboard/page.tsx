@@ -665,6 +665,11 @@ export default function DashboardPage() {
   const PROJECTS_PAGE_SIZE = 5;
   const [visibleProjectsCount, setVisibleProjectsCount] =
     useState<number>(PROJECTS_PAGE_SIZE);
+  const [visibleAdminProjectsCount, setVisibleAdminProjectsCount] =
+    useState<number>(PROJECTS_PAGE_SIZE);
+
+  // Estado de creación de proyecto de prueba (admin)
+  const [testProjectCreating, setTestProjectCreating] = useState(false);
 
   const formatDate = (value: string | null) => {
     if (!value) return 'Sin fecha';
@@ -1516,6 +1521,29 @@ export default function DashboardPage() {
     }
   };
 
+  const handleCreateTestProject = async (type: 'LANDING' | 'WEB') => {
+    setTestProjectCreating(true);
+    try {
+      const token = localStorage.getItem('access_token');
+      const res = await fetch(`${apiBase}/admin/projects/create-test`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ type }),
+      });
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : null;
+      if (!res.ok) throw new Error(data?.message || 'No se pudo crear el proyecto.');
+      await loadData();
+      // Seleccionar el proyecto recién creado y mostrar el formulario
+      handleSelectProject(normalizeProject(data));
+      setTab('projects');
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message || 'No se pudo crear el proyecto.', variant: 'destructive' });
+    } finally {
+      setTestProjectCreating(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="section-container py-16">
@@ -1924,48 +1952,100 @@ export default function DashboardPage() {
               </div>
             )}
 
-            {tab === 'projects' && isAdmin && (
-              <Card className="rounded-lg border-border/60">
-                <CardHeader>
-                  <CardTitle>Proyectos solicitados</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {adminProjects.length === 0 && (
-                    <p className="text-sm text-muted-foreground">No hay proyectos por revisar.</p>
-                  )}
-                  {adminProjects.map((proj) => (
-                    <div
-                      key={proj.id}
-                      className="flex flex-col gap-3 rounded-lg border border-border bg-white px-4 py-3 md:flex-row md:items-center md:justify-between"
-                    >
-                      <div>
-                        <p className="font-medium">{proj.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {proj.user?.name} - {proj.order?.plan?.name}
+            {tab === 'projects' && isAdmin && !isWaitingInfo && (
+              <div className="space-y-4">
+                {/* Botones de acción rápida para admin */}
+                <div className="flex flex-wrap gap-3">
+                  <Button
+                    variant="cta"
+                    className="rounded-full"
+                    disabled={testProjectCreating}
+                    onClick={() => handleCreateTestProject('LANDING')}
+                  >
+                    {testProjectCreating ? 'Creando...' : '+ Crear Landing de prueba'}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="rounded-full"
+                    disabled={testProjectCreating}
+                    onClick={() => handleCreateTestProject('WEB')}
+                  >
+                    {testProjectCreating ? 'Creando...' : '+ Crear Web Institucional de prueba'}
+                  </Button>
+                </div>
+
+                <Card className="rounded-lg border-border/60">
+                  <CardHeader>
+                    <CardTitle>Proyectos solicitados</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {adminProjects.length === 0 && (
+                      <p className="text-sm text-muted-foreground">No hay proyectos por revisar.</p>
+                    )}
+                    {adminProjects.slice(0, visibleAdminProjectsCount).map((proj) => (
+                      <div
+                        key={proj.id}
+                        className="flex flex-col gap-3 rounded-lg border border-border bg-white px-4 py-3 md:flex-row md:items-center md:justify-between"
+                      >
+                        <div>
+                          <p className="font-medium">{proj.name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {proj.user?.name} - {proj.order?.plan?.name ?? proj.type}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          {renderStatus(proj.status)}
+                          <Button variant="outline" size="sm" asChild>
+                            <Link href={`/dashboard/detalles-proyecto/${proj.id}`}>Ver proyecto</Link>
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                            title="Eliminar proyecto"
+                            onClick={() => {
+                              setDeleteConfirmText('');
+                              setProjectToDelete(proj);
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                    {adminProjects.length > visibleAdminProjectsCount && (
+                      <div className="flex flex-col items-center gap-2 pt-3">
+                        <Button
+                          variant="ctaOutline"
+                          size="sm"
+                          className="rounded-full px-6"
+                          onClick={() =>
+                            setVisibleAdminProjectsCount((c) =>
+                              Math.min(c + PROJECTS_PAGE_SIZE, adminProjects.length),
+                            )
+                          }
+                        >
+                          Cargar {Math.min(PROJECTS_PAGE_SIZE, adminProjects.length - visibleAdminProjectsCount)} más
+                        </Button>
+                        <p className="text-[11px] text-muted-foreground">
+                          Mostrando {visibleAdminProjectsCount} de {adminProjects.length} proyectos
                         </p>
                       </div>
-                      <div className="flex items-center gap-3">
-                        {renderStatus(proj.status)}
-                        <Button variant="outline" size="sm" asChild>
-                          <Link href={`/dashboard/detalles-proyecto/${proj.id}`}>Ver proyecto</Link>
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                          title="Eliminar proyecto"
-                          onClick={() => {
-                            setDeleteConfirmText('');
-                            setProjectToDelete(proj);
-                          }}
+                    )}
+                    {adminProjects.length > PROJECTS_PAGE_SIZE && visibleAdminProjectsCount >= adminProjects.length && (
+                      <div className="flex flex-col items-center gap-2 pt-3">
+                        <button
+                          type="button"
+                          className="text-xs text-muted-foreground underline hover:text-foreground"
+                          onClick={() => setVisibleAdminProjectsCount(PROJECTS_PAGE_SIZE)}
                         >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                          Mostrar solo los {PROJECTS_PAGE_SIZE} más recientes
+                        </button>
                       </div>
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
             )}
             {!isAdmin && !project && tab === 'projects' && (
               <div className="flex flex-col items-center justify-center py-24 text-center gap-4">
@@ -1979,11 +2059,22 @@ export default function DashboardPage() {
                 </a>
               </div>
             )}
-            {!isAdmin && isWaitingInfo && (
+            {isWaitingInfo && (
               <div className="grid lg:grid-cols-[2fr_1fr] gap-6">
                 <Card className="rounded-lg border-border/60">
                   <CardHeader>
-                  <CardTitle>Bienvenido, configuremos tu web</CardTitle>
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        className="text-xs text-muted-foreground hover:text-foreground mb-1 text-left"
+                        onClick={() => { setProject(null); setSelectedProjectId(null); }}
+                      >
+                        ← Volver a la lista de proyectos
+                      </button>
+                    )}
+                  <CardTitle>
+                    {isAdmin ? `Proyecto de prueba (${project?.type === 'LANDING' ? 'Landing' : 'Web Institucional'})` : 'Bienvenido, configuremos tu web'}
+                  </CardTitle>
                     <p className="text-sm text-muted-foreground">Paso {step} de 6</p>
                   </CardHeader>
                   <CardContent className="space-y-6">
