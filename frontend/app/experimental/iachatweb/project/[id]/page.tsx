@@ -23,6 +23,7 @@ import {
 } from '@/components/experimental/OnboardingChat';
 import { Templates3DDialog } from '@/components/experimental/Templates3DDialog';
 import { CreativeStudioDialog } from '@/components/experimental/CreativeStudioDialog';
+import { CanvasViewport, CanvasViewportHandle } from '@/components/experimental/CanvasViewport';
 import { toast } from 'sonner';
 import ThinkingSection from '@/components/chat/ThinkingSection';
 import ToolResultItem from '@/components/chat/ToolResultItem';
@@ -136,6 +137,10 @@ export default function projectPage() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const canvasRef = useRef<CanvasViewportHandle>(null);
+  // Modo lienzo: cuando está activo, el preview vive en un canvas infinito
+  // con zoom/pan (estilo Framer). Cuando está apagado, ocupa todo el panel.
+  const [canvasMode, setCanvasMode] = useState(true);
   const [isDragging, setIsDragging] = useState(false);
 
   useEffect(() => {
@@ -1545,17 +1550,52 @@ export default function projectPage() {
                 <Sidebar className="h-5 w-5 text-slate-400 group-hover:text-indigo-500" />
               </button>
             )}
-            <div className={cn("bg-white shadow-2xl rounded-3xl overflow-hidden flex-1 relative transition-all duration-500", rightPaneMode === 'code' ? 'w-full' : viewport === 'desktop' ? "w-full" : viewport === 'tablet' ? "w-[768px]" : "w-[375px]")}>
-               {rightPaneMode === 'code' ? (
-                 <FileExplorer
-                   files={pages}
-                   onAskAiAboutFile={(path) => {
-                     setRightPaneMode('preview');
-                     const tag = `Edita el archivo \`${path}\`: `;
-                     setInput((prev) => (prev ? `${tag}${prev}` : tag));
-                   }}
-                 />
-               ) : previewUrl ? (
+            {/* CÓDIGO: el FileExplorer ocupa todo el panel, sin canvas. */}
+            {rightPaneMode === 'code' ? (
+              <div className="bg-white shadow-2xl rounded-3xl overflow-hidden flex-1 w-full relative">
+                <FileExplorer
+                  files={pages}
+                  onAskAiAboutFile={(path) => {
+                    setRightPaneMode('preview');
+                    const tag = `Edita el archivo \`${path}\`: `;
+                    setInput((prev) => (prev ? `${tag}${prev}` : tag));
+                  }}
+                />
+              </div>
+            ) : previewUrl && canvasMode ? (
+              /* PREVIEW + LIENZO INFINITO (zoom/pan estilo Framer). El artboard
+                 es un device frame de tamaño fijo según el viewport; el canvas
+                 lo escala y mueve. */
+              (() => {
+                const dims =
+                  viewport === 'tablet'
+                    ? { w: 820, h: 1180 }
+                    : viewport === 'mobile'
+                      ? { w: 390, h: 844 }
+                      : { w: 1440, h: 900 };
+                return (
+                  <CanvasViewport
+                    ref={canvasRef}
+                    artboardWidth={dims.w}
+                    artboardHeight={dims.h}
+                  >
+                    <div
+                      className="bg-white shadow-2xl rounded-2xl overflow-hidden relative"
+                      style={{ width: dims.w, height: dims.h }}
+                    >
+                      <iframe
+                        key={`preview-iframe-${id}-${previewNonce}`}
+                        ref={iframeRef}
+                        src={previewUrl}
+                        className="w-full h-full border-none"
+                      />
+                    </div>
+                  </CanvasViewport>
+                );
+              })()
+            ) : (
+            <div className={cn("bg-white shadow-2xl rounded-3xl overflow-hidden flex-1 relative transition-all duration-500", viewport === 'desktop' ? "w-full" : viewport === 'tablet' ? "w-[768px]" : "w-[375px]")}>
+               {previewUrl ? (
                   <iframe
                     key={`preview-iframe-${id}-${previewNonce}`}
                     ref={iframeRef}
@@ -1578,7 +1618,7 @@ export default function projectPage() {
                      </div>
                   </div>
                )}
-               
+
                {runtimeError && (
                   <div className="absolute bottom-20 left-4 right-4 bg-red-600 text-white p-4 rounded-xl flex items-center justify-between shadow-2xl z-50">
                      <div className="text-xs font-bold flex items-center gap-2"><AlertCircle className="h-4 w-4" /> {runtimeError}</div>
@@ -1608,6 +1648,28 @@ export default function projectPage() {
                   </div>
                 )}
             </div>
+            )}
+
+            {/* Error de runtime en modo lienzo (el overlay de adentro solo
+                cubre el modo sin lienzo). */}
+            {runtimeError && canvasMode && previewUrl && rightPaneMode !== 'code' && (
+              <div className="absolute bottom-6 left-8 right-8 bg-red-600 text-white p-4 rounded-xl flex items-center justify-between shadow-2xl z-50">
+                <div className="text-xs font-bold flex items-center gap-2"><AlertCircle className="h-4 w-4" /> {runtimeError}</div>
+                <Button onClick={() => handleSend(`Fix this error: ${runtimeError}`)} className="bg-white text-red-600 text-xs h-7 px-3 rounded-lg font-black">AUTO-FIX</Button>
+              </div>
+            )}
+
+            {/* Toggle del modo lienzo (zoom/pan). */}
+            {previewUrl && rightPaneMode !== 'code' && (
+              <button
+                onClick={() => setCanvasMode((v) => !v)}
+                title={canvasMode ? 'Salir del lienzo' : 'Modo lienzo (zoom/pan estilo Framer)'}
+                className="absolute top-4 right-4 z-40 bg-white border border-slate-200 px-3 py-2 rounded-xl shadow-md hover:bg-slate-50 text-xs font-bold text-slate-600 flex items-center gap-1.5 transition-all"
+              >
+                <Layout className="h-3.5 w-3.5 text-indigo-500" />
+                {canvasMode ? 'Lienzo ON' : 'Lienzo'}
+              </button>
+            )}
           </div>
         </div>
 
