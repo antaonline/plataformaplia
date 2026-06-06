@@ -1180,18 +1180,13 @@ Todo en un solo HTML con anchors.`;
         html = await this.chatHtml(systemPrompt, userPrompt + '\n\nIMPORTANTE: El HTML DEBE estar COMPLETO con </body></html> al final. No lo cortes.', clientLogoUrl, clientImages);
       }
 
-      // 3. Inyectar URLs reales de imágenes
+      // 3. Inyectar URLs absolutas reales de imágenes
       html = this.injectImagesIntoHtml(html, storedImages);
 
-      // 4. Copiar imágenes generadas al public_html para independencia del backend
-      if (currentDomain) {
-        html = this.rewriteImageUrlsToRelative(html, storedImages, projectId);
-      }
-
-      // 5. Enforcer de contact form (PHP handler real)
+      // 4. Enforcer de contact form (PHP handler real)
       html = enforceContactForms(html, existingData.subdomain || '');
 
-      // 6. Inyectar meta tags SEO
+      // 5. Inyectar meta tags SEO
       html = this.injectSeoMeta(html, existingData);
 
       if (!html || !html.trim()) {
