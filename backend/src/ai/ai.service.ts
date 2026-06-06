@@ -152,6 +152,10 @@ export class AiService {
 
 SALIDA: SOLO el HTML completo (<!DOCTYPE html> hasta </html>). Cero markdown. Cero explicaciones. El primer caracter es "<".
 
+⚠️ LÍMITE DE TOKENS — MUY IMPORTANTE:
+Tienes máximo 8000 tokens de salida. El HTML DEBE terminar con </body></html>.
+Para lograrlo: CSS compacto (combina selectores, una propiedad por línea solo si necesario), omite comentarios, y si te acercas al final, cierra el HTML aunque falten secciones secundarias. El orden de prioridad si falta espacio: nav + hero + contact + footer son OBLIGATORIOS, las demás secciones son opcionales.
+
 ═══════════════════════════════════════════
 REGLAS DE IMÁGENES — CRÍTICO — NUNCA VIOLAR
 ═══════════════════════════════════════════
@@ -1191,10 +1195,21 @@ Todo en un solo HTML con anchors.`;
       const userPrompt = this.buildUserPrompt(existingData, plan);
       let html = await this.chatHtml(systemPrompt, userPrompt, clientLogoUrl, clientImages);
 
-      // Validar que el HTML esté completo — si se cortó, reintentar una vez
-      if (!html.includes('</html>') || html.length < 3000) {
-        this.logger.warn(`[html-direct] HTML incompleto (${html.length} chars), reintentando...`);
-        html = await this.chatHtml(systemPrompt, userPrompt + '\n\nIMPORTANTE: El HTML DEBE estar COMPLETO con </body></html> al final. No lo cortes.', clientLogoUrl, clientImages);
+      // Validar que el HTML esté completo
+      if (!html.includes('</html>')) {
+        this.logger.warn(`[html-direct] HTML truncado (${html.length} chars, sin </html>). Completando...`);
+        // Estrategia: pedir a Claude que complete el HTML truncado — mucho más barato que regenerar todo
+        const truncated = html.slice(-2000); // últimas 2000 chars como contexto
+        const completionPrompt = `El siguiente HTML fue truncado por límite de tokens. Continúa exactamente desde donde se cortó y cierra todos los tags abiertos terminando con </body></html>. NO repitas lo que ya está. Solo escribe la continuación:\n\n...${truncated}`;
+        const completion = await this.chatHtml(
+          'Eres un experto en HTML. Continúa y cierra el HTML truncado que te dan. Devuelve SOLO la continuación del código, sin repetir lo anterior.',
+          completionPrompt,
+        );
+        // Unir el HTML original con la continuación, evitando duplicar el overlap
+        const overlapEnd = completion.trimStart().slice(0, 100);
+        const overlapIdx = html.lastIndexOf(overlapEnd.slice(0, 30));
+        html = (overlapIdx > html.length - 500 ? html.slice(0, overlapIdx) : html) + '\n' + completion;
+        this.logger.log(`[html-direct] HTML completado: ${html.length} chars`);
       }
 
       // 3. Inyectar URLs absolutas reales de imágenes
