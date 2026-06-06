@@ -22,6 +22,7 @@ import {
   OnboardingAnswers,
 } from '@/components/experimental/OnboardingChat';
 import { Templates3DDialog } from '@/components/experimental/Templates3DDialog';
+import { CreativeStudioDialog } from '@/components/experimental/CreativeStudioDialog';
 import { toast } from 'sonner';
 import ThinkingSection from '@/components/chat/ThinkingSection';
 import ToolResultItem from '@/components/chat/ToolResultItem';
@@ -77,6 +78,7 @@ export default function projectPage() {
   const [studioCaps, setStudioCaps] = useState<StudioCapabilities | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showTemplates3D, setShowTemplates3D] = useState(false);
+  const [showCreative, setShowCreative] = useState(false);
   const onboardingCheckedRef = useRef(false);
   const [input, setInput] = useState('');
   const [viewport, setViewport] = useState<'desktop' | 'tablet' | 'mobile'>('desktop');
@@ -1477,6 +1479,17 @@ export default function projectPage() {
                           <span className="hidden sm:inline">Templates 3D</span>
                         </button>
 
+                        {/* Botón Estudio Creativo: generar imágenes/video con IA */}
+                        <button
+                          type="button"
+                          onClick={() => setShowCreative(true)}
+                          title="Estudio Creativo — generar imágenes y video con IA"
+                          className="h-9 px-3 flex items-center gap-1.5 rounded-xl hover:bg-slate-200/50 transition-colors text-slate-600 text-xs font-semibold"
+                        >
+                          <Wand2 className="h-3.5 w-3.5 text-violet-500" />
+                          <span className="hidden sm:inline">Estudio</span>
+                        </button>
+
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button variant="ghost" className="h-9 px-3 text-xs font-semibold text-slate-600 gap-2 hover:bg-slate-200/50 rounded-xl">
@@ -1681,6 +1694,26 @@ export default function projectPage() {
         authToken={typeof window !== 'undefined' ? localStorage.getItem('access_token') || '' : ''}
         onClose={() => setShowTemplates3D(false)}
         onUseTemplate={handleUseTemplate3D}
+      />
+      {/* Estudio Creativo: generar imágenes (Flux), imagen-a-video (Kling/Veo),
+          gestionar assets. Primer paso del entorno creativo unificado. */}
+      <CreativeStudioDialog
+        open={showCreative}
+        apiBase={apiBase}
+        authToken={typeof window !== 'undefined' ? localStorage.getItem('access_token') || '' : ''}
+        onClose={() => setShowCreative(false)}
+        onUseAsset={(asset) => {
+          // Por ahora: insertar el asset como mensaje al chat para que la IA
+          // lo use en la web (reemplazar hero, agregar a galería). En el
+          // sprint del canvas unificado esto será drag-and-drop directo.
+          setShowCreative(false);
+          const kind = asset.kind === 'video' ? 'video' : 'imagen';
+          handleSend(
+            `Usá este ${kind} que generé en el Estudio Creativo: ${asset.url}\n\n` +
+              `Insertalo donde mejor quede (hero, galería, o donde tenga sentido para ${kind === 'video' ? 'un fondo cinematográfico' : 'mostrar el producto/ambiente'}). ` +
+              (asset.prompt ? `Contexto: "${asset.prompt}".` : ''),
+          );
+        }}
       />
       <Toaster />
     </div>
