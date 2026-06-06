@@ -162,7 +162,7 @@ export class ClaudeProvider implements CodegenProvider {
           'https://api.anthropic.com/v1/messages',
           {
             model,
-            max_tokens: opts.maxTokens ?? 8192,
+            max_tokens: Math.min(opts.maxTokens ?? 8192, 8192), // claude-sonnet-4-6 max real
             temperature: opts.temperature ?? 0.7,
             system,
             messages: builtMessages,
@@ -171,10 +171,9 @@ export class ClaudeProvider implements CodegenProvider {
             headers: {
               'x-api-key': this.key,
               'anthropic-version': '2023-06-01',
-              'anthropic-beta': 'output-128k-2025-02-19',
               'content-type': 'application/json',
             },
-            timeout: 180_000,
+            timeout: 120_000,
           },
         ),
       'claude',

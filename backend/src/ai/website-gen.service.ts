@@ -300,10 +300,10 @@ SALIDA: devuelve SOLO el HTML completo de la pagina pedida. Sin explicaciones, s
         [{ role: 'user', content: user }],
         {
           model: MODEL_SONNET,
-          // 24k da espacio a 8-10 secciones ricas + GSAP setup + multiples
-          // svg inline + paragraphs reales. Con 16k Claude truncaba y
-          // entregaba sitios de 6 secciones planas.
-          maxTokens: 24000,
+          // 16k es el máximo que acepta GPT-4o (fallback). Claude con beta
+          // header intenta más, pero si no funciona cae a 8192 que con
+          // Tailwind CDN es suficiente para una landing completa.
+          maxTokens: 16000,
           // 0.55 es mas calibrado: variedad creativa pero menos drift
           // hacia errores tipo JSX literal o Place IDs inventados.
           temperature: 0.55,
