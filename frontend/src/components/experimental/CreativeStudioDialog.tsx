@@ -48,6 +48,10 @@ interface Props {
   onClose: () => void;
   /** Cuando el cliente elige "usar este asset" en su web. */
   onUseAsset?: (asset: CreativeAsset) => void;
+  /** Notifica al padre cada asset generado (para la barra de assets del lienzo). */
+  onAssetGenerated?: (asset: CreativeAsset) => void;
+  /** Assets externos (del padre) para mostrar en la pestaña Mis Assets. */
+  externalAssets?: CreativeAsset[];
 }
 
 export const CreativeStudioDialog: React.FC<Props> = ({
@@ -56,11 +60,21 @@ export const CreativeStudioDialog: React.FC<Props> = ({
   authToken,
   onClose,
   onUseAsset,
+  onAssetGenerated,
+  externalAssets,
 }) => {
   const [tab, setTab] = useState<Tab>('image');
   const [configured, setConfigured] = useState<boolean | null>(null);
   const [caps, setCaps] = useState<CreativeCaps | null>(null);
-  const [assets, setAssets] = useState<CreativeAsset[]>([]);
+  const [localAssets, setLocalAssets] = useState<CreativeAsset[]>([]);
+  // Combinamos los assets externos (del padre) con los generados en esta
+  // sesión del dialog, sin duplicar por id.
+  const assets = React.useMemo(() => {
+    const map = new Map<string, CreativeAsset>();
+    for (const a of externalAssets || []) map.set(a.id, a);
+    for (const a of localAssets) map.set(a.id, a);
+    return Array.from(map.values()).sort((x, y) => y.createdAt - x.createdAt);
+  }, [externalAssets, localAssets]);
 
   // Cargar modelos/capabilities al abrir.
   useEffect(() => {
@@ -76,9 +90,13 @@ export const CreativeStudioDialog: React.FC<Props> = ({
       .catch(() => setConfigured(false));
   }, [open, apiBase, authToken]);
 
-  const addAsset = useCallback((a: CreativeAsset) => {
-    setAssets((prev) => [a, ...prev]);
-  }, []);
+  const addAsset = useCallback(
+    (a: CreativeAsset) => {
+      setLocalAssets((prev) => [a, ...prev]);
+      onAssetGenerated?.(a);
+    },
+    [onAssetGenerated],
+  );
 
   return (
     <AnimatePresence>

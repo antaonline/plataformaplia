@@ -25,6 +25,8 @@ import {
 import { Templates3DDialog } from '@/components/experimental/Templates3DDialog';
 import { CreativeStudioDialog } from '@/components/experimental/CreativeStudioDialog';
 import { CanvasViewport, CanvasViewportHandle } from '@/components/experimental/CanvasViewport';
+import { CanvasAssetDock } from '@/components/experimental/CanvasAssetDock';
+import type { CreativeAsset } from '@/components/experimental/CreativeStudioDialog';
 import { toast } from 'sonner';
 import ThinkingSection from '@/components/chat/ThinkingSection';
 import ToolResultItem from '@/components/chat/ToolResultItem';
@@ -147,6 +149,9 @@ export default function projectPage() {
   const [editMode, setEditMode] = useState(false);
   const [selectedEl, setSelectedEl] = useState<any | null>(null);
   const [creativeForReplace, setCreativeForReplace] = useState(false);
+  // Assets generados/subidos en el Estudio Creativo, accesibles para
+  // arrastrar sobre el lienzo (Fase C). Persisten en la sesión del editor.
+  const [creativeAssets, setCreativeAssets] = useState<CreativeAsset[]>([]);
   const [isDragging, setIsDragging] = useState(false);
 
   useEffect(() => {
@@ -1764,6 +1769,12 @@ export default function projectPage() {
               </div>
             )}
 
+            {/* DOCK de assets arrastrables (Fase C). Solo en modo lienzo
+                con preview, cuando hay imágenes generadas para arrastrar. */}
+            {previewUrl && rightPaneMode !== 'code' && canvasMode && (
+              <CanvasAssetDock assets={creativeAssets} iframeRef={iframeRef} />
+            )}
+
             {/* INSPECTOR de elemento seleccionado (Fase B). */}
             {editMode && selectedEl && (
               <div className="absolute top-16 right-4 z-40 w-72 bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
@@ -1908,6 +1919,8 @@ export default function projectPage() {
         apiBase={apiBase}
         authToken={typeof window !== 'undefined' ? localStorage.getItem('access_token') || '' : ''}
         onClose={() => setShowCreative(false)}
+        externalAssets={creativeAssets}
+        onAssetGenerated={(a) => setCreativeAssets((prev) => [a, ...prev])}
         onUseAsset={(asset) => {
           setShowCreative(false);
           // CASO 1: venimos del inspector "Reemplazar imagen" -> reemplazo

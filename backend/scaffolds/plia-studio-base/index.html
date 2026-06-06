@@ -82,11 +82,13 @@
         var mode = 'none'; // 'none' | 'select'
         var hovered = null;
         var selected = null;
+        var dropTarget = null;
         var styleEl = document.createElement('style');
         styleEl.textContent =
           '.plia-hover{outline:2px solid #6366f1 !important;outline-offset:-2px !important;cursor:pointer !important;}' +
           '.plia-selected{outline:2px solid #8b5cf6 !important;outline-offset:-2px !important;box-shadow:0 0 0 4px rgba(139,92,246,0.2) !important;}' +
-          '.plia-editing{outline:2px dashed #10b981 !important;}';
+          '.plia-editing{outline:2px dashed #10b981 !important;}' +
+          '.plia-drop{outline:3px dashed #f59e0b !important;outline-offset:-3px !important;box-shadow:0 0 0 6px rgba(245,158,11,0.25) !important;}';
         document.head.appendChild(styleEl);
 
         function send(type, payload) {
@@ -145,6 +147,30 @@
             var oldSrc = selected.getAttribute('src');
             selected.setAttribute('src', e.data.url);
             send('PLIA_IMG_REPLACED', { oldSrc: oldSrc, newUrl: e.data.url });
+          } else if (e.data.type === 'PLIA_DRAG_OVER') {
+            // Drag de un asset desde el editor (coords en el viewport del
+            // iframe). Resaltamos la imagen bajo el cursor como destino.
+            var elAt = document.elementFromPoint(e.data.x, e.data.y);
+            if (dropTarget && dropTarget !== elAt) dropTarget.classList.remove('plia-drop');
+            if (elAt && elAt.tagName === 'IMG') {
+              dropTarget = elAt;
+              elAt.classList.add('plia-drop');
+              send('PLIA_DRAG_FEEDBACK', { over: true });
+            } else {
+              dropTarget = null;
+              send('PLIA_DRAG_FEEDBACK', { over: false });
+            }
+          } else if (e.data.type === 'PLIA_DRAG_DROP') {
+            var dropEl = document.elementFromPoint(e.data.x, e.data.y);
+            if (dropTarget) dropTarget.classList.remove('plia-drop');
+            dropTarget = null;
+            if (dropEl && dropEl.tagName === 'IMG') {
+              var prevSrc = dropEl.getAttribute('src');
+              dropEl.setAttribute('src', e.data.url);
+              send('PLIA_IMG_REPLACED', { oldSrc: prevSrc, newUrl: e.data.url });
+            }
+          } else if (e.data.type === 'PLIA_DRAG_END') {
+            if (dropTarget) { dropTarget.classList.remove('plia-drop'); dropTarget = null; }
           }
         });
 
