@@ -83,9 +83,40 @@ NOTA: Recibirás instrucciones específicas de QUÉ secciones generar en cada ll
 @Injectable()
 export class WebsiteGenService {
   private readonly logger = new Logger(WebsiteGenService.name);
-  // Plan y render: Claude primero (mejor diseño), GPT-4o como respaldo
-  private planProvider = new FallbackProvider([PROVIDERS.claude, PROVIDERS.openai]);
-  private renderProvider = new FallbackProvider([PROVIDERS.claude, PROVIDERS.openai]);
+  // SOLO Claude — GPT-4o genera diseños pobres, no lo usamos como fallback.
+  // Ante rate-limit, reintentamos Claude con espera (ver completeClaudeWithRetry).
+  private planProvider = new FallbackProvider([PROVIDERS.claude]);
+  private renderProvider = new FallbackProvider([PROVIDERS.claude]);
+
+  /**
+   * Llama a Claude con reintentos pacientes ante rate-limit (429 tokens/min).
+   * En vez de caer a GPT-4o (calidad pobre), espera y reintenta Claude.
+   */
+  private async completeClaudeWithRetry(
+    system: string,
+    messages: { role: 'user' | 'assistant'; content: string }[],
+    opts: any,
+    label: string,
+  ): Promise<string> {
+    const maxRetries = 5;
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        return await this.renderProvider.complete(system, messages, opts);
+      } catch (e: any) {
+        const status = e?.response?.status;
+        const msg = (e?.response?.data?.error?.message || e?.message || '').toLowerCase();
+        const isRateLimit = status === 429 || msg.includes('rate') || msg.includes('tokens per minute') || msg.includes('overloaded') || status === 529;
+        if (isRateLimit && attempt < maxRetries) {
+          const waitMs = (15 + attempt * 10) * 1000; // 15s, 25s, 35s, 45s, 55s
+          this.logger.warn(`[${label}] rate-limit Claude, esperando ${waitMs / 1000}s (intento ${attempt + 1}/${maxRetries})`);
+          await new Promise((r) => setTimeout(r, waitMs));
+          continue;
+        }
+        throw e;
+      }
+    }
+    throw new Error(`[${label}] Claude agotó reintentos por rate-limit`);
+  }
 
   private stripFences(s: string): string {
     let out = (s || '').trim();
@@ -163,7 +194,7 @@ productos, no generes prompts adicionales para productos — usa las del cliente
     // El logo va primero en el array de imagenes multimodales para que la
     // IA lo VEA y pueda identificarlo (por su forma/transparencia/copy).
     const multimodalImages = clientLogo ? [clientLogo, ...clientImages] : clientImages;
-    const raw = await this.planProvider.complete(
+    const raw = await this.completeClaudeWithRetry(
       system,
       [
         {
@@ -174,6 +205,7 @@ productos, no generes prompts adicionales para productos — usa las del cliente
         },
       ],
       { model: MODEL_SONNET, json: true, maxTokens: 3000, images: multimodalImages },
+      'plan',
     );
     const parsed = this.parseJson<SitePlan>(raw);
     const safe: SitePlan = {
@@ -278,10 +310,11 @@ ${sectionsList}
 Cada seccion: usa clases Tailwind + add data-gsap en elementos para animacion al scroll. Contenido REAL del brief. Visualmente distinto de las otras secciones.
 SALIDA: solo el HTML de esas secciones. Sin <!DOCTYPE>, sin <head>, sin <body>, sin scripts. Solo los tags de las secciones.`;
 
-    const raw = await this.renderProvider.complete(
+    const raw = await this.completeClaudeWithRetry(
       system,
       [{ role: 'user', content: `Brief:\n${brief}\n\nGenera el HTML de las secciones indicadas.${hasLogo ? '\nPrimera imagen = logo del cliente.' : ''}` }],
       { model: MODEL_SONNET, maxTokens: 8000, temperature: 0.55, images: multimodalImages },
+      'render-block',
     );
     const cleaned = this.stripFences(raw);
     return headFragment + '\n' + cleaned + '\n' + closingFragment;
@@ -441,15 +474,16 @@ ${revisionNote.trim()}
 
 Devuelve el HTML completo de la pagina con el cambio aplicado. Si esta solicitud no aplica a esta pagina (porque trata de otra seccion/pagina), devuelve el mismo HTML sin modificar.`;
 
-      const raw = await this.renderProvider.complete(
+      const raw = await this.completeClaudeWithRetry(
         system,
         [{ role: 'user', content: userMsg }],
         {
           model: MODEL_SONNET,
-          maxTokens: 16000,
+          maxTokens: 8000,
           temperature: 0.3,
           images: multimodalImages,
         },
+        'edit-page',
       );
       const cleaned = this.stripFences(raw);
       // Sanity check: si Claude devolvio algo muy chiquito comparado con
