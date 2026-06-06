@@ -1239,163 +1239,11 @@ Todo en un solo HTML con anchors.`;
       return null;
     }
 
-    // Motor HTML-direct (nuevo): siempre activo. generateStaticWithClaude queda como legacy unused.
-
-    try {
-      const plan = project.type as PlanType;
-      const currentDomain = existingData.publicDomain || null;
-      const clientLogoUrl: string | undefined = typeof existingData.logoUrl === 'string' && existingData.logoUrl
-        ? this.normalizeUploadUrl(existingData.logoUrl) : undefined;
-      const clientImages: string[] = Array.isArray(existingData.images)
-        ? existingData.images.filter((x: any) => typeof x === 'string').map((u: string) => this.normalizeUploadUrl(u))
-        : [];
-
-      this.logger.log(
-        `AI(html-direct) start project=${projectId} plan=${plan} domain=${currentDomain ?? 'preview-only'} logo=${!!clientLogoUrl} clientImgs=${clientImages.length}`,
-      );
-
-      // 1. Obtener imágenes (Pexels + IA) ANTES de generar HTML
-      const imagePrompts = this.buildImagePrompts(existingData);
-      const rawImages = await this.generateImages(imagePrompts, plan, 'standard');
-      const storedImages = await this.persistImages(projectId, rawImages);
-
-      // 2. Claude genera HTML con placeholders. Pasa logo e imágenes del cliente como contexto multimodal.
-      const systemPrompt = this.buildSystemPrompt(plan);
-      const userPrompt = this.buildUserPrompt(existingData, plan);
-      let html = await this.chatHtml(systemPrompt, userPrompt, clientLogoUrl, clientImages);
-
-      // Si el HTML fue truncado, cerrar limpiamente desde el último tag completo
-      if (!html.includes('</html>')) {
-        this.logger.warn(`[html-direct] HTML truncado (${html.length} chars). Cerrando limpiamente...`);
-        // Encontrar el último punto de cierre seguro
-        const candidates = ['</footer>', '</section>', '</main>', '</article>', '</div>'];
-        let cutPoint = -1;
-        for (const tag of candidates) {
-          const idx = html.lastIndexOf(tag);
-          if (idx > html.length * 0.3) { // al menos 30% del HTML
-            cutPoint = idx + tag.length;
-            break;
-          }
-        }
-        if (cutPoint > 0) {
-          html = html.slice(0, cutPoint) + '\n</body>\n</html>';
-          this.logger.log(`[html-direct] HTML cerrado limpiamente en ${cutPoint} chars`);
-        } else {
-          html = html + '\n</body>\n</html>';
-        }
-      }
-
-      // 3. Inyectar URLs absolutas reales de imágenes
-      html = this.injectImagesIntoHtml(html, storedImages);
-
-      // Inyectar redes sociales reales del cliente (reemplaza cualquier href inventado por Claude)
-      html = this.injectSocialLinks(html, existingData);
-
-      // 4. Enforcer de contact form (PHP handler real)
-      html = enforceContactForms(html, existingData.subdomain || '');
-
-      // 5. Inyectar meta tags SEO
-      html = this.injectSeoMeta(html, existingData);
-
-      if (!html || !html.trim()) {
-        throw new Error('La IA no genero contenido HTML valido.');
-      }
-
-      const scoreVal = 90;
-      const spec: SiteSpec = { brand: { name: existingData.businessName || project.name, tagline: '', tone: 'profesional' }, palette: { primary: '#0f172a', secondary: '#2563eb', accent: '#38bdf8', background: '#f8fafc', text: '#0f172a' }, typography: { heading: 'Inter', body: 'Inter' }, sections: [], images: [] };
-
-      const domain = currentDomain || '';
-      const isAdminTest = existingData._adminTest === true;
-      let deployment: { target?: string | null; previewUrl?: string } = {};
-      if (domain && html) {
-        try {
-          deployment = await this.persistGeneratedAssets(projectId, domain, html, undefined, isAdminTest);
-        } catch (error: any) {
-          this.logger.error(`No se pudo escribir en el sitio ${domain}`, error?.message || error);
-          throw new Error(`No se pudo publicar el sitio en ${domain}: ${error?.message || error}`);
-        }
-      } else if (html) {
-        deployment = await this.persistGeneratedAssets(projectId, null, html, undefined, isAdminTest);
-      }
-
-      const result: AiGenerationResult = {
-        spec,
-        images: storedImages,
-        html,
-        pages: undefined,
-        score: { conversion: scoreVal, seo: scoreVal, accessibility: scoreVal, performance: scoreVal, notes: [] },
-      };
-
-    const previewPath = join(process.cwd(), 'uploads', 'previews', String(projectId), 'index.html');
-    const previewExists = fs.existsSync(previewPath);
-    
-    this.logger.log(
-      isAdminTest
-        ? `AI done project=${projectId} [ADMIN TEST] publicado inmediatamente en ${domain}`
-        : `AI done project=${projectId} preview=${previewExists ? previewPath : 'missing'} (Pending auto-publish at deadline)`,
-    );
-
-    const publishedAt = isAdminTest ? new Date().toISOString() : undefined;
-
-    await this.prisma.project.update({
-      where: { id: projectId },
-      data: {
-        status: isAdminTest ? ProjectStatus.DELIVERED : ProjectStatus.IN_PROGRESS,
-        onboardingData: JSON.stringify({
-          ...existingData,
-          ...(isAdminTest ? {
-            publicUrl: domain ? `https://${domain}` : null,
-            publicDomain: domain || null,
-            publishedAt,
-          } : {}),
-          aiGeneration: {
-            status: 'READY',
-            mode: 'html-direct',
-            updatedAt: new Date().toISOString(),
-            score: scoreVal,
-            images: storedImages,
-            previewUrl: deployment.previewUrl || null,
-            target: deployment.target || null,
-            finishedAt: new Date().toISOString(),
-            model: 'claude/gpt-4o',
-            domain: domain || null,
-            checks: {
-              previewPath,
-              previewExists,
-            },
-          },
-        }),
-      },
-    });
-
-    return result;
-    } catch (error: any) {
-      this.logger.error(`Fallo AI generateForProject ${projectId}: ${error?.message || error}`);
-      const previewPath = join(process.cwd(), 'uploads', 'previews', String(projectId), 'index.html');
-      const previewExists = fs.existsSync(previewPath);
-      const appUrl = (process.env.PREVIEW_PROXY_BASE || 'http://localhost:3002').replace(/\/$/, '');
-      await this.prisma.project.update({
-        where: { id: projectId },
-        data: {
-          onboardingData: JSON.stringify({
-            ...existingData,
-            aiGeneration: {
-              ...(existingData.aiGeneration || {}),
-              status: 'FAILED',
-              error: error?.message || 'Error generando el sitio',
-              updatedAt: new Date().toISOString(),
-              previewUrl: previewExists ? `${appUrl}/uploads/previews/${projectId}/index.html` : null,
-              checks: {
-                previewPath,
-                previewExists,
-              },
-            },
-          }),
-        },
-      });
-      return null;
-    }
+    // Motor principal: generateStaticWithClaude (Tailwind CDN + GSAP + two-phase plan+render)
+    // Es el mismo motor que usa PliaStudio y genera webs de alta calidad.
+    return this.generateStaticWithClaude(project, revisionNote);
   }
+
 
   /**
    * Motor Claude para sitios estaticos (LANDING/WEB). Aislado del legacy.
@@ -1683,6 +1531,7 @@ Todo en un solo HTML con anchors.`;
       }
 
       const domain = currentDomain || '';
+      const isAdminTest = onboarding._adminTest === true;
       let deployment: { target?: string | null; previewUrl?: string } = {};
       if (html) {
         deployment = await this.persistGeneratedAssets(
@@ -1690,6 +1539,7 @@ Todo en un solo HTML con anchors.`;
           domain || null,
           html,
           pages,
+          isAdminTest,
         );
       }
 
@@ -1715,7 +1565,7 @@ Todo en un solo HTML con anchors.`;
       // a /home/<dominio>/public_html — porque el cron normal solo procesa
       // IN_PROGRESS con deadline vencido, y esto no aplica aqui.
       const willRepublish = isRevision && wasDelivered;
-      const finalStatus = willRepublish
+      const finalStatus = (willRepublish || isAdminTest)
         ? ProjectStatus.DELIVERED
         : ProjectStatus.IN_PROGRESS;
 
