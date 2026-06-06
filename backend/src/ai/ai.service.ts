@@ -180,7 +180,9 @@ NUNCA uses background-image:url() con estos placeholders.
 ═══════════════════════════════════════════
 CSS PREMIUM — PATRONES OBLIGATORIOS
 ═══════════════════════════════════════════
-@import url('https://fonts.googleapis.com/css2?family=FONT_HEADING:wght@400;600;700;800&family=FONT_BODY:wght@300;400;500;600&display=swap');
+Elige el par de fuentes apropiado para el sector y úsalas en el @import. Ejemplo:
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap');
+(Reemplaza con las fuentes que elijas según el sector del negocio)
 
 :root {
   --primary: #HEX;       /* color principal de la marca */
@@ -220,8 +222,8 @@ document.querySelectorAll('.fade-up').forEach(el=>observer.observe(el));
 CSS: .fade-up{opacity:0;transform:translateY(32px);transition:opacity .7s ease,transform .7s ease;} .fade-up.visible{opacity:1;transform:none;}
 
 Inputs de formulario:
-input,textarea { width:100%; padding:14px 18px; border:2px solid var(--border); border-radius:var(--radius-sm); font-size:1rem; font-family:inherit; transition:var(--transition); background:var(--surface); }
-input:focus,textarea:focus { outline:none; border-color:var(--accent); box-shadow:0 0 0 4px rgba(VAR_ACCENT_RGB,.12); }
+input,textarea { width:100%; padding:14px 18px; border:2px solid var(--border); border-radius:var(--radius-sm); font-size:1rem; font-family:inherit; transition:var(--transition); background:var(--surface); color:var(--text); }
+input:focus,textarea:focus { outline:none; border-color:var(--accent); box-shadow:0 0 0 4px color-mix(in srgb, var(--accent) 15%, transparent); }
 
 ═══════════════════════════════════════════
 ICONOS SVG — obligatorio en lugar de emojis
@@ -316,7 +318,8 @@ Todo en un solo HTML con anchors.`;
       input.instagram ? `Instagram: @${input.instagram}` : '',
       input.facebook ? `Facebook: ${input.facebook}` : '',
       input.whatsapp ? `WhatsApp: ${input.whatsapp}` : '',
-      input.contactEmail ? `Email: ${input.contactEmail}` : '',
+      input.tiktok ? `TikTok: @${input.tiktok}` : '',
+      input.contactEmail ? `Email de contacto: ${input.contactEmail}` : '',
       input.additionalInstructions ? `INSTRUCCIONES ADICIONALES: ${input.additionalInstructions}` : '',
     ].filter(Boolean);
 
@@ -535,32 +538,46 @@ Todo en un solo HTML con anchors.`;
   // Modelo híbrido de imágenes: Pexels para ambientales, IA para únicas/específicas
   // strategy: 'pexels' = solo Pexels | 'ai' = solo IA generativa | 'hybrid' = Pexels primero, IA fallback
   private buildImagePrompts(input: any): Array<{ id: string; prompt: string; usage: string; strategy: 'pexels' | 'ai' | 'hybrid' }> {
-    const business = input.businessName || input.businessType || 'negocio profesional';
+    const business = input.businessName || input.businessType || 'professional business';
     const city = input.city || 'Peru';
-    const sector = (input.businessSector || input.businessType || 'business').toLowerCase();
+    const sectorRaw = (input.businessSector || input.businessType || '').toLowerCase();
     const style = (input.visualStyle || '').toLowerCase();
     const isLuxury = style.includes('elegante') || style.includes('sofisticado') || style.includes('lujo');
 
+    // Traducción español→inglés para mejor búsqueda en Pexels
+    const sectorMap: Record<string, string> = {
+      cafeteria: 'coffee shop cafe', cafetería: 'coffee shop cafe',
+      restaurante: 'restaurant food', polleria: 'chicken restaurant food',
+      panaderia: 'bakery bread', pasteleria: 'pastry bakery',
+      gimnasio: 'gym fitness', salon: 'beauty salon', peluqueria: 'hair salon',
+      medico: 'medical clinic doctor', dentista: 'dental clinic',
+      abogado: 'law office professional', arquitecto: 'architecture design',
+      fotógrafo: 'photography studio', fotografo: 'photography studio',
+      tienda: 'retail store shop', boutique: 'fashion boutique clothing',
+      hotel: 'hotel luxury accommodation', hostal: 'hostel accommodation',
+      spa: 'spa wellness relaxation', yoga: 'yoga wellness studio',
+      inmobiliaria: 'real estate property', construccion: 'construction building',
+      software: 'technology software office', startup: 'startup technology modern',
+      marketing: 'marketing agency creative office', diseño: 'design creative studio',
+    };
+    const sectorEn = Object.entries(sectorMap).find(([k]) => sectorRaw.includes(k))?.[1] || sectorRaw || 'professional business';
+
     return [
-      // Hero: Pexels (foto real cinematic de fondo, gratis y de alta calidad)
       {
         id: 'hero', usage: 'hero', strategy: 'pexels',
-        prompt: `cinematic ${isLuxury ? 'luxury elegant' : 'modern professional'} ${sector} ${city} high quality wide shot`,
+        prompt: `${isLuxury ? 'luxury elegant' : 'modern professional'} ${sectorEn} interior wide shot high quality`,
       },
-      // Gallery 1: Pexels (foto de producto/servicio real)
       {
         id: 'gallery1', usage: 'gallery1', strategy: 'pexels',
-        prompt: `professional high quality close detail ${sector} product service photo`,
+        prompt: `${sectorEn} product service detail close up professional photo`,
       },
-      // Gallery 2: IA generativa (imagen única y branded del negocio)
       {
         id: 'gallery2', usage: 'gallery2', strategy: 'ai',
-        prompt: `Professional photorealistic image for ${business}, a ${sector} business in ${city}. High quality, modern, elegant. Suitable for a premium website.`,
+        prompt: `Professional photorealistic marketing image for ${business}, a ${sectorEn} in ${city}. Premium quality, modern aesthetic, suitable for luxury website hero section.`,
       },
-      // Gallery 3: Pexels (ambiente/interior)
       {
         id: 'gallery3', usage: 'gallery3', strategy: 'pexels',
-        prompt: `beautiful interior ambient ${sector} ${city} modern lifestyle professional`,
+        prompt: `${sectorEn} ambient lifestyle interior modern clean professional`,
       },
     ];
   }
