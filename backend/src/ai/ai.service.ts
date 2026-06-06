@@ -8,6 +8,7 @@ import { NextExportService } from '../integrations/next-export/next-export.servi
 import { WebsiteGenService, WebMode } from './website-gen.service';
 import { MailService } from '../mail/mail.service';
 import { ProjectStatus } from '@prisma/client';
+import { enforceContactForms } from './contact-form-enforcer';
 
 type PlanType = 'LANDING' | 'WEB';
 
@@ -388,15 +389,32 @@ Todo en un solo HTML con anchors.`;
     return this.safeJsonParse<T>(content, {} as T);
   }
 
-  // Genera HTML premium usando Claude directamente (Anthropic API) con fallback a GPT-4o
-  private async chatHtml(system: string, user: string): Promise<string> {
+  // Genera HTML premium — Claude directo (Anthropic) con imágenes del cliente multimodal
+  private async chatHtml(system: string, user: string, logoUrl?: string, clientImages: string[] = []): Promise<string> {
     const anthropicKey = process.env.ANTHROPIC_API_KEY || '';
     const anthropicModel = process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-6';
 
-    // 1. Intentar con Claude (Anthropic) — mejor calidad para HTML creativo
     if (anthropicKey) {
       try {
-        this.logger.log(`[chatHtml] usando Claude ${anthropicModel} via Anthropic API`);
+        this.logger.log(`[chatHtml] Claude ${anthropicModel} — logo=${!!logoUrl} clientImgs=${clientImages.length}`);
+
+        // Construir bloques de imagen para multimodal (logo + fotos del cliente)
+        const imageBlocks: any[] = [];
+        const imagesToSend = [logoUrl, ...clientImages].filter(Boolean).slice(0, 5) as string[];
+        for (const url of imagesToSend) {
+          if (/^https?:\/\//.test(url)) {
+            imageBlocks.push({ type: 'image', source: { type: 'url', url } });
+          }
+        }
+
+        const userContent: any[] = [
+          ...imageBlocks,
+          { type: 'text', text: imageBlocks.length > 0
+            ? `${user}\n\nLas imágenes adjuntas son: ${logoUrl ? 'logo del negocio (úsalo en el nav y footer)' : ''}${clientImages.length ? ', fotos reales del negocio (úsalas como referencia de estilo e inclúyelas si encajan)' : ''}. Intégralos en el diseño.`
+            : user
+          },
+        ];
+
         const res = await axios.post(
           'https://api.anthropic.com/v1/messages',
           {
@@ -404,7 +422,7 @@ Todo en un solo HTML con anchors.`;
             max_tokens: 8000,
             temperature: 0.68,
             system,
-            messages: [{ role: 'user', content: user }],
+            messages: [{ role: 'user', content: userContent }],
           },
           {
             headers: {
@@ -412,34 +430,90 @@ Todo en un solo HTML con anchors.`;
               'anthropic-version': '2023-06-01',
               'Content-Type': 'application/json',
             },
-            timeout: 120000,
+            timeout: 180000,
           },
         );
         const content: string = res.data?.content?.[0]?.text ?? '';
-        const inputTokens = res.data?.usage?.input_tokens ?? 0;
-        const outputTokens = res.data?.usage?.output_tokens ?? 0;
-        this.logger.log(`[chatHtml] Claude OK — input=${inputTokens} output=${outputTokens} tokens`);
+        this.logger.log(`[chatHtml] Claude OK — input=${res.data?.usage?.input_tokens} output=${res.data?.usage?.output_tokens} tokens`);
         return content.replace(/^```html?\s*/i, '').replace(/```\s*$/i, '').trim();
       } catch (err: any) {
-        this.logger.warn(`[chatHtml] Claude fallo: ${err?.response?.data?.error?.message || err?.message}. Usando GPT-4o como fallback.`);
+        this.logger.warn(`[chatHtml] Claude fallo: ${err?.response?.data?.error?.message || err?.message}. Fallback GPT-4o.`);
       }
     }
 
-    // 2. Fallback: GPT-4o via proxy OpenAI
-    this.logger.log(`[chatHtml] fallback a GPT-4o`);
+    // Fallback: GPT-4o
+    this.logger.log(`[chatHtml] fallback GPT-4o`);
     const url = `${this.env.baseUrl}/chat/completions`;
+    const messages: any[] = [{ role: 'system', content: system }];
+    const userParts: any[] = [];
+    if (logoUrl) userParts.push({ type: 'image_url', image_url: { url: logoUrl } });
+    clientImages.slice(0, 3).forEach(img => userParts.push({ type: 'image_url', image_url: { url: img } }));
+    userParts.push({ type: 'text', text: user });
+    messages.push({ role: 'user', content: userParts.length > 1 ? userParts : user });
+
     const data = await this.openAiPost<any>(url, {
       model: this.env.modelPrimary,
-      messages: [
-        { role: 'system', content: system },
-        { role: 'user', content: user },
-      ],
+      messages,
       temperature: 0.68,
       max_tokens: 14000,
     });
     const content: string = data?.choices?.[0]?.message?.content ?? '';
     this.logger.log(`[chatHtml] GPT-4o tokens=${data?.usage?.total_tokens ?? '?'}`);
     return content.replace(/^```html?\s*/i, '').replace(/```\s*$/i, '').trim();
+  }
+
+  // Reescribe URLs de imágenes generadas a rutas relativas y las copia al public_html
+  private rewriteImageUrlsToRelative(
+    html: string,
+    images: Array<{ id: string; url: string; usage: string }>,
+    projectId: number,
+  ): string {
+    let result = html;
+    const appUrl = (process.env.PREVIEW_PROXY_BASE || 'http://localhost:3002').replace(/\/$/, '');
+    for (const img of images) {
+      if (img.url.startsWith(appUrl)) {
+        const filename = img.url.split('/').pop() ?? '';
+        if (filename) {
+          result = result.split(img.url).join(`assets/images/${filename}`);
+        }
+      }
+    }
+    return result;
+  }
+
+  // Copia imágenes generadas a assets/images/ dentro del preview/public_html
+  private copyImagesToSiteAssets(projectId: number, images: Array<{ id: string; url: string; usage: string }>, targetDir: string) {
+    const appUrl = (process.env.PREVIEW_PROXY_BASE || 'http://localhost:3002').replace(/\/$/, '');
+    const srcDir = join(process.cwd(), 'uploads', 'generated', String(projectId));
+    const destDir = join(targetDir, 'assets', 'images');
+    if (!fs.existsSync(srcDir)) return;
+    fs.mkdirSync(destDir, { recursive: true });
+    for (const img of images) {
+      if (img.url.startsWith(appUrl)) {
+        const filename = img.url.split('/').pop() ?? '';
+        const src = join(srcDir, filename);
+        const dest = join(destDir, filename);
+        if (filename && fs.existsSync(src)) {
+          fs.copyFileSync(src, dest);
+        }
+      }
+    }
+  }
+
+  // Inyecta meta tags SEO básicos en el <head>
+  private injectSeoMeta(html: string, data: any): string {
+    const title = `${data.businessName || 'Bienvenidos'} — ${data.city || 'Peru'}`;
+    const description = (data.shortDescription || `${data.businessName} en ${data.city}`).slice(0, 160);
+    const canonical = data.subdomain ? `https://${data.subdomain}.plia.pe` : '';
+    const metaTags = [
+      `<meta name="description" content="${description.replace(/"/g, '&quot;')}">`,
+      `<meta property="og:title" content="${title.replace(/"/g, '&quot;')}">`,
+      `<meta property="og:description" content="${description.replace(/"/g, '&quot;')}">`,
+      `<meta property="og:type" content="website">`,
+      canonical ? `<link rel="canonical" href="${canonical}">` : '',
+      `<meta name="robots" content="index, follow">`,
+    ].filter(Boolean).join('\n    ');
+    return html.replace('</head>', `    ${metaTags}\n</head>`);
   }
 
   // Inyecta URLs reales en TODOS los patrones [[PLIA_IMG:xxx]] — en src=, url(), background, etc.
@@ -1080,26 +1154,45 @@ Todo en un solo HTML con anchors.`;
     try {
       const plan = project.type as PlanType;
       const currentDomain = existingData.publicDomain || null;
+      const clientLogoUrl: string | undefined = typeof existingData.logoUrl === 'string' && existingData.logoUrl
+        ? this.normalizeUploadUrl(existingData.logoUrl) : undefined;
+      const clientImages: string[] = Array.isArray(existingData.images)
+        ? existingData.images.filter((x: any) => typeof x === 'string').map((u: string) => this.normalizeUploadUrl(u))
+        : [];
+
       this.logger.log(
-        `AI(html-direct) start project=${projectId} plan=${plan} domain=${currentDomain ?? 'preview-only'}`,
+        `AI(html-direct) start project=${projectId} plan=${plan} domain=${currentDomain ?? 'preview-only'} logo=${!!clientLogoUrl} clientImgs=${clientImages.length}`,
       );
 
-      // 1. Obtener imagenes reales de Pexels ANTES de generar HTML
+      // 1. Obtener imágenes (Pexels + IA) ANTES de generar HTML
       const imagePrompts = this.buildImagePrompts(existingData);
       const rawImages = await this.generateImages(imagePrompts, plan, 'standard');
       const storedImages = await this.persistImages(projectId, rawImages);
 
-      // 2. Claude genera HTML completo con placeholders de imagen
+      // 2. Claude genera HTML con placeholders. Pasa logo e imágenes del cliente como contexto multimodal.
       const systemPrompt = this.buildSystemPrompt(plan);
       const userPrompt = this.buildUserPrompt(existingData, plan);
-      let html = await this.chatHtml(systemPrompt, userPrompt);
+      let html = await this.chatHtml(systemPrompt, userPrompt, clientLogoUrl, clientImages);
 
-      // 3. Inyectar URLs reales en los placeholders
-      // Usar storedImages (URLs públicas reales) para inyectar en el HTML
+      // Validar que el HTML esté completo — si se cortó, reintentar una vez
+      if (!html.includes('</html>') || html.length < 3000) {
+        this.logger.warn(`[html-direct] HTML incompleto (${html.length} chars), reintentando...`);
+        html = await this.chatHtml(systemPrompt, userPrompt + '\n\nIMPORTANTE: El HTML DEBE estar COMPLETO con </body></html> al final. No lo cortes.', clientLogoUrl, clientImages);
+      }
+
+      // 3. Inyectar URLs reales de imágenes
       html = this.injectImagesIntoHtml(html, storedImages);
 
-      // 4. Aplicar contact.php y limpieza de seguridad
-      // enforceContactForms se aplica en persistGeneratedAssets internamente
+      // 4. Copiar imágenes generadas al public_html para independencia del backend
+      if (currentDomain) {
+        html = this.rewriteImageUrlsToRelative(html, storedImages, projectId);
+      }
+
+      // 5. Enforcer de contact form (PHP handler real)
+      html = enforceContactForms(html, existingData.subdomain || '');
+
+      // 6. Inyectar meta tags SEO
+      html = this.injectSeoMeta(html, existingData);
 
       if (!html || !html.trim()) {
         throw new Error('La IA no genero contenido HTML valido.');
