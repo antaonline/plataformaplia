@@ -356,14 +356,14 @@ ${formEndpoint ? `FORMULARIO: <form action="${formEndpoint}" method="POST" data-
 
 ANTI-SOLAPAMIENTO (CRÍTICO): flujo normal de documento, secciones apiladas. PROHIBIDO position:absolute salvo imagen de fondo del hero (dentro de hero relative overflow-hidden). Sin márgenes negativos ni heights que recorten.
 
-LÍMITE DE TOKENS (CRÍTICO): tienes ~8000 tokens. La página DEBE terminar COMPLETA con </body></html>. Usa Tailwind (clases cortas) y sé eficiente. Si te acercas al límite, cierra el HTML — MEJOR 6 secciones completas que 9 cortadas. Prioridad: nav, hero, y las primeras secciones del plan, contacto y footer SIEMPRE presentes.`;
+GENERA LA PÁGINA COMPLETA Y RICA: TODAS las secciones del plan, con detalle premium. Tienes presupuesto amplio de tokens — NO te limites, pero DEBE terminar con </body></html>. Cada sección rica, contenido real, diseño nivel Awwwards. nav, hero, todas las secciones del plan, contacto y footer.`;
 
-      const user = `Brief del negocio:\n${brief}\n\nGenera la LANDING COMPLETA (documento HTML entero: <!DOCTYPE html> hasta </html>).\nSecciones sugeridas (en orden, adapta al brief):\n${sectionsGuide}\n\nDebe terminar COMPLETA con </body></html>. Diseño nivel Awwwards, español real, sin solapamientos.${hasLogo ? ' La primera imagen adjunta es el logo.' : ''}`;
+      const user = `Brief del negocio:\n${brief}\n\nGenera la LANDING COMPLETA Y RICA (documento HTML entero: <!DOCTYPE html> hasta </html>).\nSecciones (en orden, adapta al brief, hazlas todas ricas y detalladas):\n${sectionsGuide}\n\nDebe terminar COMPLETA con </body></html>. Diseño nivel Awwwards, español real, sin solapamientos.${hasLogo ? ' La primera imagen adjunta es el logo.' : ''}`;
 
       let html = await this.completeClaudeWithRetry(
         system,
         [{ role: 'user', content: user }],
-        { model: MODEL_SONNET, maxTokens: 8000, temperature: 0.6, images: multimodalImages },
+        { model: MODEL_SONNET, maxTokens: 20000, temperature: 0.6, images: multimodalImages },
         `render-${page.file}`,
       );
       html = this.stripFences(html);
@@ -455,7 +455,7 @@ Devuelve el HTML completo de la pagina con el cambio aplicado. Si esta solicitud
         [{ role: 'user', content: userMsg }],
         {
           model: MODEL_SONNET,
-          maxTokens: 8000,
+          maxTokens: 24000,
           temperature: 0.3,
           images: multimodalImages,
         },

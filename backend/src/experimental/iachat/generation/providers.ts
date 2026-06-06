@@ -162,7 +162,7 @@ export class ClaudeProvider implements CodegenProvider {
           'https://api.anthropic.com/v1/messages',
           {
             model,
-            max_tokens: Math.min(opts.maxTokens ?? 8192, 8192), // claude-sonnet-4-6 max real
+            max_tokens: Math.min(opts.maxTokens ?? 8192, 32000), // claude-sonnet-4-6 soporta hasta 64k; 32k es holgado para una landing completa
             temperature: opts.temperature ?? 0.7,
             system,
             messages: builtMessages,
