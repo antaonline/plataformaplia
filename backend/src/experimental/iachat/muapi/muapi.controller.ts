@@ -132,4 +132,30 @@ export class MuapiController {
     }
     return { url };
   }
+
+  /**
+   * Upload LOCAL (sin Muapi): guarda la imagen del cliente en uploads/media
+   * y devuelve la URL pública. Para arrastrar imágenes propias al lienzo
+   * sin depender de Muapi. Disponible en todos los planes.
+   */
+  @Post('upload-local')
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadLocal(@UploadedFile() file: any) {
+    if (!file?.buffer) {
+      throw new BadRequestException('No se recibió ningún archivo');
+    }
+    const fs = await import('fs/promises');
+    const path = await import('path');
+    const dir = path.join(process.cwd(), 'uploads', 'media');
+    await fs.mkdir(dir, { recursive: true });
+    const safeExt = (file.originalname || 'png').split('.').pop() || 'png';
+    const name = `upload-${Date.now()}-${Math.round(Math.random() * 1e9)}.${safeExt.toLowerCase()}`;
+    await fs.writeFile(path.join(dir, name), file.buffer);
+    const base = (
+      process.env.PUBLIC_API_URL ||
+      process.env.PREVIEW_PROXY_BASE ||
+      'http://localhost:3002'
+    ).replace(/\/$/, '');
+    return { url: `${base}/uploads/media/${name}` };
+  }
 }

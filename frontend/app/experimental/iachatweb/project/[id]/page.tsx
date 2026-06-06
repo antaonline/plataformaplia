@@ -152,6 +152,39 @@ export default function projectPage() {
   // Assets generados/subidos en el Estudio Creativo, accesibles para
   // arrastrar sobre el lienzo (Fase C). Persisten en la sesión del editor.
   const [creativeAssets, setCreativeAssets] = useState<CreativeAsset[]>([]);
+  // Drop de imágenes externas (desde el PC) al lienzo.
+  const [fileDragActive, setFileDragActive] = useState(false);
+
+  /** Sube imágenes arrastradas desde el PC y las agrega al dock de assets. */
+  const handleExternalFiles = useCallback(
+    async (files: FileList | File[]) => {
+      const token = localStorage.getItem('access_token');
+      if (!token) return;
+      const imgs = Array.from(files).filter((f) => f.type.startsWith('image/'));
+      if (imgs.length === 0) return;
+      for (const file of imgs) {
+        const form = new FormData();
+        form.append('file', file);
+        try {
+          const res = await fetch(`${apiBase}/experimental/creative/upload-local`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}` },
+            body: form,
+          });
+          const data = await res.json();
+          if (data.url) {
+            setCreativeAssets((prev) => [
+              { id: `up-${Date.now()}-${Math.random()}`, kind: 'image', url: data.url, createdAt: Date.now() },
+              ...prev,
+            ]);
+          }
+        } catch {
+          /* noop */
+        }
+      }
+    },
+    [apiBase],
+  );
   const [isDragging, setIsDragging] = useState(false);
 
   useEffect(() => {
@@ -1624,7 +1657,29 @@ export default function projectPage() {
           </AnimatePresence>
           
           {/* Preview Area */}
-          <div className="flex-1 bg-slate-100 flex flex-col items-center p-8 overflow-hidden relative">
+          <div
+            className="flex-1 bg-slate-100 flex flex-col items-center p-8 overflow-hidden relative"
+            onDragEnter={(e) => {
+              if (Array.from(e.dataTransfer.types).includes('Files')) {
+                e.preventDefault();
+                setFileDragActive(true);
+              }
+            }}
+            onDragOver={(e) => {
+              if (Array.from(e.dataTransfer.types).includes('Files')) e.preventDefault();
+            }}
+            onDragLeave={(e) => {
+              // Solo desactivar si salimos del contenedor (no de un hijo).
+              if (e.currentTarget === e.target) setFileDragActive(false);
+            }}
+            onDrop={(e) => {
+              if (Array.from(e.dataTransfer.types).includes('Files')) {
+                e.preventDefault();
+                setFileDragActive(false);
+                handleExternalFiles(e.dataTransfer.files);
+              }
+            }}
+          >
             {!isSidebarOpen && (
               <button 
                 onClick={() => setIsSidebarOpen(true)} 
@@ -1773,6 +1828,19 @@ export default function projectPage() {
                 con preview, cuando hay imágenes generadas para arrastrar. */}
             {previewUrl && rightPaneMode !== 'code' && canvasMode && (
               <CanvasAssetDock assets={creativeAssets} iframeRef={iframeRef} />
+            )}
+
+            {/* Overlay de drop para imágenes externas (arrastradas del PC). */}
+            {fileDragActive && (
+              <div className="absolute inset-4 z-[60] rounded-3xl border-4 border-dashed border-violet-400 bg-violet-500/10 backdrop-blur-sm flex items-center justify-center pointer-events-none">
+                <div className="text-center">
+                  <div className="w-16 h-16 rounded-2xl bg-violet-600 flex items-center justify-center mx-auto mb-3 shadow-lg">
+                    <ImageIcon className="h-8 w-8 text-white" />
+                  </div>
+                  <p className="text-lg font-black text-violet-700">Suelta tu imagen aquí</p>
+                  <p className="text-sm text-violet-500 font-medium">Se agregará al dock para arrastrarla sobre el sitio</p>
+                </div>
+              </div>
             )}
 
             {/* INSPECTOR de elemento seleccionado (Fase B). */}
