@@ -342,4 +342,84 @@ export class StudioPlansService {
       orderBy: { price: 'asc' },
     });
   }
+
+  /**
+   * SOLO ADMIN/DEV: cambia el plan Studio activo del usuario para hacer
+   * pruebas con distintos tiers. Cancela las suscripciones Studio activas
+   * previas y crea una nueva ACTIVE apuntando al plan elegido. Si el slug
+   * es 'studio-free', solo cancela (el fallback de getCapabilities ya
+   * devuelve free cuando no hay suscripción activa).
+   *
+   * Verificación de admin: role=ADMIN o userId en IACHAT_UNLIMITED_USER_IDS.
+   */
+  async devSetPlan(userId: number, slug: string): Promise<{ ok: boolean; planSlug: string }> {
+    // Verificar admin.
+    const user = await (this.prisma as any).user.findUnique({
+      where: { id: userId },
+      select: { role: true },
+    });
+    const envList = (process.env.IACHAT_UNLIMITED_USER_IDS || '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const isAdmin =
+      user?.role === 'ADMIN' || envList.includes(String(userId));
+    if (!isAdmin) {
+      throw new ForbiddenException(
+        'Solo cuentas admin pueden cambiar de plan manualmente.',
+      );
+    }
+
+    const validSlugs = [
+      'studio-free',
+      'studio-starter',
+      'studio-pro',
+      'studio-agency',
+    ];
+    if (!validSlugs.includes(slug)) {
+      throw new Error(`Slug de plan inválido: ${slug}`);
+    }
+
+    // Cancelar suscripciones Studio activas previas para que getCapabilities
+    // no tome una vieja.
+    await (this.prisma as any).hostingSubscription.updateMany({
+      where: {
+        userId,
+        plan: { serviceType: 'STUDIO_SUBSCRIPTION' },
+        status: { in: ['ACTIVE', 'TRIAL'] },
+      },
+      data: { status: 'CANCELLED' },
+    });
+
+    // studio-free no necesita suscripción (es el fallback).
+    if (slug === 'studio-free') {
+      return { ok: true, planSlug: 'studio-free' };
+    }
+
+    // Crear la nueva suscripción ACTIVE apuntando al plan elegido.
+    const plan = await (this.prisma as any).plan.findFirst({
+      where: { slug, serviceType: 'STUDIO_SUBSCRIPTION' },
+    });
+    if (!plan) {
+      throw new Error(`Plan ${slug} no existe en la BD. ¿Corriste la migration?`);
+    }
+
+    const now = new Date();
+    const oneYear = new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000);
+    await (this.prisma as any).hostingSubscription.create({
+      data: {
+        userId,
+        planId: plan.id,
+        serviceType: 'STUDIO_SUBSCRIPTION',
+        status: 'ACTIVE',
+        startDate: now,
+        endDate: oneYear,
+        nextBillingAt: oneYear,
+        billingCycleMonths: 12,
+        metadata: JSON.stringify({ devOverride: true, setAt: now.toISOString() }),
+      },
+    });
+
+    return { ok: true, planSlug: slug };
+  }
 }

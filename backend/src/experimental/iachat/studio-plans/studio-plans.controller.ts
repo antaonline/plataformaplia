@@ -62,4 +62,18 @@ export class StudioPlansController {
   async publicPlans() {
     return this.studioPlans.listPublicPlans();
   }
+
+  /**
+   * SOLO ADMIN: cambia el plan Studio activo del usuario para testing.
+   * El service valida que sea admin. Tras cambiarlo, getCapabilities
+   * devuelve el nuevo tier y el editor refleja las herramientas del plan.
+   */
+  @UseGuards(JwtAuthGuard)
+  @Post('dev-set-plan')
+  async devSetPlan(
+    @Request() req: any,
+    @Body() body: { slug: string },
+  ) {
+    return this.studioPlans.devSetPlan(req.user.id, body.slug);
+  }
 }

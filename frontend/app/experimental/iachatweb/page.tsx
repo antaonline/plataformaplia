@@ -48,6 +48,7 @@ import {
   ConversationalOnboarding,
   ConversationalOnboardingHandle,
 } from "@/components/experimental/ConversationalOnboarding";
+import { AdminPlanSwitcher } from "@/components/experimental/AdminPlanSwitcher";
 
 
 
@@ -540,6 +541,18 @@ export default function DashboardPage() {
         </div>
 
         <div className="mt-auto space-y-6">
+           {/* Selector de plan SOLO admin — para probar cada tier. */}
+           {user?.role === 'ADMIN' && (
+             <AdminPlanSwitcher
+               apiBase={apiBase}
+               authToken={typeof window !== 'undefined' ? localStorage.getItem('access_token') || '' : ''}
+               currentSlug={studioCaps?.planSlug}
+               onChanged={(slug) => {
+                 const token = localStorage.getItem('access_token');
+                 if (token) fetchStudioCaps(token);
+               }}
+             />
+           )}
            <div className="bg-white/5 border border-white/10 rounded-3xl p-6 text-white relative overflow-hidden shadow-2xl">
               <div className="absolute top-0 right-0 p-4 opacity-10">
                  <Zap className="h-12 w-12 text-cta fill-cta" />

@@ -41,48 +41,50 @@ export interface MuapiModel {
  * Registro de modelos. Los endpoint names siguen el patrón visto en la doc
  * (generate_<model>). Ajustables vía env si Muapi los renombra.
  */
+// Endpoints CONFIRMADOS contra el OpenAPI real de Muapi
+// (https://api.muapi.ai/openapi.json). El path es el slug directo, sin
+// prefijo "generate_". Ajustables por env por si Muapi versiona.
 const MODEL_REGISTRY: Record<string, MuapiModel> = {
-  // ─── Imagen ───────────────────────────────────────────────────────────
+  // ─── Imagen (Flux) ────────────────────────────────────────────────────
   'flux-dev': {
     id: 'flux-dev',
     kind: 'image',
-    endpoint: process.env.MUAPI_EP_FLUX_DEV || 'generate_flux_dev_image',
-    label: 'Flux Dev (rápido)',
+    endpoint: process.env.MUAPI_EP_FLUX_DEV || 'flux-dev-image',
+    label: 'Flux Dev (alta calidad)',
     costUsd: 0.03,
   },
-  'flux-pro': {
-    id: 'flux-pro',
+  'flux-schnell': {
+    id: 'flux-schnell',
     kind: 'image',
-    endpoint: process.env.MUAPI_EP_FLUX_PRO || 'generate_flux_pro_image',
-    label: 'Flux Pro (alta calidad)',
-    costUsd: 0.05,
+    endpoint: process.env.MUAPI_EP_FLUX_SCHNELL || 'flux-schnell-image',
+    label: 'Flux Schnell (rápido)',
+    costUsd: 0.02,
   },
-  // ─── Video (image-to-video) ───────────────────────────────────────────
-  'kling-image-to-video': {
-    id: 'kling-image-to-video',
+  // ─── Video imagen-a-video (Veo 3) ─────────────────────────────────────
+  'veo-fast-i2v': {
+    id: 'veo-fast-i2v',
     kind: 'video',
     endpoint:
-      process.env.MUAPI_EP_KLING_I2V || 'generate_kling_image_to_video',
-    label: 'Kling — imagen a video',
-    costUsd: 0.45,
+      process.env.MUAPI_EP_VEO_FAST_I2V || 'veo3-fast-image-to-video',
+    label: 'Veo 3 Fast — imagen a video',
+    costUsd: 0.8,
     requiresImage: true,
   },
-  'veo-image-to-video': {
-    id: 'veo-image-to-video',
+  'veo-i2v': {
+    id: 'veo-i2v',
     kind: 'video',
-    endpoint: process.env.MUAPI_EP_VEO_I2V || 'generate_veo_image_to_video',
-    label: 'Veo — imagen a video (premium)',
+    endpoint: process.env.MUAPI_EP_VEO_I2V || 'veo3-image-to-video',
+    label: 'Veo 3 — imagen a video (premium)',
     costUsd: 2.0,
     requiresImage: true,
   },
-  // ─── Video (text-to-video) ────────────────────────────────────────────
-  'kling-text-to-video': {
-    id: 'kling-text-to-video',
+  // ─── Video texto-a-video (Veo 3) ──────────────────────────────────────
+  'veo-t2v': {
+    id: 'veo-t2v',
     kind: 'video',
-    endpoint:
-      process.env.MUAPI_EP_KLING_T2V || 'generate_kling_text_to_video',
-    label: 'Kling — texto a video',
-    costUsd: 0.45,
+    endpoint: process.env.MUAPI_EP_VEO_T2V || 'veo3-text-to-video',
+    label: 'Veo 3 — texto a video',
+    costUsd: 1.5,
   },
 };
 

@@ -63,7 +63,7 @@ export class MuapiController {
     if (!body.prompt || !body.prompt.trim()) {
       throw new BadRequestException('El prompt es obligatorio');
     }
-    const modelId = body.modelId || (caps.tools.flux ? 'flux-pro' : 'flux-dev');
+    const modelId = body.modelId || 'flux-dev';
     return this.muapi.generate({
       modelId,
       prompt: body.prompt.trim(),
@@ -97,11 +97,10 @@ export class MuapiController {
     if (!body.imageUrl) {
       throw new BadRequestException('Se requiere la URL de la imagen de entrada');
     }
-    // Veo es premium (caro): solo Studio/Agency. Kling para Pro.
+    // Veo premium (caro): solo Studio/Agency. Veo Fast para Pro.
     const isPremiumVideo = caps.tools.luma || caps.planSlug === 'studio-agency';
     const modelId =
-      body.modelId ||
-      (isPremiumVideo ? 'veo-image-to-video' : 'kling-image-to-video');
+      body.modelId || (isPremiumVideo ? 'veo-i2v' : 'veo-fast-i2v');
     return this.muapi.generate({
       modelId,
       imageUrl: body.imageUrl,
