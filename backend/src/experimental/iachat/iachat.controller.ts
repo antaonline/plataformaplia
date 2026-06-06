@@ -204,6 +204,25 @@ export class AiChatController {
     return this.aiChatService.getChat(id, req.user.id);
   }
 
+  /**
+   * Edición visual (Fase B): aplica un cambio del lienzo (editar texto,
+   * reemplazar imagen) directo a los archivos, sin pasar por la IA.
+   * Devuelve los archivos actualizados para que el front los sincronice
+   * al preview (Vite HMR recarga).
+   */
+  @Post(':id/visual-edit')
+  @HttpCode(HttpStatus.OK)
+  visualEdit(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req: any,
+    @Body()
+    body:
+      | { kind: 'text'; oldText: string; newText: string }
+      | { kind: 'image'; oldSrc: string; newUrl: string },
+  ) {
+    return this.aiChatService.applyVisualEdit(id, req.user.id, body);
+  }
+
   @Patch(':id/rename')
   renameChat(
     @Param('id', ParseIntPipe) id: number,

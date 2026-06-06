@@ -82,6 +82,91 @@ export class AiChatService {
     }[/RESPONSE]\n\n[FILES]${JSON.stringify(files)}[/FILES]`;
   }
 
+  /**
+   * EDICIÓN VISUAL (Fase B del editor): aplica un cambio puntual que el
+   * cliente hizo en el lienzo (editar texto, reemplazar imagen) directo a
+   * los archivos del proyecto, SIN pasar por la IA. Busca el texto/URL
+   * viejo en los archivos generados y lo reemplaza por el nuevo.
+   *
+   * Devuelve el set de archivos actualizado para que el frontend lo
+   * sincronice al preview (Vite HMR recarga al instante).
+   */
+  async applyVisualEdit(
+    chatId: number,
+    userId: number,
+    edit:
+      | { kind: 'text'; oldText: string; newText: string }
+      | { kind: 'image'; oldSrc: string; newUrl: string },
+  ): Promise<{ ok: boolean; files: Record<string, string>; replacements: number }> {
+    const chat = await this.prisma.aiChat.findUnique({ where: { id: chatId } });
+    if (!chat || chat.userId !== userId) {
+      throw new NotFoundException('Chat no encontrado');
+    }
+
+    // Buscar el último mensaje del assistant con [FILES].
+    const messages = await this.prisma.aiMessage.findMany({
+      where: { chatId },
+      orderBy: { createdAt: 'asc' },
+    });
+    const lastWithFiles = [...messages]
+      .reverse()
+      .find((m) => m.role === 'assistant' && /\[FILES\]/.test(m.content || ''));
+    if (!lastWithFiles) {
+      return { ok: false, files: {}, replacements: 0 };
+    }
+
+    const fm = lastWithFiles.content.match(/\[FILES\]([\s\S]*?)\[\/FILES\]/);
+    let files: Record<string, string> = {};
+    try {
+      files = JSON.parse(fm![1]);
+    } catch {
+      return { ok: false, files: {}, replacements: 0 };
+    }
+
+    // Aplicar el reemplazo. Para texto: reemplazo literal de la cadena
+    // (escapamos para regex). Para imagen: reemplazo de la URL.
+    const find =
+      edit.kind === 'text' ? edit.oldText.trim() : edit.oldSrc;
+    const repl = edit.kind === 'text' ? edit.newText.trim() : edit.newUrl;
+    if (!find || find === repl) {
+      return { ok: true, files, replacements: 0 };
+    }
+    const escaped = find.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp(escaped, 'g');
+
+    let replacements = 0;
+    for (const [path, content] of Object.entries(files)) {
+      if (path.startsWith('/__')) continue; // saltar __deps__/__design__
+      if (typeof content !== 'string' || !content.includes(find)) continue;
+      const updated = content.replace(re, () => {
+        replacements++;
+        return repl;
+      });
+      files[path] = updated;
+    }
+
+    if (replacements === 0) {
+      return { ok: false, files, replacements: 0 };
+    }
+
+    // Recomponer el mensaje preservando META/RESPONSE y actualizar la BD.
+    const metaM = lastWithFiles.content.match(/\[META\]([\s\S]*?)\[\/META\]/);
+    const respM = lastWithFiles.content.match(/\[RESPONSE\]([\s\S]*?)\[\/RESPONSE\]/);
+    const newContent =
+      `[META]${metaM ? metaM[1] : '{}'}[/META]` +
+      `[RESPONSE]${respM ? respM[1] : ''}[/RESPONSE]\n\n` +
+      `[FILES]${JSON.stringify(files)}[/FILES]`;
+    await this.prisma.aiMessage.update({
+      where: { id: lastWithFiles.id },
+      data: { content: newContent },
+    });
+
+    this.logger.log(
+      `[visual-edit] chat=${chatId} kind=${edit.kind} reemplazos=${replacements}`,
+    );
+    return { ok: true, files, replacements };
+  }
+
   // ============================================================
   // CREAR CHAT — Fase de Planificación (3 conceptos iniciales)
   // ============================================================

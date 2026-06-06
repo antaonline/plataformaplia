@@ -9,7 +9,8 @@ import {
   BookOpen, Hammer, MessageSquare, Lightbulb, X, Check, Wand2,
   Paperclip, Image as ImageIcon, Trash2, ChevronDown, Sidebar,
   Zap, FileText, Clock, Plus, Layout, Settings, LogOut, Search,
-  MoreVertical, Eye, Code, Download, Copy, User, Bot, Save, Trash, ExternalLink
+  MoreVertical, Eye, Code, Download, Copy, User, Bot, Save, Trash, ExternalLink,
+  MousePointer2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -141,6 +142,11 @@ export default function projectPage() {
   // Modo lienzo: cuando está activo, el preview vive en un canvas infinito
   // con zoom/pan (estilo Framer). Cuando está apagado, ocupa todo el panel.
   const [canvasMode, setCanvasMode] = useState(true);
+  // Modo edición visual (Fase B): seleccionar elementos del preview y
+  // editarlos (texto/imagen) directo en el lienzo.
+  const [editMode, setEditMode] = useState(false);
+  const [selectedEl, setSelectedEl] = useState<any | null>(null);
+  const [creativeForReplace, setCreativeForReplace] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
 
   useEffect(() => {
@@ -477,10 +483,82 @@ export default function projectPage() {
         setRuntimeError(`${prefix}: ${e.data.message}`);
         return;
       }
+
+      // 3. EDICIÓN VISUAL (Fase B): elemento seleccionado en el lienzo.
+      if (e.data?.type === 'PLIA_ELEMENT_SELECTED') {
+        setSelectedEl(e.data);
+        return;
+      }
+      // 4. Texto editado inline -> aplicar al código via visual-edit.
+      if (e.data?.type === 'PLIA_TEXT_CHANGED' && e.data.oldText) {
+        await applyVisualEdit({
+          kind: 'text',
+          oldText: e.data.oldText,
+          newText: e.data.newText,
+        });
+        return;
+      }
+      // 5. Imagen reemplazada -> aplicar al código.
+      if (e.data?.type === 'PLIA_IMG_REPLACED' && e.data.oldSrc) {
+        await applyVisualEdit({
+          kind: 'image',
+          oldSrc: e.data.oldSrc,
+          newUrl: e.data.newUrl,
+        });
+        return;
+      }
     };
     window.addEventListener('message', onMsg);
     return () => window.removeEventListener('message', onMsg);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiBase, id]);
+
+  /**
+   * Aplica una edición visual (texto/imagen) llamando al backend, que
+   * reemplaza en los archivos. Luego actualiza `pages` con los archivos
+   * devueltos -> el useEffect de sync recarga el preview (Vite HMR).
+   */
+  const applyVisualEdit = useCallback(
+    async (
+      edit:
+        | { kind: 'text'; oldText: string; newText: string }
+        | { kind: 'image'; oldSrc: string; newUrl: string },
+    ) => {
+      const token = localStorage.getItem('access_token');
+      if (!token) return;
+      try {
+        const res = await fetch(`${apiBase}/experimental/iachat/${id}/visual-edit`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(edit),
+        });
+        const data = await res.json();
+        if (data.ok && data.files && Object.keys(data.files).length > 0) {
+          setPages(data.files);
+          toast.success(
+            edit.kind === 'text' ? 'Texto actualizado' : 'Imagen reemplazada',
+          );
+        } else if (data.replacements === 0) {
+          toast.error('No se encontró el contenido en el código. Probá editarlo desde el chat.');
+        }
+      } catch {
+        toast.error('No se pudo aplicar el cambio');
+      }
+    },
+    [apiBase, id],
+  );
+
+  // Comunicar el modo de selección al iframe cuando cambia editMode.
+  useEffect(() => {
+    iframeRef.current?.contentWindow?.postMessage(
+      { type: 'PLIA_SET_TOOL', tool: editMode ? 'select' : 'none' },
+      '*',
+    );
+    if (!editMode) setSelectedEl(null);
+  }, [editMode, previewUrl, previewNonce]);
 
   // Cuando el servidor pasa a 'running' (recien listo), recargamos el iframe
   // UNA vez. Sin esto, si el iframe cargo la URL antes de que Vite estuviera
@@ -1659,16 +1737,82 @@ export default function projectPage() {
               </div>
             )}
 
-            {/* Toggle del modo lienzo (zoom/pan). */}
+            {/* Toggles: modo lienzo (zoom/pan) + modo edición visual. */}
             {previewUrl && rightPaneMode !== 'code' && (
-              <button
-                onClick={() => setCanvasMode((v) => !v)}
-                title={canvasMode ? 'Salir del lienzo' : 'Modo lienzo (zoom/pan estilo Framer)'}
-                className="absolute top-4 right-4 z-40 bg-white border border-slate-200 px-3 py-2 rounded-xl shadow-md hover:bg-slate-50 text-xs font-bold text-slate-600 flex items-center gap-1.5 transition-all"
-              >
-                <Layout className="h-3.5 w-3.5 text-indigo-500" />
-                {canvasMode ? 'Lienzo ON' : 'Lienzo'}
-              </button>
+              <div className="absolute top-4 right-4 z-40 flex items-center gap-2">
+                <button
+                  onClick={() => setEditMode((v) => !v)}
+                  title={editMode ? 'Salir del modo edición' : 'Editar elementos (click para seleccionar)'}
+                  className={cn(
+                    'px-3 py-2 rounded-xl shadow-md text-xs font-bold flex items-center gap-1.5 transition-all border',
+                    editMode
+                      ? 'bg-violet-600 text-white border-violet-600'
+                      : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50',
+                  )}
+                >
+                  <MousePointer2 className="h-3.5 w-3.5" />
+                  {editMode ? 'Editando' : 'Editar'}
+                </button>
+                <button
+                  onClick={() => setCanvasMode((v) => !v)}
+                  title={canvasMode ? 'Salir del lienzo' : 'Modo lienzo (zoom/pan estilo Framer)'}
+                  className="bg-white border border-slate-200 px-3 py-2 rounded-xl shadow-md hover:bg-slate-50 text-xs font-bold text-slate-600 flex items-center gap-1.5 transition-all"
+                >
+                  <Layout className="h-3.5 w-3.5 text-indigo-500" />
+                  {canvasMode ? 'Lienzo ON' : 'Lienzo'}
+                </button>
+              </div>
+            )}
+
+            {/* INSPECTOR de elemento seleccionado (Fase B). */}
+            {editMode && selectedEl && (
+              <div className="absolute top-16 right-4 z-40 w-72 bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
+                <div className="px-4 py-3 bg-gradient-to-r from-violet-50 to-white border-b border-slate-100 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-violet-600">
+                      {selectedEl.isImage ? 'Imagen' : `<${selectedEl.tag}>`}
+                    </span>
+                  </div>
+                  <button onClick={() => setSelectedEl(null)} className="text-slate-300 hover:text-slate-500">
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+                <div className="p-4 space-y-3">
+                  {selectedEl.isImage ? (
+                    <>
+                      {selectedEl.src && (
+                        <img src={selectedEl.src} alt="" className="w-full h-28 object-cover rounded-lg border border-slate-100" />
+                      )}
+                      <button
+                        onClick={() => { setCreativeForReplace(true); setShowCreative(true); }}
+                        className="w-full px-3 py-2.5 rounded-xl bg-violet-600 text-white text-sm font-bold flex items-center justify-center gap-2 hover:bg-violet-700"
+                      >
+                        <Wand2 className="h-4 w-4" /> Reemplazar imagen
+                      </button>
+                      <p className="text-[10px] text-slate-400 text-center">Elegí o generá una en el Estudio Creativo.</p>
+                    </>
+                  ) : (
+                    <>
+                      <div>
+                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Texto</label>
+                        <p className="mt-1 text-sm text-slate-700 bg-slate-50 rounded-lg p-2.5 max-h-24 overflow-y-auto leading-snug">
+                          {selectedEl.text || <span className="italic text-slate-400">(sin texto directo)</span>}
+                        </p>
+                      </div>
+                      {selectedEl.text && (
+                        <button
+                          onClick={() => {
+                            iframeRef.current?.contentWindow?.postMessage({ type: 'PLIA_EDIT_TEXT' }, '*');
+                          }}
+                          className="w-full px-3 py-2.5 rounded-xl bg-violet-600 text-white text-sm font-bold flex items-center justify-center gap-2 hover:bg-violet-700"
+                        >
+                          <Code className="h-4 w-4" /> Editar texto en el lienzo
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
             )}
           </div>
         </div>
@@ -1765,14 +1909,24 @@ export default function projectPage() {
         authToken={typeof window !== 'undefined' ? localStorage.getItem('access_token') || '' : ''}
         onClose={() => setShowCreative(false)}
         onUseAsset={(asset) => {
-          // Por ahora: insertar el asset como mensaje al chat para que la IA
-          // lo use en la web (reemplazar hero, agregar a galería). En el
-          // sprint del canvas unificado esto será drag-and-drop directo.
           setShowCreative(false);
+          // CASO 1: venimos del inspector "Reemplazar imagen" -> reemplazo
+          // directo en el lienzo (sin pasar por el chat). El iframe cambia
+          // el src y nos avisa con PLIA_IMG_REPLACED, que aplica al código.
+          if (creativeForReplace && asset.kind === 'image' && selectedEl?.isImage) {
+            iframeRef.current?.contentWindow?.postMessage(
+              { type: 'PLIA_REPLACE_IMG', url: asset.url },
+              '*',
+            );
+            setCreativeForReplace(false);
+            return;
+          }
+          setCreativeForReplace(false);
+          // CASO 2: uso general -> insertar via chat para que la IA decida.
           const kind = asset.kind === 'video' ? 'video' : 'imagen';
           handleSend(
-            `Usá este ${kind} que generé en el Estudio Creativo: ${asset.url}\n\n` +
-              `Insertalo donde mejor quede (hero, galería, o donde tenga sentido para ${kind === 'video' ? 'un fondo cinematográfico' : 'mostrar el producto/ambiente'}). ` +
+            `Usa este ${kind} que generé en el Estudio Creativo: ${asset.url}\n\n` +
+              `Insértalo donde mejor quede (hero, galería, o donde tenga sentido para ${kind === 'video' ? 'un fondo cinematográfico' : 'mostrar el producto/ambiente'}). ` +
               (asset.prompt ? `Contexto: "${asset.prompt}".` : ''),
           );
         }}

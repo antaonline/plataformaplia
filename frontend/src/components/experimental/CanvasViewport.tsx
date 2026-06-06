@@ -120,21 +120,33 @@ export const CanvasViewport = React.forwardRef<CanvasViewportHandle, Props>(
       zoomAt(rect.left + rect.width / 2, rect.top + rect.height / 2, factor);
     };
 
-    const onWheel = (e: React.WheelEvent) => {
-      // Ctrl/Cmd + wheel = zoom (estándar de design tools). Wheel solo = pan
-      // vertical/horizontal como en un lienzo.
-      if (e.ctrlKey || e.metaKey) {
-        e.preventDefault();
-        const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
-        zoomAt(e.clientX, e.clientY, factor);
-      } else {
-        // Pan con la rueda (vertical) y shift para horizontal.
-        setPan((p) => ({
-          x: p.x - (e.shiftKey ? e.deltaY : e.deltaX),
-          y: p.y - (e.shiftKey ? 0 : e.deltaY),
-        }));
-      }
-    };
+    // Listener de rueda NATIVO con { passive: false } para poder hacer
+    // preventDefault. El onWheel de React es passive por default -> el
+    // navegador se queda con ctrl+rueda (zoom de la página) y nuestro
+    // preventDefault no surte efecto. Con el listener nativo lo capturamos.
+    useEffect(() => {
+      const el = containerRef.current;
+      if (!el) return;
+      const handler = (e: WheelEvent) => {
+        // Ctrl (o Cmd en Mac) + rueda = zoom del lienzo. Igual que Kittl.
+        if (e.ctrlKey || e.metaKey) {
+          e.preventDefault();
+          e.stopPropagation();
+          const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+          zoomAt(e.clientX, e.clientY, factor);
+        } else {
+          // Rueda sola = pan (vertical; Shift = horizontal).
+          e.preventDefault();
+          setPan((p) => ({
+            x: p.x - (e.shiftKey ? e.deltaY : e.deltaX),
+            y: p.y - (e.shiftKey ? 0 : e.deltaY),
+          }));
+        }
+      };
+      el.addEventListener('wheel', handler, { passive: false });
+      return () => el.removeEventListener('wheel', handler);
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     // ─── Pan con arrastre ─────────────────────────────────────────────────
     const canPan = tool === 'hand' || spaceHeld;
@@ -194,7 +206,6 @@ export const CanvasViewport = React.forwardRef<CanvasViewportHandle, Props>(
     return (
       <div
         ref={containerRef}
-        onWheel={onWheel}
         onMouseDown={onMouseDown}
         className="absolute inset-0 overflow-hidden select-none"
         style={{ background, cursor }}

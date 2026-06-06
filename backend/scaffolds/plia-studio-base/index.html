@@ -68,6 +68,117 @@
       mensaje PLIA_CAPTURE. En produccion (sitio publicado, sin padre PLIA)
       este listener queda mudo y html2canvas NUNCA se carga -> 0 overhead.
     -->
+    <!--
+      PLIA Studio: BRIDGE DE SELECCIÓN (editor visual, Fase B). Permite que
+      el editor padre active un "modo selección": al pasar el cursor se
+      resalta el elemento, al hacer click se selecciona y se reporta su
+      info (tag, texto, clases) al padre. También soporta editar el texto
+      inline (contentEditable) y reporta el cambio. Solo activo dentro de
+      PLIA Studio (parent !== self).
+    -->
+    <script>
+      (function () {
+        if (window.parent === window) return;
+        var mode = 'none'; // 'none' | 'select'
+        var hovered = null;
+        var selected = null;
+        var styleEl = document.createElement('style');
+        styleEl.textContent =
+          '.plia-hover{outline:2px solid #6366f1 !important;outline-offset:-2px !important;cursor:pointer !important;}' +
+          '.plia-selected{outline:2px solid #8b5cf6 !important;outline-offset:-2px !important;box-shadow:0 0 0 4px rgba(139,92,246,0.2) !important;}' +
+          '.plia-editing{outline:2px dashed #10b981 !important;}';
+        document.head.appendChild(styleEl);
+
+        function send(type, payload) {
+          try { window.parent.postMessage(Object.assign({ type: type }, payload || {}), '*'); } catch (_) {}
+        }
+        // No queremos seleccionar elementos enormes (body, #root). Subimos al
+        // elemento "significativo" más cercano (con texto o que sea media).
+        function isSelectable(el) {
+          if (!el || el === document.body) return false;
+          if (el.id === 'root') return false;
+          return true;
+        }
+        function describe(el) {
+          var text = '';
+          // Texto directo del elemento (no de hijos profundos) para edición.
+          for (var i = 0; i < el.childNodes.length; i++) {
+            if (el.childNodes[i].nodeType === 3) text += el.childNodes[i].nodeValue;
+          }
+          text = (text || el.textContent || '').trim();
+          var rect = el.getBoundingClientRect();
+          return {
+            tag: el.tagName.toLowerCase(),
+            text: text.slice(0, 500),
+            fullText: (el.textContent || '').trim().slice(0, 500),
+            classes: el.className && typeof el.className === 'string' ? el.className : '',
+            isImage: el.tagName === 'IMG',
+            src: el.tagName === 'IMG' ? el.getAttribute('src') : null,
+            rect: { x: rect.left, y: rect.top, w: rect.width, h: rect.height },
+          };
+        }
+
+        window.addEventListener('message', function (e) {
+          if (!e.data) return;
+          if (e.data.type === 'PLIA_SET_TOOL') {
+            mode = e.data.tool === 'select' ? 'select' : 'none';
+            if (mode === 'none') {
+              if (hovered) { hovered.classList.remove('plia-hover'); hovered = null; }
+            }
+          } else if (e.data.type === 'PLIA_EDIT_TEXT' && selected) {
+            // Hacer editable el elemento seleccionado.
+            var before = selected.textContent;
+            selected.setAttribute('contenteditable', 'true');
+            selected.classList.add('plia-editing');
+            selected.focus();
+            var onBlur = function () {
+              selected.removeAttribute('contenteditable');
+              selected.classList.remove('plia-editing');
+              selected.removeEventListener('blur', onBlur);
+              var after = selected.textContent;
+              if (after !== before) {
+                send('PLIA_TEXT_CHANGED', { oldText: before.trim(), newText: after.trim() });
+              }
+            };
+            selected.addEventListener('blur', onBlur);
+          } else if (e.data.type === 'PLIA_REPLACE_IMG' && selected && selected.tagName === 'IMG') {
+            var oldSrc = selected.getAttribute('src');
+            selected.setAttribute('src', e.data.url);
+            send('PLIA_IMG_REPLACED', { oldSrc: oldSrc, newUrl: e.data.url });
+          }
+        });
+
+        document.addEventListener(
+          'mouseover',
+          function (e) {
+            if (mode !== 'select') return;
+            var el = e.target;
+            if (!isSelectable(el)) return;
+            if (hovered && hovered !== el) hovered.classList.remove('plia-hover');
+            hovered = el;
+            el.classList.add('plia-hover');
+          },
+          true
+        );
+        document.addEventListener(
+          'click',
+          function (e) {
+            if (mode !== 'select') return;
+            var el = e.target;
+            if (!isSelectable(el)) return;
+            e.preventDefault();
+            e.stopPropagation();
+            if (selected) selected.classList.remove('plia-selected');
+            if (hovered) hovered.classList.remove('plia-hover');
+            selected = el;
+            el.classList.add('plia-selected');
+            send('PLIA_ELEMENT_SELECTED', describe(el));
+          },
+          true
+        );
+      })();
+    </script>
+
     <script>
       (function () {
         if (window.parent === window) return; // no estamos en iframe
