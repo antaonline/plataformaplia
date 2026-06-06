@@ -153,13 +153,13 @@ Tu trabajo es generar HTML completo (<!DOCTYPE html>...</html>) con CSS moderno 
 REGLAS ABSOLUTAS — nunca las violes:
 1. Devuelve SOLO el HTML completo. Sin markdown, sin bloques de codigo, sin explicaciones. Empieza con <!DOCTYPE html>.
 2. Todo el CSS va embebido en <style> dentro de <head>. Cero dependencias externas excepto Google Fonts (via @import).
-3. Para imagenes usa EXACTAMENTE estos placeholders (seran reemplazados por fotos reales):
-   - Hero/banner principal: src="[[PLIA_IMG:hero]]"
-   - Galeria 1: src="[[PLIA_IMG:gallery1]]"
-   - Galeria 2: src="[[PLIA_IMG:gallery2]]"
-   - Galeria 3: src="[[PLIA_IMG:gallery3]]"
-   - Equipo/persona: src="[[PLIA_IMG:team1]]"
-   Usa los que necesites segun el negocio. Las imagenes DEBEN tener width y height definidos en CSS.
+3. Para imagenes usa EXACTAMENTE estos placeholders como atributo src= de etiquetas <img> (NUNCA como CSS background-image):
+   - Hero: <img src="[[PLIA_IMG:hero]]" alt="hero" class="hero-bg">
+   - Galeria 1: <img src="[[PLIA_IMG:gallery1]]" alt="imagen 1">
+   - Galeria 2: <img src="[[PLIA_IMG:gallery2]]" alt="imagen 2">
+   - Galeria 3: <img src="[[PLIA_IMG:gallery3]]" alt="imagen 3">
+   Para el efecto hero full-bleed: pon la imagen dentro del section con position:absolute, inset:0, width:100%, height:100%, object-fit:cover, z-index:0. El contenido va en un div con position:relative, z-index:1.
+   NUNCA uses background-image:url() para estos placeholders. Siempre <img src="[[PLIA_IMG:xxx]]">.
 4. PROHIBIDO usar emojis. Para iconos usa SVG inline (paths simples, elegantes).
 5. Formulario de contacto con action="/contact.php" method="POST". Campos: nombre, email, mensaje. Boton de envio estilizado.
 6. JavaScript minimo embebido en <script> al final: solo para menu hamburguesa mobile, smooth scroll, y animaciones de entrada (IntersectionObserver fade-in/slide-up).
@@ -312,57 +312,39 @@ ESTANDARES DE DISEÑO PREMIUM obligatorios:
     return this.safeJsonParse<T>(content, {} as T);
   }
 
-  // Llama a Claude (via proxy OpenAI-compatible) o fallback a gpt-4o
-  // para generar texto libre (HTML completo). Sin response_format JSON.
+  // Genera HTML premium usando el mismo proxy/modelo configurado en el sistema
   private async chatHtml(system: string, user: string): Promise<string> {
-    const providers = [
-      { name: 'claude', model: 'claude-opus-4-5', baseUrl: process.env.ANTHROPIC_PROXY_URL || this.env.baseUrl, key: process.env.ANTHROPIC_API_KEY },
-      { name: 'gpt-4o', model: 'gpt-4o', baseUrl: this.env.baseUrl, key: null },
-    ].filter(p => p.key || p.name === 'gpt-4o');
-
-    for (const provider of providers) {
-      try {
-        const url = `${provider.baseUrl.replace(/\/$/, '')}/chat/completions`;
-        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-        if (provider.key) headers['Authorization'] = `Bearer ${provider.key}`;
-        else headers['Authorization'] = this.headers['Authorization'];
-
-        const res = await axios.post(url, {
-          model: provider.model,
-          messages: [
-            { role: 'system', content: system },
-            { role: 'user', content: user },
-          ],
-          temperature: 0.75,
-          max_tokens: 8000,
-        }, { headers });
-
-        const content: string = res.data?.choices?.[0]?.message?.content ?? '';
-        if (!content.includes('<html') && !content.includes('<!DOCTYPE')) {
-          throw new Error('La respuesta no contiene HTML valido');
-        }
-        // Limpiar posibles bloques markdown ```html ... ```
-        const cleaned = content.replace(/^```html?\s*/i, '').replace(/```\s*$/i, '').trim();
-        this.logger.log(`[chatHtml] provider=${provider.name} tokens=${res.data?.usage?.total_tokens ?? '?'}`);
-        return cleaned;
-      } catch (err: any) {
-        this.logger.warn(`[chatHtml] Provider ${provider.name} fallo: ${err?.response?.data?.error?.message || err?.message}`);
-      }
-    }
-    throw new Error('Todos los proveedores fallaron al generar HTML');
+    const url = `${this.env.baseUrl}/chat/completions`;
+    const model = this.env.modelPrimary; // usa el mismo modelo que ya funciona
+    this.logger.log(`[chatHtml] usando model=${model}`);
+    const data = await this.openAiPost<any>(url, {
+      model,
+      messages: [
+        { role: 'system', content: system },
+        { role: 'user', content: user },
+      ],
+      temperature: 0.72,
+      max_tokens: 10000,
+    });
+    const content: string = data?.choices?.[0]?.message?.content ?? '';
+    this.logger.log(`[chatHtml] tokens=${data?.usage?.total_tokens ?? '?'}`);
+    // Limpiar bloques markdown si Claude los añade
+    return content.replace(/^```html?\s*/i, '').replace(/```\s*$/i, '').trim();
   }
 
-  // Inyecta URLs de imagenes reales en los placeholders [[PLIA_IMG:xxx]]
+  // Inyecta URLs reales en TODOS los patrones [[PLIA_IMG:xxx]] — en src=, url(), background, etc.
   private injectImagesIntoHtml(html: string, images: Array<{ id: string; url: string; usage: string }>): string {
     let result = html;
-    // Mapear por usage y por id
     for (const img of images) {
-      const byUsage = new RegExp(`\\[\\[PLIA_IMG:${img.usage}\\]\\]`, 'gi');
-      const byId = new RegExp(`\\[\\[PLIA_IMG:${img.id}\\]\\]`, 'gi');
-      result = result.replace(byUsage, img.url).replace(byId, img.url);
+      // Reemplaza [[PLIA_IMG:usage]] y [[PLIA_IMG:id]] en cualquier contexto (src=, url(), CSS, etc.)
+      [img.usage, img.id].forEach(key => {
+        result = result.split(`[[PLIA_IMG:${key}]]`).join(img.url);
+        result = result.split(`[[PLIA_IMG:${key.toUpperCase()}]]`).join(img.url);
+      });
     }
-    // Reemplazar cualquier placeholder restante con imagen de Pexels generica
-    result = result.replace(/\[\[PLIA_IMG:[^\]]+\]\]/gi, 'https://images.pexels.com/photos/1181671/pexels-photo-1181671.jpeg?auto=compress&cs=tinysrgb&w=1200');
+    // Cualquier placeholder restante → imagen genérica de Pexels
+    result = result.replace(/\[\[PLIA_IMG:[^\]]+\]\]/gi,
+      'https://images.pexels.com/photos/302893/pexels-photo-302893.jpeg?auto=compress&cs=tinysrgb&w=1200');
     return result;
   }
 
