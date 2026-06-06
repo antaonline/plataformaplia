@@ -216,7 +216,8 @@ export function enforcePremiumQuality(
   out = stripJsxLiterals(out);
   out = neutralizeMailtoFallback(out, formEndpoint);
   out = fixBrokenMapEmbed(out);
-  out = ensurePremiumLibraries(out);
+  // NO inyectamos GSAP (ensurePremiumLibraries): aplicaba opacity:0 y conflictúa
+  // con el sistema .reveal seguro que ya incluye el head. Dejaba secciones invisibles.
   return out;
 }
 

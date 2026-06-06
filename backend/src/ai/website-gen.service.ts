@@ -289,55 +289,37 @@ ${formScript}
 </body></html>`;
   }
 
-  /** Genera el HTML de UN grupo de secciones (1-2). Devuelve solo el markup de secciones. */
-  private async renderSectionGroup(
-    sectionsToRender: { id: string; title: string; brief: string }[],
-    ds: SitePlan['design'],
-    brief: string,
-    imageUrls: Record<string, string>,
-    hasLogo: boolean,
-    clientLogo: string | undefined,
-    multimodalImages: string[],
-    formEndpoint: string | undefined,
-    includeNav: boolean,
-    includeFooter: boolean,
-  ): Promise<string> {
-    const imgList = Object.entries(imageUrls).map(([u, url]) => `- ${u}: ${url}`).join('\n');
-    const list = sectionsToRender.map((s, i) => `${i + 1}. <section id="${s.id}"> "${s.title}": ${s.brief}`).join('\n');
-
-    const system = `${STATIC_RULES}
-
-DESIGN SYSTEM (OBLIGATORIO, idéntico en todas las secciones):
-- Colores via variables CSS YA definidas: var(--primary) ${ds.palette.primary}, var(--accent) ${ds.palette.accent}, var(--bg) ${ds.palette.bg}, var(--text) ${ds.palette.text}, var(--secondary) ${ds.palette.secondary}
-- Tipografia ya cargada: titulos '${ds.fonts.heading}', cuerpo '${ds.fonts.body}'
-- Vibe: ${ds.vibe}
-${hasLogo ? `- LOGO del cliente (úsalo en nav y footer): ${clientLogo}` : ''}
-IMAGENES DISPONIBLES (usa SOLO estas URLs, NO inventes):
-${imgList || '(sin imagenes)'}
-${formEndpoint ? `FORMULARIO: <form action="${formEndpoint}" method="POST" data-plia-contact> campos name,email,phone,message + <input type="text" name="_honeypot" tabindex="-1" style="position:absolute;left:-9999px"> + <p data-plia-msg style="display:none"></p>` : ''}
-
-REGLAS ANTI-SOLAPAMIENTO (CRÍTICO):
-- Cada <section> es un bloque de FLUJO NORMAL, ancho completo, apilado verticalmente. Contenido en <div class="max-w-7xl mx-auto px-6">.
-- Padding vertical generoso: py-20 o py-28.
-- PROHIBIDO position:absolute/fixed EXCEPTO la imagen de fondo del hero (absolute inset-0 dentro de un hero "relative overflow-hidden"). Ninguna otra seccion usa absolute.
-- PROHIBIDO margenes negativos, heights fijos que recorten, ni z-index que tape otras secciones.
-- Animacion: agrega class="reveal" a los bloques que quieras animar al entrar (el observer ya existe). NUNCA opacity:0 de otra forma.
-- Fondos alternados entre secciones (claro var(--bg) / oscuro var(--primary)) para ritmo visual.
-
-SALIDA: SOLO el markup de las secciones pedidas. ${includeNav ? 'Incluye el <nav> sticky ANTES de las secciones.' : ''}${includeFooter ? ' Incluye el <footer> DESPUÉS de las secciones.' : ''} NO escribas <!DOCTYPE>, <html>, <head>, <body> ni <script>. Solo <nav>/<section>/<footer>. Sin markdown.`;
-
-    const user = `Brief del negocio:\n${brief}\n\nGENERA EXACTAMENTE ESTAS SECCIONES (contenido real, persuasivo, español):\n${list}${includeNav ? '\n\nAdemás incluye al inicio: <nav> sticky top-0 z-50 backdrop-blur con logo/marca, links de navegación (anclas), y CTA pill accent.' : ''}${includeFooter ? '\n\nAdemás incluye al final: <footer> multi-columna con marca, links, redes sociales SVG y copyright.' : ''}\n\nDiseño nivel Awwwards, sin solapamientos.${hasLogo ? ' La primera imagen adjunta es el logo.' : ''}`;
-
-    const raw = await this.completeClaudeWithRetry(
-      system,
-      [{ role: 'user', content: user }],
-      { model: MODEL_SONNET, maxTokens: 6000, temperature: 0.6, images: multimodalImages },
-      `render-grp-${sectionsToRender.map((s) => s.id).join('+')}`,
-    );
-    return this.stripFences(raw);
+  /** Red de seguridad: garantiza que ningún elemento .reveal quede invisible.
+   *  Inyecta CSS visible-por-defecto + un script failsafe antes de </body>. */
+  private injectRevealSafety(html: string): string {
+    const safetyCss = `<style id="plia-reveal-safety">
+.reveal{opacity:1!important;transform:none!important}
+.reveal.armed{opacity:0!important;transform:translateY(28px)!important;transition:opacity .7s ease,transform .7s ease}
+.reveal.armed.in{opacity:1!important;transform:none!important}
+</style>`;
+    const safetyJs = `<script id="plia-reveal-js">
+(function(){
+function run(){
+var els=[].slice.call(document.querySelectorAll('.reveal'));
+els.forEach(function(el){el.classList.add('armed');});
+var o=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){e.target.classList.add('in');o.unobserve(e.target);}});},{threshold:.1,rootMargin:'0px 0px -30px 0px'});
+els.forEach(function(el){o.observe(el);});
+setTimeout(function(){els.forEach(function(el){el.classList.add('in');});},2000);
+}
+if(document.readyState!=='loading')run();else document.addEventListener('DOMContentLoaded',run);
+})();
+</script>`;
+    let out = html;
+    // Insertar CSS antes de </head> (o al inicio si no hay head)
+    if (/<\/head>/i.test(out)) out = out.replace(/<\/head>/i, `${safetyCss}\n</head>`);
+    else out = safetyCss + '\n' + out;
+    // Insertar JS antes de </body>
+    if (/<\/body>/i.test(out)) out = out.replace(/<\/body>/i, `${safetyJs}\n</body>`);
+    else out = out + '\n' + safetyJs;
+    return out;
   }
 
-  /** Fase 2: genera la página sección por sección (estilo IaChat) y la ensambla. */
+  /** Fase 2: genera el documento HTML completo en UNA sola llamada coherente. */
   async renderAll(
     plan: SitePlan,
     brief: string,
@@ -351,61 +333,57 @@ SALIDA: SOLO el markup de las secciones pedidas. ${includeNav ? 'Incluye el <nav
     const validClientImages = clientImages.filter((s) => /^https?:\/\//.test(s));
     const multimodalImages = hasLogo ? [clientLogo as string, ...validClientImages] : validClientImages;
     const ds = plan.design;
+    const imgList = Object.entries(imageUrls).map(([u, url]) => `- ${u}: ${url}`).join('\n');
     const files: Record<string, string> = {};
 
     for (const page of plan.pages) {
       const isLanding = mode === 'LANDING' || page.file === 'index.html';
 
-      // Lista de secciones decidida por la IA. Garantizamos hero, contacto y footer.
-      let sections = (isLanding && plan.sections?.length)
-        ? plan.sections.filter((s) => s && s.id && !['nav', 'header', 'footer'].includes(s.id.toLowerCase()))
-        : [];
-      if (!sections.length) {
-        sections = [
-          { id: 'hero', title: 'Hero', brief: 'Impacto visual con imagen de fondo, propuesta de valor y 2 CTAs.' },
-          { id: 'beneficios', title: 'Por qué elegirnos', brief: '3-4 razones con iconos SVG.' },
-          { id: 'servicios', title: 'Servicios', brief: 'Productos/servicios del negocio en cards.' },
-          { id: 'galeria', title: 'Galería', brief: 'Grid de imágenes con hover.' },
-          { id: 'testimonios', title: 'Testimonios', brief: '3 reseñas con avatar y estrellas.' },
-        ];
-      }
-      if (!sections.some((s) => s.id.toLowerCase() === 'hero')) {
-        sections.unshift({ id: 'hero', title: 'Hero', brief: 'Impacto visual con imagen de fondo y CTAs.' });
-      }
-      if (!sections.some((s) => /contact/.test(s.id.toLowerCase()))) {
-        sections.push({ id: 'contacto', title: 'Contacto', brief: 'Formulario + datos de contacto + redes sociales.' });
-      }
+      const sectionsGuide = (isLanding && plan.sections?.length)
+        ? plan.sections.map((s, i) => `${i + 1}. [${s.id}] ${s.title}: ${s.brief}`).join('\n')
+        : 'Decide las secciones óptimas para vender este negocio según el brief.';
 
-      // Agrupar en pares (2 secciones por llamada). Nav va con el primer grupo, footer con el último.
-      const PER_GROUP = 2;
-      const groups: { id: string; title: string; brief: string }[][] = [];
-      for (let i = 0; i < sections.length; i += PER_GROUP) {
-        groups.push(sections.slice(i, i + PER_GROUP));
-      }
+      const system = `${STATIC_RULES}
 
-      const bodyParts: string[] = [];
-      for (let i = 0; i < groups.length; i++) {
-        const fragment = await this.renderSectionGroup(
-          groups[i],
-          ds,
-          brief,
-          imageUrls,
-          hasLogo,
-          clientLogo,
-          multimodalImages,
-          formEndpoint,
-          i === 0, // nav en el primer grupo
-          i === groups.length - 1, // footer en el último grupo
-        );
-        bodyParts.push(fragment);
-      }
+DESIGN SYSTEM (respetar):
+- Paleta: primary ${ds.palette.primary}, secondary ${ds.palette.secondary}, accent ${ds.palette.accent}, bg ${ds.palette.bg}, text ${ds.palette.text}
+- Tipografía: títulos "${ds.fonts.heading}", cuerpo "${ds.fonts.body}" (Google Fonts)
+- Vibe: ${ds.vibe}
+${hasLogo ? `LOGO del cliente (obligatorio en nav y footer): ${clientLogo}` : ''}
+IMÁGENES DISPONIBLES (usa SOLO estas URLs exactas, NO inventes):
+${imgList || '(sin imágenes)'}
+${formEndpoint ? `FORMULARIO: <form action="${formEndpoint}" method="POST" data-plia-contact> con name,email,phone,message + <input type="text" name="_honeypot" tabindex="-1" style="position:absolute;left:-9999px"> + <p data-plia-msg style="display:none"></p>` : ''}
 
-      let html = this.buildHead(ds, plan.projectName || 'Bienvenidos')
-        + '\n' + bodyParts.join('\n')
-        + '\n' + this.buildClosingScript(formEndpoint);
+ANTI-SOLAPAMIENTO (CRÍTICO): flujo normal de documento, secciones apiladas. PROHIBIDO position:absolute salvo imagen de fondo del hero (dentro de hero relative overflow-hidden). Sin márgenes negativos ni heights que recorten.
+
+LÍMITE DE TOKENS (CRÍTICO): tienes ~8000 tokens. La página DEBE terminar COMPLETA con </body></html>. Usa Tailwind (clases cortas) y sé eficiente. Si te acercas al límite, cierra el HTML — MEJOR 6 secciones completas que 9 cortadas. Prioridad: nav, hero, y las primeras secciones del plan, contacto y footer SIEMPRE presentes.`;
+
+      const user = `Brief del negocio:\n${brief}\n\nGenera la LANDING COMPLETA (documento HTML entero: <!DOCTYPE html> hasta </html>).\nSecciones sugeridas (en orden, adapta al brief):\n${sectionsGuide}\n\nDebe terminar COMPLETA con </body></html>. Diseño nivel Awwwards, español real, sin solapamientos.${hasLogo ? ' La primera imagen adjunta es el logo.' : ''}`;
+
+      let html = await this.completeClaudeWithRetry(
+        system,
+        [{ role: 'user', content: user }],
+        { model: MODEL_SONNET, maxTokens: 8000, temperature: 0.6, images: multimodalImages },
+        `render-${page.file}`,
+      );
+      html = this.stripFences(html);
+
+      // Si truncó, cerrar limpio desde el último cierre de sección
+      if (!/<\/html>/i.test(html)) {
+        const candidates = ['</footer>', '</section>', '</main>'];
+        let cut = -1;
+        for (const t of candidates) {
+          const idx = html.lastIndexOf(t);
+          if (idx > html.length * 0.4) { cut = idx + t.length; break; }
+        }
+        if (cut > 0) html = html.slice(0, cut);
+        if (!/<\/body>/i.test(html)) html += '\n</body>';
+        if (!/<\/html>/i.test(html)) html += '\n</html>';
+      }
 
       html = enforcePremiumQuality(html, formEndpoint);
       if (formEndpoint) html = enforceContactForms(html, formEndpoint);
+      html = this.injectRevealSafety(html); // red de seguridad anti opacity:0
       files[page.file] = html;
     }
 
