@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PROVIDERS, FallbackProvider } from '../experimental/iachat/generation/providers';
 import { enforceContactForms } from './contact-form-enforcer';
 import { enforcePremiumQuality } from './premium-quality-enforcer';
+import { PLIA_DESIGN_INTELLIGENCE } from './design-intelligence';
 
 export type WebMode = 'LANDING' | 'WEB';
 
@@ -356,6 +357,8 @@ if(document.readyState!=='loading')run();else document.addEventListener('DOMCont
         : 'Decide las secciones óptimas para vender este negocio según el brief.';
 
       const system = `${STATIC_RULES}
+
+${PLIA_DESIGN_INTELLIGENCE}
 
 DESIGN SYSTEM (respetar):
 - Paleta: primary ${ds.palette.primary}, secondary ${ds.palette.secondary}, accent ${ds.palette.accent}, bg ${ds.palette.bg}, text ${ds.palette.text}
