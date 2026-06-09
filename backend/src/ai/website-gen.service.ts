@@ -345,12 +345,21 @@ if(document.readyState!=='loading')run();else document.addEventListener('DOMCont
     clientImages: string[] = [],
     clientLogo?: string,
     formEndpoint?: string,
+    imageNotes?: Record<string, string>,
   ): Promise<Record<string, string>> {
     const hasLogo = !!clientLogo && /^https?:\/\//.test(clientLogo);
     const validClientImages = clientImages.filter((s) => /^https?:\/\//.test(s));
     const multimodalImages = hasLogo ? [clientLogo as string, ...validClientImages] : validClientImages;
     const ds = plan.design;
     const imgList = Object.entries(imageUrls).map(([u, url]) => `- ${u}: ${url}`).join('\n');
+    // URLs de las imágenes que SUBIÓ el cliente (contenido real del negocio).
+    // imageNotes opcional: url → instrucción del cliente sobre dónde/cómo usarla.
+    const clientImgList = validClientImages
+      .map((u, i) => {
+        const note = (imageNotes && imageNotes[u]) ? ` — Instrucción del cliente: "${imageNotes[u]}"` : '';
+        return `- imagen_cliente_${i + 1}: ${u}${note}`;
+      })
+      .join('\n');
     const files: Record<string, string> = {};
 
     for (const page of plan.pages) {
@@ -387,8 +396,10 @@ DESIGN SYSTEM (respetar):
 - Paleta: primary ${ds.palette.primary}, secondary ${ds.palette.secondary}, accent ${ds.palette.accent}, bg ${ds.palette.bg}, text ${ds.palette.text}
 - Tipografía: títulos "${ds.fonts.heading}", cuerpo "${ds.fonts.body}" (Google Fonts)
 - Vibe: ${ds.vibe}
-${hasLogo ? `LOGO del cliente (obligatorio en nav y footer): ${clientLogo}` : ''}
-IMÁGENES DISPONIBLES (usa SOLO estas URLs exactas, NO inventes):
+${hasLogo ? `LOGO del cliente (OBLIGATORIO: úsalo en el nav y en el footer): ${clientLogo}` : ''}
+${clientImgList ? `IMÁGENES REALES DEL CLIENTE (CONTENIDO REAL DEL NEGOCIO — son OBLIGATORIAS, úsalas con su URL exacta donde corresponda según cada instrucción; tienen PRIORIDAD sobre las imágenes IA):
+${clientImgList}
+` : ''}IMÁGENES IA DISPONIBLES (fotos de stock generadas; usa SOLO estas URLs exactas, NO inventes; si una imagen del cliente cubre el slot, prefiérela):
 ${imgList || '(sin imágenes)'}
 ${formEndpoint ? `FORMULARIO: <form action="${formEndpoint}" method="POST" data-plia-contact> con name,email,phone,message + <input type="text" name="_honeypot" tabindex="-1" style="position:absolute;left:-9999px"> + <p data-plia-msg style="display:none"></p>` : ''}
 

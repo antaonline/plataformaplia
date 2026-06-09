@@ -672,6 +672,8 @@ export default function DashboardPage() {
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+  // Instrucción por imagen (paralelo a imageFiles por índice). Vacío = "usar a su criterio".
+  const [imageNotes, setImageNotes] = useState<string[]>([]);
   const [catalogPdfFile, setCatalogPdfFile] = useState<File | null>(null);
   const [renewOpen, setRenewOpen] = useState(false);
   // Wizard de vinculación de dominio propio
@@ -1349,6 +1351,13 @@ export default function DashboardPage() {
         uploadedImages = mediaData?.onboardingData?.images ?? mediaData?.images ?? uploadedImages;
       }
 
+      // Mapear instrucción por imagen → { [url]: nota }. Por índice con las URLs subidas.
+      const imageNotesMap: Record<string, string> = {};
+      uploadedImages.forEach((url, i) => {
+        const note = (imageNotes[i] || '').trim();
+        if (note) imageNotesMap[url] = note;
+      });
+
       const res = await fetch(`${apiBase}/projects/${project.id}/onboarding`, {
         method: 'POST',
         headers: {
@@ -1370,6 +1379,7 @@ export default function DashboardPage() {
             logoUrl,
             images: uploadedImages,
             imageInstructions: formData.imageInstructions,
+            imageNotes: imageNotesMap,
           },
         }),
       });
@@ -2670,13 +2680,31 @@ export default function DashboardPage() {
                               );
                             })}
                           </div>
-                        <div className="mt-4">
-                          <label className="text-sm font-medium">Otros colores en especifico:</label>
-                          <Input
-                            value={formData.colors}
-                            onChange={(e) => setFormData({ ...formData, colors: e.target.value })}
-                            placeholder="Ej: Beige, dorado, azul marino"
-                          />
+                        <div className="mt-4 space-y-2">
+                          <label className="text-sm font-medium">¿Tienes un color de marca exacto?</label>
+                          <div className="flex items-center gap-3">
+                            <label className="relative flex h-12 w-12 cursor-pointer items-center justify-center rounded-xl border-2 border-border overflow-hidden shrink-0" title="Elegir color exacto">
+                              <input
+                                type="color"
+                                className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                                onChange={(e) => {
+                                  const hex = e.target.value;
+                                  const prev = formData.colors.replace(/#[0-9a-fA-F]{6}/g, '').replace(/^[,\s]+|[,\s]+$/g, '');
+                                  setFormData({ ...formData, colors: prev ? `${prev}, ${hex}` : hex });
+                                }}
+                              />
+                              <span className="text-lg">🎨</span>
+                            </label>
+                            <Input
+                              className="flex-1"
+                              value={formData.colors}
+                              onChange={(e) => setFormData({ ...formData, colors: e.target.value })}
+                              placeholder="Ej: Beige, dorado, #1e40af, azul marino"
+                            />
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            Toca el cuadro de color para elegir uno exacto, o escribe nombres/códigos. La IA respetará estos colores.
+                          </p>
                         </div>
 
                         </div>
@@ -3016,35 +3044,54 @@ export default function DashboardPage() {
                           </div>
                           <div className="mt-2 text-xs text-muted-foreground">{imageFiles.length}/5 imagenes seleccionadas</div>
                           {imagePreviews.length > 0 && (
-                            <div className="mt-2 grid grid-cols-2 gap-3 md:grid-cols-3">
+                            <div className="mt-3 space-y-3">
+                              <p className="text-xs text-muted-foreground">
+                                Por cada imagen, dinos dónde usarla. Si no sabes, déjalo vacío y la IA decidirá por ti.
+                              </p>
                               {imagePreviews.map((src, index) => (
-                                <div key={src} className="relative overflow-hidden rounded-xl border border-border">
-                                  <img src={src} alt={`Preview ${index + 1}`} className="h-28 w-full object-cover" />
-                                  <button
-                                    type="button"
-                                    className="absolute right-2 top-2 rounded-full bg-white/80 px-2 py-1 text-xs"
-                                    onClick={() => {
-                                      const nextFiles = imageFiles.filter((_, i) => i != index);
-                                      setImageFiles(nextFiles);
-                                    }}
-                                  >
-                                    Quitar
-                                  </button>
+                                <div key={src} className="flex gap-3 items-start rounded-xl border border-border p-3">
+                                  <div className="relative shrink-0">
+                                    <img src={src} alt={`Preview ${index + 1}`} className="h-20 w-20 rounded-lg object-cover" />
+                                    <button
+                                      type="button"
+                                      className="absolute -right-1 -top-1 rounded-full bg-white shadow border border-border px-1.5 py-0.5 text-[10px]"
+                                      onClick={() => {
+                                        setImageFiles(imageFiles.filter((_, i) => i !== index));
+                                        setImageNotes(imageNotes.filter((_, i) => i !== index));
+                                      }}
+                                    >
+                                      ✕
+                                    </button>
+                                  </div>
+                                  <div className="flex-1 space-y-1.5">
+                                    <label className="text-xs font-medium text-foreground/80">¿Dónde debería usarse esta imagen?</label>
+                                    <Input
+                                      className="text-sm"
+                                      placeholder="Ej: en el hero / en la galería / como foto del local..."
+                                      value={imageNotes[index] || ''}
+                                      onChange={(e) => {
+                                        const next = [...imageNotes];
+                                        next[index] = e.target.value;
+                                        setImageNotes(next);
+                                      }}
+                                    />
+                                    <button
+                                      type="button"
+                                      className="text-[11px] text-muted-foreground underline hover:text-foreground"
+                                      onClick={() => {
+                                        const next = [...imageNotes];
+                                        next[index] = '';
+                                        setImageNotes(next);
+                                      }}
+                                    >
+                                      Usar a su criterio
+                                    </button>
+                                  </div>
                                 </div>
                               ))}
                             </div>
                           )}
                         </div>
-                        {imageFiles.length > 0 && (
-                          <div>
-                            <label className="text-sm font-medium">Instrucciones para las imagenes</label>
-                            <Textarea
-                              value={formData.imageInstructions}
-                              onChange={(e) => setFormData({ ...formData, imageInstructions: e.target.value })}
-                              placeholder="Indica como deseas que utilicemos cada imagen que subiste dentro de tu pagina web."
-                            />
-                          </div>
-                        )}
                         <button
                           type="button"
                           className={`inline-flex items-center gap-2 rounded-full border px-3 py-2 text-sm transition ${

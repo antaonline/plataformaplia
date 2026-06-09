@@ -1547,6 +1547,17 @@ Todo en un solo HTML con anchors.`;
         ? '/_plia/contact.php'
         : `${apiBase}/api/site-contact/${projectId}`;
 
+      // Notas por imagen: el cliente puede indicar dónde/cómo usar cada foto.
+      // onboarding.imageNotes = { [url]: "instrucción" }. normalizamos las URLs.
+      const imageNotes: Record<string, string> = {};
+      if (onboarding.imageNotes && typeof onboarding.imageNotes === 'object') {
+        for (const [u, note] of Object.entries(onboarding.imageNotes)) {
+          if (typeof note === 'string' && note.trim()) {
+            imageNotes[this.normalizeUploadUrl(u)] = note.trim();
+          }
+        }
+      }
+
       const filesMap = await this.websiteGen.renderAll(
         sitePlan,
         brief,
@@ -1555,6 +1566,7 @@ Todo en un solo HTML con anchors.`;
         clientImages,
         clientLogo,
         formEndpoint,
+        imageNotes,
       );
 
       // 4. Mismo formato de salida que legacy: pages[{slug,html}] + html.
