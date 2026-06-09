@@ -9,6 +9,7 @@ import { WebsiteGenService, WebMode } from './website-gen.service';
 import { MailService } from '../mail/mail.service';
 import { ProjectStatus } from '@prisma/client';
 import { enforceContactForms } from './contact-form-enforcer';
+import { getIntentDirective } from './site-intents';
 
 type PlanType = 'LANDING' | 'WEB';
 
@@ -370,7 +371,10 @@ Todo en un solo HTML con anchors.`;
       input.additionalInstructions ? `⚡ INSTRUCCIONES ESPECIALES DEL CLIENTE (RESPETAR AL PIE DE LA LETRA): ${input.additionalInstructions}` : '',
     ].filter(Boolean);
 
-    return lines.join('\n') + `\n\nGenera el HTML completo premium. Texto real y convincente en español (CERO lorem ipsum). Incorpora TODA la información anterior en las secciones correspondientes. Diseño ganador de premios Awwwards.`;
+    // La intención ("¿qué necesitas?") dirige la estructura y el tono de la web
+    const intentDirective = getIntentDirective(input.siteIntent);
+
+    return lines.join('\n') + intentDirective + `\n\nGenera el HTML completo premium. Texto real y convincente en español (CERO lorem ipsum). Incorpora TODA la información anterior en las secciones correspondientes. Diseño ganador de premios Awwwards.`;
   }
 
   private buildUserPromptLegacy(input: any, plan: PlanType) {

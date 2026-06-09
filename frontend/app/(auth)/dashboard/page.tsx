@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import type { JSX } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -124,6 +126,26 @@ declare global {
     Izipay?: any;
   }
 }
+
+// Opciones "¿Qué necesitas?" — definen el objetivo de la web y personalizan la generación
+type SiteIntentOption = { id: string; label: string; description: string; icon: JSX.Element };
+const intentIcon = (path: JSX.Element) => (
+  <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">{path}</svg>
+);
+const landingIntents: SiteIntentOption[] = [
+  { id: 'sales', label: 'Landing de venta', description: 'Para vender un producto o servicio: beneficios, precios, testimonios y botones de compra. Diseñada para convertir visitantes en clientes.', icon: intentIcon(<><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></>) },
+  { id: 'sales-letter', label: 'Carta de venta', description: 'Una página larga y persuasiva que cuenta una historia: el problema de tu cliente y cómo lo resuelves. Mucho texto convincente.', icon: intentIcon(<><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8M16 17H8M10 9H8"/></>) },
+  { id: 'informational', label: 'Landing informativa', description: 'Presenta tu negocio sin presión de venta: qué ofreces, tu menú o catálogo, ubicación y contacto. Ideal para que te conozcan.', icon: intentIcon(<><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></>) },
+  { id: 'lead-capture', label: 'Landing de captación', description: 'Enfocada en conseguir datos de contacto (correos, leads). Un formulario protagonista y mínimas distracciones.', icon: intentIcon(<><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><path d="m22 6-10 7L2 6"/></>) },
+  { id: 'booking', label: 'Reservas / Citas', description: 'Para que tus clientes agenden o reserven fácil: servicios, horarios y botón claro de reserva. Ideal para restaurantes, salones, clínicas.', icon: intentIcon(<><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></>) },
+  { id: 'event', label: 'Landing de evento', description: 'Para promocionar un evento o lanzamiento: fecha, cuenta regresiva, agenda y registro. Genera expectativa y asistentes.', icon: intentIcon(<><path d="M5.8 11.3 2 22l10.7-3.79"/><path d="M4 3h.01M22 8h.01M15 2h.01M22 20h.01"/><path d="m22 2-2.24.75a2.9 2.9 0 0 0-1.96 3.12c.1.86-.57 1.63-1.45 1.63h-.38c-.86 0-1.6.6-1.76 1.44L12 14l5 5 1.3-.5c.84-.16 1.44-.9 1.44-1.76v-.38c0-.88.77-1.55 1.63-1.45a2.9 2.9 0 0 0 3.12-1.96L22 10z"/></>) },
+];
+const webIntents: SiteIntentOption[] = [
+  { id: 'corporate', label: 'Web corporativa', description: 'Sitio completo de varias páginas: inicio, nosotros, servicios y contacto. Para proyectar profesionalismo y solidez de tu empresa.', icon: intentIcon(<><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M9 22v-4h6v4M8 6h.01M16 6h.01M8 10h.01M16 10h.01M8 14h.01M16 14h.01"/></>) },
+  { id: 'services', label: 'Web de servicios', description: 'Detalla tus servicios, tu proceso de trabajo y resultados. Para consultoras, agencias y profesionales que venden servicios.', icon: intentIcon(<><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></>) },
+  { id: 'portfolio', label: 'Portafolio', description: 'Muestra tus mejores trabajos o proyectos con galerías visuales. Ideal para fotógrafos, diseñadores, arquitectos y creativos.', icon: intentIcon(<><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.09-3.09a2 2 0 0 0-2.82 0L6 21"/></>) },
+  { id: 'catalog', label: 'Catálogo', description: 'Organiza y exhibe tus productos o servicios de forma ordenada y atractiva. Para tiendas y negocios con variedad de oferta.', icon: intentIcon(<><path d="M3 9h18M9 21V9"/><rect x="3" y="3" width="18" height="18" rx="2"/></>) },
+];
 
 const audienceOptions = [
   'Emprendedores',
@@ -689,6 +711,7 @@ export default function DashboardPage() {
   const [formData, setFormData] = useState({
     domainOption: 'subdomain',
     subdomain: '',
+    siteIntent: '',
     businessIdentity: '' as BusinessIdentity | '',
     businessTypeQuery: '',
     businessType: '',
@@ -831,6 +854,7 @@ export default function DashboardPage() {
       ...prev,
       domainOption: data.domainOption ?? prev.domainOption,
       subdomain: data.subdomain ?? prev.subdomain,
+      siteIntent: data.siteIntent ?? prev.siteIntent,
       businessIdentity: data.businessIdentity ?? prev.businessIdentity,
       businessTypeQuery: data.businessType ?? data.businessTypeQuery ?? prev.businessTypeQuery,
       businessType: data.businessType ?? prev.businessType,
@@ -1102,6 +1126,10 @@ export default function DashboardPage() {
       }
       if (formData.subdomain.length < 3) {
         setFormError('El subdominio debe tener al menos 3 caracteres.');
+        return;
+      }
+      if (!formData.siteIntent) {
+        setFormError('Selecciona qué necesitas (el objetivo de tu web).');
         return;
       }
     }
@@ -1995,9 +2023,19 @@ export default function DashboardPage() {
                         </div>
                         <div className="flex items-center gap-3">
                           {renderStatus(proj.status)}
-                          <Button variant="outline" size="sm" asChild>
-                            <Link href={`/dashboard/detalles-proyecto/${proj.id}`}>Ver proyecto</Link>
-                          </Button>
+                          {proj.status === 'WAITING_INFO' ? (
+                            <Button
+                              variant="cta"
+                              size="sm"
+                              onClick={() => handleSelectProject(normalizeProject(proj))}
+                            >
+                              Completar formulario
+                            </Button>
+                          ) : (
+                            <Button variant="outline" size="sm" asChild>
+                              <Link href={`/dashboard/detalles-proyecto/${proj.id}`}>Ver proyecto</Link>
+                            </Button>
+                          )}
                           <Button
                             size="sm"
                             variant="ghost"
@@ -2099,6 +2137,13 @@ export default function DashboardPage() {
                       ))}
                     </div>
 
+                    <motion.div
+                      key={step}
+                      initial={{ opacity: 0, x: 28 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ duration: 0.3, ease: 'easeOut' }}
+                      className="space-y-6"
+                    >
                     {step === 1 && (
                       <div className="space-y-4">
                         <div className="space-y-2">
@@ -2109,26 +2154,29 @@ export default function DashboardPage() {
                         </div>
 
                         <div
-                          className={`w-full rounded-2xl border p-4 text-left transition ${
+                          className={`w-full rounded-3xl border-2 p-5 text-left transition ${
                             formData.domainOption === 'subdomain'
-                              ? 'border-cta bg-cta/10'
+                              ? 'border-cta bg-cta/5'
                               : 'border-border bg-white'
                           }`}
                           onClick={() =>
                             setFormData((prev) => ({ ...prev, domainOption: 'subdomain' }))
                           }
                         >
-                          <div className="flex items-center justify-between">
+                          <div className="flex items-center justify-between mb-4">
                             <div>
-                              <p className="text-sm font-semibold">Subdominio gratuito</p>
+                              <p className="text-base font-bold">Subdominio gratuito</p>
                               <p className="text-xs text-muted-foreground">
-                                Tu web estara en tudominio.plia.pe
+                                Tu web estará en tu-dominio.plia.pe
                               </p>
                             </div>
-                            <span className="text-xs rounded-full bg-cta/10 text-cta px-2 py-1">Gratis</span>
+                            <span className="text-xs font-bold rounded-full bg-cta text-black px-3 py-1.5 shadow-sm">GRATIS</span>
                           </div>
-                          <div className="mt-3 flex items-center gap-2">
-                            <Input
+
+                          {/* Campo grande estilo app nativa */}
+                          <div className="flex items-stretch rounded-2xl border-2 border-border focus-within:border-cta focus-within:ring-4 focus-within:ring-cta/20 overflow-hidden bg-white transition">
+                            <input
+                              className="flex-1 px-5 py-4 text-2xl md:text-3xl font-bold text-foreground placeholder:text-muted-foreground/40 outline-none bg-transparent min-w-0"
                               placeholder="miempresa"
                               value={formData.subdomain}
                               onChange={(e) =>
@@ -2138,10 +2186,20 @@ export default function DashboardPage() {
                                 }))
                               }
                             />
-                            <span className="text-sm text-muted-foreground">.plia.pe</span>
+                            <div className="flex items-center px-5 bg-muted/60 border-l-2 border-border">
+                              <span className="text-xl md:text-2xl font-bold text-foreground/70 whitespace-nowrap">.plia.pe</span>
+                            </div>
                           </div>
+
+                          {/* Preview en vivo */}
+                          {formData.subdomain.trim().length >= 3 && (
+                            <p className="mt-3 text-sm">
+                              <span className="text-muted-foreground">Tu web: </span>
+                              <span className="font-semibold text-cta-foreground">https://{formData.subdomain}.plia.pe</span>
+                            </p>
+                          )}
                           <p className="mt-2 text-xs text-muted-foreground">
-                            Solo letras, numeros y guion. Minimo 3, maximo 30.
+                            Solo letras, números y guión. Mínimo 3, máximo 30.
                           </p>
                         </div>
 
@@ -2154,6 +2212,49 @@ export default function DashboardPage() {
                               </p>
                             </div>
                             <span className="text-xs rounded-full bg-muted px-2 py-1">Proximamente</span>
+                          </div>
+                        </div>
+
+                        {/* ¿Qué necesitas? — selector de intención */}
+                        <div className="pt-4 space-y-3">
+                          <div>
+                            <h3 className="text-base font-bold">¿Qué necesitas?</h3>
+                            <p className="text-xs text-muted-foreground">
+                              Elige el objetivo de tu web. Esto nos ayuda a crear una página más precisa para ti.
+                            </p>
+                          </div>
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            {(project?.type === 'WEB' ? webIntents : landingIntents).map((opt) => {
+                              const active = formData.siteIntent === opt.id;
+                              return (
+                                <motion.button
+                                  key={opt.id}
+                                  type="button"
+                                  whileTap={{ scale: 0.97 }}
+                                  className={`relative flex flex-col gap-2 rounded-2xl border-2 p-4 text-left transition ${
+                                    active
+                                      ? 'border-cta bg-cta/10 shadow-sm'
+                                      : 'border-border bg-white hover:border-foreground/25'
+                                  }`}
+                                  onClick={() => setFormData((prev) => ({ ...prev, siteIntent: opt.id }))}
+                                >
+                                  <div className={`flex h-11 w-11 items-center justify-center rounded-xl ${active ? 'bg-cta text-black' : 'bg-muted text-foreground/70'}`}>
+                                    {opt.icon}
+                                  </div>
+                                  <p className="text-sm font-bold leading-snug">{opt.label}</p>
+                                  <p className="text-xs text-muted-foreground leading-relaxed">{opt.description}</p>
+                                  {active && (
+                                    <motion.span
+                                      initial={{ scale: 0 }}
+                                      animate={{ scale: 1 }}
+                                      className="absolute top-3 right-3 flex h-6 w-6 items-center justify-center rounded-full bg-cta text-black"
+                                    >
+                                      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                                    </motion.span>
+                                  )}
+                                </motion.button>
+                              );
+                            })}
                           </div>
                         </div>
                       </div>
@@ -2964,6 +3065,7 @@ export default function DashboardPage() {
                         </button>
                       </div>
                     )}
+                    </motion.div>
 
                     {formError && <p className="text-sm text-destructive">{formError}</p>}
 
