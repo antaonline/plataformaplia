@@ -1,0 +1,4 @@
+# Componentes crudos descargados de 21st.dev — NO versionar (son miles de archivos
+# y referencia local). Se regeneran con scripts/ingest-21st-components.js
+*
+!.gitignore
