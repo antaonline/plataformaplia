@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { JSX } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { ColorPicker, ColorArea, ColorSlider, ColorSwatch, ColorSwatchPicker, Label as CpLabel } from '@/components/ui/heroui-color-picker';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -1352,9 +1353,11 @@ export default function DashboardPage() {
       }
 
       // Mapear instrucción por imagen → { [url]: nota }. Por índice con las URLs subidas.
+      // '__AUTO__' o vacío = sin instrucción (nosotros decidimos). Solo enviamos texto real.
       const imageNotesMap: Record<string, string> = {};
       uploadedImages.forEach((url, i) => {
-        const note = (imageNotes[i] || '').trim();
+        const raw = imageNotes[i] || '';
+        const note = raw === '__AUTO__' ? '' : raw.trim();
         if (note) imageNotesMap[url] = note;
       });
 
@@ -2683,18 +2686,37 @@ export default function DashboardPage() {
                         <div className="mt-4 space-y-2">
                           <label className="text-sm font-medium">¿Tienes un color de marca exacto?</label>
                           <div className="flex items-center gap-3">
-                            <label className="relative flex h-12 w-12 cursor-pointer items-center justify-center rounded-xl border-2 border-border overflow-hidden shrink-0" title="Elegir color exacto">
-                              <input
-                                type="color"
-                                className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-                                onChange={(e) => {
-                                  const hex = e.target.value;
-                                  const prev = formData.colors.replace(/#[0-9a-fA-F]{6}/g, '').replace(/^[,\s]+|[,\s]+$/g, '');
-                                  setFormData({ ...formData, colors: prev ? `${prev}, ${hex}` : hex });
-                                }}
-                              />
-                              <span className="text-lg">🎨</span>
-                            </label>
+                            <ColorPicker
+                              value={/#[0-9a-fA-F]{6}/.test(formData.colors) ? (formData.colors.match(/#[0-9a-fA-F]{6}/) || ['#1e40af'])[0] : '#1e40af'}
+                              onChange={(c) => {
+                                const hex = c.toString('hex');
+                                const rest = formData.colors.replace(/#[0-9a-fA-F]{6}/g, '').replace(/^[,\s]+|[,\s]+$/g, '');
+                                setFormData({ ...formData, colors: rest ? `${rest}, ${hex}` : hex });
+                              }}
+                            >
+                              <ColorPicker.Trigger className="rounded-xl border-2 border-border p-1">
+                                <ColorSwatch size="lg" />
+                              </ColorPicker.Trigger>
+                              <ColorPicker.Popover>
+                                <ColorArea colorSpace="hsb" xChannel="saturation" yChannel="brightness">
+                                  <ColorArea.Thumb />
+                                </ColorArea>
+                                <ColorSlider channel="hue" className="gap-1 px-1" colorSpace="hsb">
+                                  <CpLabel>Tono</CpLabel>
+                                  <ColorSlider.Output />
+                                  <ColorSlider.Track>
+                                    <ColorSlider.Thumb />
+                                  </ColorSlider.Track>
+                                </ColorSlider>
+                                <ColorSwatchPicker className="justify-center px-1">
+                                  {['#ef4444', '#f97316', '#eab308', '#22c55e', '#06b6d4', '#3b82f6', '#8b5cf6', '#ec4899', '#111827'].map((p) => (
+                                    <ColorSwatchPicker.Item key={p} color={p}>
+                                      <ColorSwatchPicker.Swatch />
+                                    </ColorSwatchPicker.Item>
+                                  ))}
+                                </ColorSwatchPicker>
+                              </ColorPicker.Popover>
+                            </ColorPicker>
                             <Input
                               className="flex-1"
                               value={formData.colors}
@@ -2703,7 +2725,7 @@ export default function DashboardPage() {
                             />
                           </div>
                           <p className="text-xs text-muted-foreground">
-                            Toca el cuadro de color para elegir uno exacto, o escribe nombres/códigos. La IA respetará estos colores.
+                            Toca el cuadro de color para elegir uno exacto, o escribe nombres/códigos. Usaremos estos colores en tu web.
                           </p>
                         </div>
 
@@ -3046,9 +3068,12 @@ export default function DashboardPage() {
                           {imagePreviews.length > 0 && (
                             <div className="mt-3 space-y-3">
                               <p className="text-xs text-muted-foreground">
-                                Por cada imagen, dinos dónde usarla. Si no sabes, déjalo vacío y la IA decidirá por ti.
+                                Por cada imagen, dinos dónde usarla. Si no sabes, marca &quot;Usar a su criterio&quot; y nosotros la ubicaremos por ti.
                               </p>
-                              {imagePreviews.map((src, index) => (
+                              {imagePreviews.map((src, index) => {
+                                // null = aún no decide, '' string vacío = "a su criterio" (auto), texto = instrucción
+                                const isAuto = imageNotes[index] === '__AUTO__';
+                                return (
                                 <div key={src} className="flex gap-3 items-start rounded-xl border border-border p-3">
                                   <div className="relative shrink-0">
                                     <img src={src} alt={`Preview ${index + 1}`} className="h-20 w-20 rounded-lg object-cover" />
@@ -3063,32 +3088,46 @@ export default function DashboardPage() {
                                       ✕
                                     </button>
                                   </div>
-                                  <div className="flex-1 space-y-1.5">
-                                    <label className="text-xs font-medium text-foreground/80">¿Dónde debería usarse esta imagen?</label>
-                                    <Input
-                                      className="text-sm"
-                                      placeholder="Ej: en el hero / en la galería / como foto del local..."
-                                      value={imageNotes[index] || ''}
-                                      onChange={(e) => {
-                                        const next = [...imageNotes];
-                                        next[index] = e.target.value;
-                                        setImageNotes(next);
-                                      }}
-                                    />
+                                  <div className="flex-1 space-y-2">
+                                    {!isAuto && (
+                                      <>
+                                        <label className="text-xs font-medium text-foreground/80">¿Dónde debería usarse esta imagen?</label>
+                                        <Input
+                                          className="text-sm"
+                                          placeholder="Ej: en el hero / en la galería / como foto del local..."
+                                          value={imageNotes[index] === '__AUTO__' ? '' : (imageNotes[index] || '')}
+                                          onChange={(e) => {
+                                            const next = [...imageNotes];
+                                            next[index] = e.target.value;
+                                            setImageNotes(next);
+                                          }}
+                                        />
+                                      </>
+                                    )}
+                                    {/* Toggle "Usar a su criterio" */}
                                     <button
                                       type="button"
-                                      className="text-[11px] text-muted-foreground underline hover:text-foreground"
+                                      className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs transition ${
+                                        isAuto ? 'border-cta bg-cta/10 text-foreground font-medium' : 'border-border bg-white text-muted-foreground hover:border-foreground/25'
+                                      }`}
                                       onClick={() => {
                                         const next = [...imageNotes];
-                                        next[index] = '';
+                                        next[index] = isAuto ? '' : '__AUTO__';
                                         setImageNotes(next);
                                       }}
                                     >
+                                      <span className={`flex h-4 w-4 items-center justify-center rounded-full border ${isAuto ? 'border-cta bg-cta text-black' : 'border-border'}`}>
+                                        {isAuto && <Check size={10} />}
+                                      </span>
                                       Usar a su criterio
                                     </button>
+                                    {isAuto && (
+                                      <p className="text-[11px] text-muted-foreground">Nosotros decidiremos dónde queda mejor esta imagen.</p>
+                                    )}
                                   </div>
                                 </div>
-                              ))}
+                                );
+                              })}
                             </div>
                           )}
                         </div>
