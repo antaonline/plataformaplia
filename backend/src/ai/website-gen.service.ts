@@ -4,6 +4,7 @@ import { enforceContactForms } from './contact-form-enforcer';
 import { enforcePremiumQuality } from './premium-quality-enforcer';
 import { PLIA_DESIGN_INTELLIGENCE } from './design-intelligence';
 import { pickFooterArchetype } from './design-library/footers';
+import { pickHeroArchetype } from './design-library/heroes';
 
 export type WebMode = 'LANDING' | 'WEB';
 
@@ -357,9 +358,12 @@ if(document.readyState!=='loading')run();else document.addEventListener('DOMCont
         ? plan.sections.map((s, i) => `${i + 1}. [${s.id}] ${s.title}: ${s.brief}`).join('\n')
         : 'Decide las secciones óptimas para vender este negocio según el brief.';
 
-      // Elegir un arquetipo de footer de nuestra biblioteca según el vibe del negocio
+      // Elegir arquetipos de nuestra biblioteca según el vibe del negocio.
+      // htmlOnly=true → solo heros ligeros (CSS), nada de WebGL/three.js en landings.
       const footer = pickFooterArchetype(ds.vibe, brief);
-      const footerGuide = `\nFOOTER — usa este estilo de nuestra biblioteca (adáptalo al negocio, genera código fresco):\n"${footer.name}": ${footer.pattern}`;
+      const hero = pickHeroArchetype(ds.vibe, brief, true);
+      const heroGuide = `\nHERO — usa este estilo de nuestra biblioteca (adáptalo al negocio, código fresco, SOLO CSS/Tailwind, sin WebGL):\n"${hero.name}": ${hero.pattern}`;
+      const footerGuide = `\nFOOTER — usa este estilo de nuestra biblioteca (adáptalo al negocio, código fresco):\n"${footer.name}": ${footer.pattern}`;
 
       const system = `${STATIC_RULES}
 
@@ -378,7 +382,7 @@ ANTI-SOLAPAMIENTO (CRÍTICO): flujo normal de documento, secciones apiladas. PRO
 
 GENERA LA PÁGINA COMPLETA Y RICA: TODAS las secciones del plan, con detalle premium. Tienes presupuesto amplio de tokens — NO te limites, pero DEBE terminar con </body></html>. Cada sección rica, contenido real, diseño nivel Awwwards. nav, hero, todas las secciones del plan, contacto y footer.`;
 
-      const user = `Brief del negocio:\n${brief}\n\nGenera la LANDING COMPLETA Y RICA (documento HTML entero: <!DOCTYPE html> hasta </html>).\nSecciones (en orden, adapta al brief, hazlas todas ricas y detalladas):\n${sectionsGuide}\n${footerGuide}\n\nDebe terminar COMPLETA con </body></html>. Diseño nivel Awwwards, español real, sin solapamientos.${hasLogo ? ' La primera imagen adjunta es el logo.' : ''}`;
+      const user = `Brief del negocio:\n${brief}\n\nGenera la LANDING COMPLETA Y RICA (documento HTML entero: <!DOCTYPE html> hasta </html>).\nSecciones (en orden, adapta al brief, hazlas todas ricas y detalladas):\n${sectionsGuide}\n${heroGuide}\n${footerGuide}\n\nDebe terminar COMPLETA con </body></html>. Diseño nivel Awwwards, español real, sin solapamientos.${hasLogo ? ' La primera imagen adjunta es el logo.' : ''}`;
 
       let html = await this.completeClaudeWithRetry(
         system,
