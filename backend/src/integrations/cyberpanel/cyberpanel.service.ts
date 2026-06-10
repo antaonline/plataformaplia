@@ -729,9 +729,14 @@ export class CyberpanelService {
       accountProvision.plainPassword ||
       process.env.CYBERPANEL_EXISTING_USER_PASSWORD ||
       '';
-    const siteRequest = this.buildWebsiteRequest(domain, account, ownerPassword);
+    // FREEMIUM: las webs en prueba arrancan con el paquete limitado admin_free.
+    // Al pagar, activateTrialForUser hace changePackage al paquete pago (Default).
+    const trialPackage = (project as any).isTrial
+      ? (process.env.CYBERPANEL_PACKAGE_FREE || 'admin_free')
+      : undefined;
+    const siteRequest = this.buildWebsiteRequest(domain, account, ownerPassword, trialPackage);
     try {
-      const response = await this.createSiteForAccount(domain, account, ownerPassword);
+      const response = await this.createSiteForAccount(domain, account, ownerPassword, trialPackage);
       await this.prisma.project.update({
         where: { id: projectId },
         data: {

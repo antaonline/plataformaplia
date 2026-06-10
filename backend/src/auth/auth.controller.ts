@@ -12,6 +12,7 @@ import {
 import { AuthGuard } from '@nestjs/passport'
 import type { Response } from 'express'
 import { AuthService } from './auth.service'
+import { GoogleDashboardGuard } from './google-dashboard.guard'
 import { JwtAuthGuard } from './jwt-auth.guard'
 import { RefreshTokenService } from './refresh-token.service'
 import { Throttle } from '@nestjs/throttler'
@@ -232,26 +233,35 @@ export class AuthController {
     return this.authService.requestPasswordReset(body.email)
   }
 
+  // Inicio Google para iachat (sin state).
   @Get('google')
   @UseGuards(AuthGuard('google'))
   async googleAuth(@Req() req) {}
+
+  // Inicio Google para el dashboard website_build (state=dashboard).
+  @Get('google/dashboard')
+  @UseGuards(GoogleDashboardGuard)
+  async googleAuthDashboard(@Req() req) {}
 
   @Get('google/callback')
   @UseGuards(AuthGuard('google'))
   async googleAuthRedirect(@Req() req, @Res() res: Response) {
     const result = await this.authService.validateGoogleUser(req.user);
-    
-    // Configurar cookie de refresh token
+
     res.cookie('refresh_token', result.refresh_token, {
       httpOnly: true,
-      secure: false, // true en prod
+      secure: false,
       sameSite: 'strict',
       path: '/auth/refresh',
       maxAge: 1000 * 60 * 60 * 24 * 7,
     });
 
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
-    // Redirigir al frontend con el access_token
-    return res.redirect(`${frontendUrl}/experimental/iachatweb?token=${result.access_token}`);
+    // Redirige según el origen: dashboard (website_build) o iachat.
+    const dest =
+      (result as any).flow === 'dashboard'
+        ? `${frontendUrl}/login?token=${result.access_token}`
+        : `${frontendUrl}/experimental/iachatweb?token=${result.access_token}`;
+    return res.redirect(dest);
   }
 }

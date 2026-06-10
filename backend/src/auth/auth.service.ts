@@ -357,20 +357,60 @@ export class AuthService {
 
   async validateGoogleUser(googleUser: any) {
     let user = await this.usersService.findByEmail(googleUser.email);
+    let createdNow = false;
 
     if (!user) {
-      // Crear usuario si no existe
       user = await this.prisma.user.create({
         data: {
           email: googleUser.email,
-          name: `${googleUser.firstName} ${googleUser.lastName}`,
-          password: '', // Sin password para usuarios Google
+          name: `${googleUser.firstName} ${googleUser.lastName}`.trim() || googleUser.email.split('@')[0],
+          password: '',
           role: 'USER',
         },
       });
+      createdNow = true;
     }
 
-    // Emitir tokens (fingeprint genérico para OAuth)
-    return this.issueTokens(user.id, 'google-oauth-flow');
+    // FREEMIUM: si el login Google viene del dashboard (website_build) y el
+    // usuario es nuevo (o no tiene proyecto), crear su proyecto en prueba.
+    const fromDashboard = googleUser.flow === 'dashboard';
+    if (fromDashboard) {
+      const hasProject = await this.prisma.project.findFirst({ where: { userId: user.id } });
+      if (!hasProject) {
+        try {
+          const freePlan =
+            (await this.prisma.plan.findFirst({ where: { slug: 'plia-free' } })) ??
+            (await this.prisma.plan.findFirst({ where: { serviceType: 'WEBSITE_BUILD' as any } }));
+          if (freePlan) {
+            const order = await this.prisma.order.create({
+              data: {
+                userId: user.id,
+                planId: freePlan.id,
+                amount: 0,
+                currency: 'PEN',
+                status: 'PAID' as any,
+                metadata: JSON.stringify({ _freemium: true }),
+              },
+            });
+            await this.prisma.project.create({
+              data: {
+                name: `Proyecto ${order.id}`,
+                type: 'LANDING' as any,
+                status: 'WAITING_INFO' as any,
+                isTrial: true,
+                trialStatus: 'active',
+                user: { connect: { id: user.id } },
+                order: { connect: { id: order.id } },
+              },
+            });
+          }
+        } catch {
+          /* no bloquear el login si falla la creación del proyecto */
+        }
+      }
+    }
+
+    const tokens = await this.issueTokens(user.id, 'google-oauth-flow');
+    return { ...tokens, flow: googleUser.flow || '', createdNow };
   }
 }
