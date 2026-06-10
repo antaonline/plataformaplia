@@ -577,14 +577,12 @@ var timer = setInterval(tick,1000);
         project.user?.email
       ) {
         const loginUrl = `${process.env.APP_URL ?? 'http://localhost:3001'}/login`;
+        // SEGURIDAD: NO enviamos credenciales de CyberPanel al cliente. El cliente
+        // gestiona todo desde el dashboard de Plia (modelo SaaS). Solo avisamos que
+        // su proyecto está listo con el link al dashboard.
         await this.mailService.sendProjectReady(project.user.email, {
           projectName: project.name,
           loginUrl,
-          hostingAccess: {
-            panelUrl: cyberpanelProvision.account.panelUrl,
-            username: cyberpanelProvision.account.username,
-            password: cyberpanelProvision.plainPassword,
-          },
         });
       }
 
