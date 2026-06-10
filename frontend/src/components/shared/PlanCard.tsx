@@ -8,8 +8,9 @@ import { AnimatedSection } from "./AnimatedSection";
 interface PlanCardProps {
   name: string;
   price: number;
-  originalPrice: number;
-  discount: number;
+  originalPrice?: number;
+  discount?: number;
+  isFree?: boolean;
   description: string;
   detalle: string;
   features: readonly string[];
@@ -28,8 +29,9 @@ interface PlanCardProps {
 export const PlanCard = ({
   name,
   price,
-  originalPrice,
-  discount,
+  originalPrice = 0,
+  discount = 0,
+  isFree = false,
   description,
   detalle,
   features,
@@ -46,8 +48,12 @@ export const PlanCard = ({
 }: PlanCardProps) => {
   const resolvedHref =
     ctaHref ??
-    (name.toLowerCase().includes("landing") ? "/checkout?plan=landing" : "/checkout?plan=web");
-  const resolvedCtaLabel = ctaLabel ?? "Elegir este plan";
+    (isFree
+      ? "/registro"
+      : name.toLowerCase().includes("landing")
+        ? "/checkout?plan=landing"
+        : "/checkout?plan=web");
+  const resolvedCtaLabel = ctaLabel ?? (isFree ? "Empieza gratis" : "Elegir este plan");
 
   return (
     <AnimatedSection delay={delay} direction="up">
@@ -122,17 +128,19 @@ export const PlanCard = ({
           )}
 
           <div className="flex items-end gap-1">
-            <span
-              className={`text-sm ${
-                isPopular && !isDisabled
-                  ? "text-primary-foreground/70"
-                  : isDisabled
-                    ? "text-muted-foreground/70"
-                    : "text-muted-foreground"
-              }`}
-            >
-              {pricePrefix}
-            </span>
+            {!isFree && (
+              <span
+                className={`text-sm ${
+                  isPopular && !isDisabled
+                    ? "text-primary-foreground/70"
+                    : isDisabled
+                      ? "text-muted-foreground/70"
+                      : "text-muted-foreground"
+                }`}
+              >
+                {pricePrefix}
+              </span>
+            )}
             <span
               className={`text-5xl font-bold ${
                 isPopular && !isDisabled
@@ -142,7 +150,7 @@ export const PlanCard = ({
                     : "text-foreground"
               }`}
             >
-              {price}
+              {isFree ? "Gratis" : price}
             </span>
             {priceSuffix && (
               <span
@@ -167,7 +175,7 @@ export const PlanCard = ({
                   : "text-muted-foreground"
             }`}
           >
-            {paymentLabel ?? (isDisabled ? "Pago único mensual" : "Pago único")}
+            {paymentLabel ?? (isFree ? "Sin tarjeta · 30 días de prueba" : isDisabled ? "Pago único mensual" : "Pago único")}
           </p>
         </div>
 

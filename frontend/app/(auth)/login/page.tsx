@@ -160,6 +160,13 @@ export default function LoginPage() {
                   </Button>
                 </form>
 
+                <div className="mt-5 text-center text-sm">
+                  <span className="text-muted-foreground">¿No tienes cuenta? </span>
+                  <Link href="/registro" className="font-semibold text-cta-foreground underline">
+                    Crea tu web gratis
+                  </Link>
+                </div>
+
                 <div className="mt-8 text-xs text-muted-foreground flex flex-wrap gap-3">
                   <Link href="/privacidad" className="hover:underline">Privacidad</Link>
                   <span>-</span>

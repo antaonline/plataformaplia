@@ -52,18 +52,36 @@ const testimonialsBg = "/imagenes/testimonials-bg.png";
 
 const plans = [
   {
+    name: "Prueba Gratis",
+    price: 0,
+    description: "Crea tu web gratis y pruébala 30 días. Paga solo si decides conservarla.",
+    detalle: "Sin tarjeta. Sin compromiso.",
+    freeHosting: "1 web · subdominio plia.pe",
+    features: [
+      "Tu web creada por nosotros, GRATIS",
+      "Subdominio gratuito tunegocio.plia.pe",
+      "30 días para probarla y decidir",
+      "Diseño profesional y moderno",
+      "Optimizada para celulares",
+      "Actívala cuando quieras para conservarla",
+    ],
+    ctaLabel: "Empieza gratis",
+    isFree: true,
+  },
+  {
     name: "Plan Landing",
     price: 390,
     originalPrice: 560,
     discount: 30,
     description: "Perfecto para empezar con una página sencilla y efectiva.",
-    detalle: "Pago único por desarrollo. Se renueva por S/. 135/anual",
+    detalle: "Pago único por desarrollo. Luego solo renuevas el hosting (S/. 135/anual), el desarrollo no se vuelve a pagar.",
     freeHosting: "Hosting gratis por 1 año",
     features: [
       "Una sola página enfocada a ventas",
       "Diseño profesional y moderno",
       "Optimizada para celulares",
       "Formulario de contacto",
+      "Aparece en Google (SEO)",
       "Certificado de seguridad (HTTPS)",
       "Entrega en 24 Horas!",
     ],
@@ -88,24 +106,6 @@ const plans = [
       "Entrega de 2 días hábiles!",
     ],
     isPopular: true,
-  },
-  {
-    name: "Plan IA",
-    price: 25,
-    originalPrice: 33,
-    discount: 24,
-    description: "Desarrolla tu web con inteligencia artificial y publícala en minutos.",
-    detalle: "Pago mensual, incluye hosting",
-    freeHosting: "",
-    features: [
-      "Generación automática con IA",
-      "Publicación instantánea",
-      "Personalización inteligente",
-      "Actualizaciones automáticas",
-      "Integración con herramientas IA",
-    ],
-    isDisabled: true,
-    comingSoon: true,
   },
 ];
 
@@ -585,21 +585,7 @@ export default function Home() {
           
           <div className="grid md:grid-cols-3 gap-8 mx-auto mt-16">
             {plans.map((plan, index) => (
-              <PlanCard
-                key={plan.name}
-                name={plan.name}
-                price={plan.price}
-                originalPrice={plan.originalPrice}
-                discount={plan.discount}
-                description={plan.description}
-                detalle={plan.detalle}
-                features={plan.features}
-                freeHosting={plan.freeHosting}
-                isPopular={plan.isPopular}
-                isDisabled={plan.isDisabled}
-                comingSoon={plan.comingSoon}
-                delay={index * 0.15}
-              />
+              <PlanCard key={plan.name} delay={index * 0.15} {...(plan as any)} />
             ))}
           </div>
           
