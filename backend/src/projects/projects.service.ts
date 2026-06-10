@@ -372,6 +372,62 @@ p{color:#cbd5e1;font-size:1.05rem;line-height:1.7;margin-bottom:28px}
     return true;
   }
 
+  /**
+   * Activa la web freemium de un usuario cuando paga un plan (landing/web).
+   * Restaura si estaba pausada, sube hosting admin_free → Default, y quita el
+   * badge demo + noindex. Devuelve el proyecto o null si no había proyecto trial.
+   */
+  async activateTrialForUser(userId: number, _paidOrderId?: number) {
+    const trial = await this.prisma.project.findFirst({
+      where: { userId, isTrial: true, NOT: { trialStatus: 'converted' } },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (!trial) return null;
+    const data = JSON.parse((trial.onboardingData as string) || '{}');
+
+    if (trial.trialStatus === 'suspended') {
+      await this.restoreTrial(trial.id);
+    } else {
+      await this.prisma.project.update({
+        where: { id: trial.id },
+        data: { trialStatus: 'converted', isTrial: false },
+      });
+    }
+
+    // Subir paquete de hosting admin_free → Default.
+    try {
+      const username = data?.cyberpanel?.account?.username;
+      const paidPackage = process.env.CYBERPANEL_PACKAGE || 'Default';
+      if (username) {
+        await this.cyberpanelService.changePackage(username, paidPackage);
+        this.logger.log(`activateTrial project=${trial.id}: paquete → ${paidPackage}`);
+      }
+    } catch (e: any) {
+      this.logger.warn(`activateTrial project=${trial.id}: changePackage fallo: ${e?.message}`);
+    }
+
+    // Quitar badge demo + noindex de los archivos publicados.
+    try {
+      const targetDir = this.getTargetDirectory(trial.id, data);
+      if (targetDir && fs.existsSync(targetDir)) {
+        for (const f of fs.readdirSync(targetDir)) {
+          if (!f.endsWith('.html')) continue;
+          const p = join(targetDir, f);
+          let html = fs.readFileSync(p, 'utf-8');
+          html = html
+            .replace(/<a [^>]*href="https:\/\/plia\.pe"[^>]*>[\s\S]*?Hecho con plia\.pe<\/a>/gi, '')
+            .replace(/<meta name="robots" content="noindex">/gi, '<meta name="robots" content="index, follow">');
+          fs.writeFileSync(p, html, 'utf-8');
+        }
+        this.logger.log(`activateTrial project=${trial.id}: badge + noindex removidos.`);
+      }
+    } catch (e: any) {
+      this.logger.warn(`activateTrial project=${trial.id}: limpiar badge fallo: ${e?.message}`);
+    }
+
+    return this.prisma.project.findUnique({ where: { id: trial.id } });
+  }
+
   /** Restaura una web freemium pausada (cuando el cliente paga/activa). */
   async restoreTrial(projectId: number): Promise<boolean> {
     const project = await this.prisma.project.findUnique({ where: { id: projectId } });

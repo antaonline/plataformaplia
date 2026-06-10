@@ -128,6 +128,15 @@ export class PaymentsService {
         where: { orderId: order.id },
       });
 
+      // FREEMIUM: si el usuario tiene una web en prueba, ACTIVARLA en vez de
+      // crear un proyecto nuevo (restaura, sube hosting, quita badge demo).
+      if (!project) {
+        const activated = await this.projectsService.activateTrialForUser(user.id, order.id);
+        if (activated) {
+          project = activated;
+        }
+      }
+
       if (!project) {
         project = await this.projectsService.createFromOrder({
           id: order.id,
