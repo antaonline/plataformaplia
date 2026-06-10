@@ -135,6 +135,27 @@ export class MailService {
   // Llama al template correspondiente y delega en send().
   // ============================================================
 
+  /** Correo genérico (avisos de trial, etc.) con CTA. Branding simple Plia. */
+  async sendGenericNotice(
+    email: string,
+    p: { subject: string; heading: string; body: string; ctaLabel?: string; ctaUrl?: string },
+  ) {
+    const cta = p.ctaUrl && p.ctaLabel
+      ? `<tr><td style="padding:8px 0 24px"><a href="${p.ctaUrl}" style="display:inline-block;background:#D9FF00;color:#0f172a;font-weight:700;text-decoration:none;padding:14px 28px;border-radius:999px">${p.ctaLabel}</a></td></tr>`
+      : '';
+    const html = `<!doctype html><html><body style="margin:0;background:#f4f4f5;font-family:system-ui,-apple-system,'Segoe UI',sans-serif">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:32px 0"><tr><td align="center">
+<table width="520" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:16px;padding:36px;text-align:left">
+<tr><td style="font-size:20px;font-weight:800;color:#0f172a;padding-bottom:8px">PLIA</td></tr>
+<tr><td style="font-size:24px;font-weight:800;color:#0f172a;padding:8px 0">${p.heading}</td></tr>
+<tr><td style="font-size:15px;line-height:1.7;color:#475569;padding:8px 0 24px">${p.body}</td></tr>
+${cta}
+<tr><td style="font-size:12px;color:#94a3b8;border-top:1px solid #e2e8f0;padding-top:20px">PLIA · plia.pe — Tu web profesional</td></tr>
+</table></td></tr></table></body></html>`;
+    const text = `${p.heading}\n\n${p.body}\n\n${p.ctaLabel ? `${p.ctaLabel}: ${p.ctaUrl}` : ''}`;
+    return this.send({ to: email, context: 'generic-notice', rendered: { subject: p.subject, html, text } });
+  }
+
   async send2FACode(email: string, code: string) {
     return this.send({
       to: email,

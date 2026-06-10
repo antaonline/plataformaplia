@@ -21,6 +21,7 @@ import { CyberpanelModule } from './integrations/cyberpanel/cyberpanel.module';
 import { NextExportModule } from './integrations/next-export/next-export.module';
 import { RenewHostingCron } from './cron/renew-hosting.cron';
 import { PublishProjectsCron } from './cron/publish-projects.cron';
+import { TrialCron } from './cron/trial.cron';
 import { CustomDomainDriftCron } from './cron/custom-domain-drift.cron';
 import { MailModule } from './mail/mail.module';
 import { ContactModule } from './contact/contact.module';
@@ -71,6 +72,7 @@ import { ThrottlerModule } from '@nestjs/throttler'
     RenewHostingCron,
     PublishProjectsCron,
     CustomDomainDriftCron,
+    TrialCron,
   ],
 })
 export class AppModule {}

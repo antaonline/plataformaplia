@@ -321,6 +321,80 @@ var timer = setInterval(tick,1000);
     return `${baseUrl}/uploads/preview-temp/${projectId}/index.html`;
   }
 
+  /** Página amigable que se sirve cuando una web freemium entra en pausa (día 30). */
+  private buildPausePageHtml(businessName: string): string {
+    const name = (businessName || 'Esta web').replace(/</g, '&lt;');
+    return `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>${name} · Próximamente</title>
+<style>
+*{margin:0;box-sizing:border-box}body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%);color:#f8fafc;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;text-align:center}
+.card{max-width:560px}.logo{width:64px;height:64px;margin:0 auto 24px;display:flex;align-items:center;justify-content:center;background:#D9FF00;border-radius:18px;font-weight:800;font-size:28px;color:#0f172a}
+h1{font-size:clamp(1.8rem,5vw,2.8rem);font-weight:800;line-height:1.15;margin-bottom:16px}
+p{color:#cbd5e1;font-size:1.05rem;line-height:1.7;margin-bottom:28px}
+.badge{display:inline-block;background:rgba(217,255,0,.12);border:1px solid rgba(217,255,0,.3);color:#D9FF00;font-size:.8rem;font-weight:600;padding:8px 18px;border-radius:999px;margin-bottom:24px}
+.foot{margin-top:40px;color:#64748b;font-size:.85rem}.foot a{color:#D9FF00;text-decoration:none}
+</style></head><body><div class="card">
+<div class="logo">P</div>
+<div class="badge">Sitio en pausa</div>
+<h1>${name} estará disponible muy pronto</h1>
+<p>Esta web está temporalmente en pausa. Su dueño está afinando los últimos detalles para darte la mejor experiencia. ¡Vuelve pronto!</p>
+<div class="foot">Hecho con <a href="https://plia.pe" target="_blank" rel="noopener">plia.pe</a> · Crea tu web profesional</div>
+</div></body></html>`;
+  }
+
+  /** Suspende una web freemium: guarda sus archivos y publica la página de pausa. */
+  async suspendTrial(projectId: number): Promise<boolean> {
+    const project = await this.prisma.project.findUnique({ where: { id: projectId } });
+    if (!project) return false;
+    const data = JSON.parse((project.onboardingData as string) || '{}');
+    const targetDir = this.getTargetDirectory(projectId, data);
+    if (!targetDir || !fs.existsSync(targetDir)) {
+      this.logger.warn(`suspendTrial project=${projectId}: target dir inexistente.`);
+    } else {
+      // Guardar los archivos actuales (no borrar) para restaurarlos al pagar.
+      const backupDir = join(process.cwd(), 'uploads', 'trial-paused', String(projectId));
+      try {
+        if (fs.existsSync(backupDir)) fs.rmSync(backupDir, { recursive: true, force: true });
+        this.copyFolderRecursive(targetDir, backupDir);
+        // Reemplazar public_html por la página de pausa.
+        for (const f of fs.readdirSync(targetDir)) {
+          if (f.endsWith('.html')) fs.rmSync(join(targetDir, f), { force: true });
+        }
+        fs.writeFileSync(join(targetDir, 'index.html'), this.buildPausePageHtml(data.businessName), 'utf-8');
+        this.logger.log(`suspendTrial project=${projectId}: web pausada, backup en ${backupDir}.`);
+      } catch (e: any) {
+        this.logger.error(`suspendTrial project=${projectId} fallo: ${e?.message}`);
+      }
+    }
+    await this.prisma.project.update({
+      where: { id: projectId },
+      data: { trialStatus: 'suspended' },
+    });
+    return true;
+  }
+
+  /** Restaura una web freemium pausada (cuando el cliente paga/activa). */
+  async restoreTrial(projectId: number): Promise<boolean> {
+    const project = await this.prisma.project.findUnique({ where: { id: projectId } });
+    if (!project) return false;
+    const data = JSON.parse((project.onboardingData as string) || '{}');
+    const targetDir = this.getTargetDirectory(projectId, data);
+    const backupDir = join(process.cwd(), 'uploads', 'trial-paused', String(projectId));
+    if (targetDir && fs.existsSync(backupDir)) {
+      try {
+        this.copyFolderRecursive(backupDir, targetDir);
+        fs.rmSync(backupDir, { recursive: true, force: true });
+        this.logger.log(`restoreTrial project=${projectId}: web restaurada desde backup.`);
+      } catch (e: any) {
+        this.logger.error(`restoreTrial project=${projectId} fallo: ${e?.message}`);
+      }
+    }
+    await this.prisma.project.update({
+      where: { id: projectId },
+      data: { trialStatus: 'converted', isTrial: false },
+    });
+    return true;
+  }
+
   private getTargetDirectory(projectId: number, onboardingData: any) {
     const aiGeneration = onboardingData?.aiGeneration || {};
     if (typeof aiGeneration.target === 'string' && aiGeneration.target.trim()) {
@@ -1141,6 +1215,95 @@ var timer = setInterval(tick,1000);
     }
 
     return updated;
+  }
+
+  /**
+   * Procesa las webs freemium en prueba: envía avisos (día 20/27), suspende al
+   * vencer los 30 días, y limpia backups tras 90 días de pausadas. Lo dispara
+   * el cron diario. Idempotente: marca en onboardingData qué avisos ya se enviaron.
+   */
+  async processTrials() {
+    const now = Date.now();
+    const trials = await this.prisma.project.findMany({
+      where: { isTrial: true, trialEndsAt: { not: null } },
+      include: { user: true },
+    });
+
+    for (const project of trials) {
+      try {
+        const endsAt = project.trialEndsAt ? new Date(project.trialEndsAt).getTime() : 0;
+        if (!endsAt) continue;
+        const data = JSON.parse((project.onboardingData as string) || '{}');
+        const sent: Record<string, boolean> = data._trialNotices || {};
+        const daysLeft = Math.ceil((endsAt - now) / (1000 * 60 * 60 * 24));
+        const email = project.user?.email;
+        const appUrl = (process.env.APP_URL ?? 'http://localhost:3001').replace(/\/$/, '');
+
+        // Suspensión: pasó el plazo y aún está activa.
+        if (now >= endsAt && project.trialStatus === 'active') {
+          await this.suspendTrial(project.id);
+          if (email) {
+            try {
+              await this.mailService.sendGenericNotice(email, {
+                subject: 'Tu web entró en pausa — actívala cuando quieras',
+                heading: 'Tu web está en pausa 💤',
+                body: `Tu prueba gratuita de 30 días terminó. No te preocupes: guardamos tu web por 90 días. Actívala cuando quieras y vuelve al instante, justo como la dejaste.`,
+                ctaLabel: 'Activar mi web',
+                ctaUrl: `${appUrl}/dashboard`,
+              });
+            } catch {}
+          }
+          continue;
+        }
+
+        // Aviso día 27 (3 días restantes).
+        if (project.trialStatus === 'active' && daysLeft <= 3 && daysLeft > 0 && !sent.d27 && email) {
+          try {
+            await this.mailService.sendGenericNotice(email, {
+              subject: `Solo quedan ${daysLeft} días de tu prueba`,
+              heading: `Quedan ${daysLeft} días ⏳`,
+              body: `Tu web sigue online. Activa tu plan para conservarla, que aparezca en Google y mejorar tu hosting. Si no haces nada, entrará en pausa en ${daysLeft} días.`,
+              ctaLabel: 'Activar mi plan',
+              ctaUrl: `${appUrl}/dashboard`,
+            });
+            sent.d27 = true;
+          } catch {}
+        }
+        // Aviso día 20 (≈10 días restantes).
+        else if (project.trialStatus === 'active' && daysLeft <= 10 && daysLeft > 3 && !sent.d20 && email) {
+          try {
+            await this.mailService.sendGenericNotice(email, {
+              subject: 'Te quedan 10 días de prueba gratuita',
+              heading: 'Tu web sigue brillando ✨',
+              body: `Te quedan unos 10 días de prueba. Si tu web te gusta, actívala para conservarla para siempre, aparecer en Google y mejorar tu hosting.`,
+              ctaLabel: 'Ver mi plan',
+              ctaUrl: `${appUrl}/dashboard`,
+            });
+            sent.d20 = true;
+          } catch {}
+        }
+
+        // Limpieza: backups de webs pausadas hace más de 90 días.
+        if (project.trialStatus === 'suspended' && now >= endsAt + 90 * 24 * 60 * 60 * 1000) {
+          const backupDir = join(process.cwd(), 'uploads', 'trial-paused', String(project.id));
+          if (fs.existsSync(backupDir)) {
+            fs.rmSync(backupDir, { recursive: true, force: true });
+            this.logger.log(`processTrials: backup de project=${project.id} eliminado (90 días).`);
+          }
+        }
+
+        // Persistir qué avisos se enviaron.
+        if (JSON.stringify(sent) !== JSON.stringify(data._trialNotices || {})) {
+          data._trialNotices = sent;
+          await this.prisma.project.update({
+            where: { id: project.id },
+            data: { onboardingData: JSON.stringify(data) },
+          });
+        }
+      } catch (e: any) {
+        this.logger.error(`processTrials project=${project.id} fallo: ${e?.message}`);
+      }
+    }
   }
 
   async autoPublishReadyProjects() {

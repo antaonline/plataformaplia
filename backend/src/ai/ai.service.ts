@@ -581,6 +581,24 @@ Todo en un solo HTML con anchors.`;
     return result;
   }
 
+  /**
+   * Inyecta en webs FREEMIUM (trial): un badge flotante "Hecho con plia.pe"
+   * abajo a la derecha + meta noindex (las demos no se indexan en Google hasta
+   * que el cliente paga). Al activar el plan, se regenera sin esto.
+   */
+  private injectTrialBadge(html: string): string {
+    let out = html;
+    // noindex
+    if (!/name=["']robots["']/i.test(out)) {
+      const meta = '<meta name="robots" content="noindex">';
+      out = /<\/head>/i.test(out) ? out.replace(/<\/head>/i, `  ${meta}\n</head>`) : meta + out;
+    }
+    // Badge flotante (estilo Lovable)
+    const badge = `<a href="https://plia.pe" target="_blank" rel="noopener" style="position:fixed;bottom:16px;right:16px;z-index:99999;display:flex;align-items:center;gap:7px;background:#0f172a;color:#fff;font-family:system-ui,sans-serif;font-size:12.5px;font-weight:600;text-decoration:none;padding:8px 14px;border-radius:999px;box-shadow:0 4px 16px rgba(0,0,0,.25);border:1px solid rgba(255,255,255,.1)"><span style="display:inline-flex;width:18px;height:18px;align-items:center;justify-content:center;background:#D9FF00;color:#0f172a;border-radius:5px;font-weight:800;font-size:11px">P</span>Hecho con plia.pe</a>`;
+    out = /<\/body>/i.test(out) ? out.replace(/<\/body>/i, `${badge}\n</body>`) : out + badge;
+    return out;
+  }
+
   private injectSeoMeta(html: string, data: any): string {
     const title = `${data.businessName || 'Bienvenidos'} — ${data.city || 'Peru'}`;
     const description = (data.shortDescription || `${data.businessName} en ${data.city}`).slice(0, 160);
@@ -1570,9 +1588,12 @@ Todo en un solo HTML con anchors.`;
       );
 
       // 4. Mismo formato de salida que legacy: pages[{slug,html}] + html.
+      // Si el proyecto es FREEMIUM (trial): inyectar badge "demo plia.pe" + noindex.
+      const isTrialProject = (project as any).isTrial === true && (project as any).trialStatus !== 'converted';
+      const applyTrial = (content: string) => (isTrialProject ? this.injectTrialBadge(content) : content);
       const pages = Object.entries(filesMap).map(([file, content]) => ({
         slug: file === 'index.html' ? 'index' : file.replace(/\.html$/i, ''),
-        html: content,
+        html: applyTrial(content),
       }));
       const html =
         pages.find((p) => p.slug === 'index')?.html || pages[0]?.html || '';

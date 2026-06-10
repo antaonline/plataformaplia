@@ -1675,12 +1675,16 @@ export default function DashboardPage() {
             >
               Mi cuenta
             </button>
-            <button
-              className="w-full text-left px-3 py-2 rounded-lg hover:bg-muted text-muted-foreground"
-              onClick={() => setAdvancedOpen(true)}
-            >
-              Configuracion avanzada
-            </button>
+            {/* SEGURIDAD: acceso a CyberPanel SOLO para admin. Los clientes
+                gestionan todo desde el dashboard de Plia (modelo SaaS). */}
+            {isAdmin && (
+              <button
+                className="w-full text-left px-3 py-2 rounded-lg hover:bg-muted text-muted-foreground"
+                onClick={() => setAdvancedOpen(true)}
+              >
+                Configuracion avanzada
+              </button>
+            )}
           </div>
 
           <div className="mt-auto pt-6 text-xs text-muted-foreground">
