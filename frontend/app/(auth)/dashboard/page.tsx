@@ -67,6 +67,10 @@ type Project = {
   onboardingData: any;
   startedAt: string | null;
   deadline: string | null;
+  // Freemium / trial
+  isTrial?: boolean;
+  trialEndsAt?: string | null;
+  trialStatus?: string | null;
   // Dominio propio vinculado vía vhAlias (null si solo usa subdominio plia.pe)
   customDomain?: string | null;
   customDomainAttachedAt?: string | null;
@@ -1768,6 +1772,35 @@ export default function DashboardPage() {
           </Dialog>
 
           <div className="px-6 py-8 space-y-6">
+            {/* Banner FREEMIUM: web en prueba — countdown + activar */}
+            {project?.isTrial && project?.trialStatus !== 'converted' && (() => {
+              const ends = project.trialEndsAt ? new Date(project.trialEndsAt).getTime() : null;
+              const daysLeft = ends ? Math.max(0, Math.ceil((ends - now) / (1000 * 60 * 60 * 24))) : null;
+              const suspended = project.trialStatus === 'suspended';
+              return (
+                <div className={`rounded-2xl border-2 p-5 ${suspended ? 'border-amber-400 bg-amber-50' : 'border-cta bg-cta/5'}`}>
+                  <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <p className="font-bold text-foreground">
+                        {suspended
+                          ? '💤 Tu web está en pausa'
+                          : daysLeft !== null
+                            ? `🎁 Prueba gratuita — te quedan ${daysLeft} ${daysLeft === 1 ? 'día' : 'días'}`
+                            : '🎁 Web en prueba gratuita'}
+                      </p>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        {suspended
+                          ? 'Guardamos tu web por 90 días. Actívala y vuelve al instante, justo como la dejaste.'
+                          : 'Activa tu plan para conservar tu web, que aparezca en Google, quitar el sello de demo y mejorar tu hosting. Incluye 1 año de hosting — luego solo renuevas el hosting, el desarrollo no se vuelve a pagar.'}
+                      </p>
+                    </div>
+                    <Button variant="cta" className="rounded-full shrink-0" asChild>
+                      <Link href="/planes">Activar mi plan</Link>
+                    </Button>
+                  </div>
+                </div>
+              );
+            })()}
             {tab === 'account' && (
               <div className="grid gap-6 md:grid-cols-[1fr_0.7fr]">
                 <Card className="rounded-2xl border-border/60 shadow-sm">
