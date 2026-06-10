@@ -229,6 +229,73 @@ export class AuthService {
     }
   }
 
+  /**
+   * Registro FREEMIUM sin pago (solo website_build: landing / web institucional).
+   * Crea el usuario + una orden gratuita (plan plia-free) + un proyecto en modo
+   * prueba (isTrial). Devuelve tokens para auto-login. El trialEndsAt se fija al
+   * publicar la web (no aquí), para que los 30 días cuenten desde la publicación.
+   */
+  async registerFree(
+    email: string,
+    password: string,
+    plan: 'LANDING' | 'WEB',
+    fingerprint: string,
+    userAgent?: string,
+    ip?: string,
+  ) {
+    const cleanEmail = (email || '').trim().toLowerCase();
+    if (!cleanEmail || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(cleanEmail)) {
+      throw new UnauthorizedException('Email inválido.');
+    }
+    if (!password || password.length < 6) {
+      throw new UnauthorizedException('La contraseña debe tener al menos 6 caracteres.');
+    }
+
+    const existing = await this.prisma.user.findUnique({ where: { email: cleanEmail } });
+    if (existing) {
+      throw new UnauthorizedException('Ya existe una cuenta con este correo. Inicia sesión.');
+    }
+
+    const hashed = await bcrypt.hash(password, 10);
+    const user = await this.prisma.user.create({
+      data: { email: cleanEmail, password: hashed, name: cleanEmail.split('@')[0], role: 'USER' as any },
+    });
+
+    // Plan freemium (creado por la migración). Si no existe, fallback al primero.
+    const freePlan =
+      (await this.prisma.plan.findFirst({ where: { slug: 'plia-free' } })) ??
+      (await this.prisma.plan.findFirst({ where: { serviceType: 'WEBSITE_BUILD' as any } }));
+    if (!freePlan) throw new ServiceUnavailableException('No hay plan gratuito configurado.');
+
+    // Orden gratuita (amount 0) para satisfacer la relación project→order.
+    const order = await this.prisma.order.create({
+      data: {
+        userId: user.id,
+        planId: freePlan.id,
+        amount: 0,
+        currency: 'PEN',
+        status: 'PAID' as any,
+        metadata: JSON.stringify({ _freemium: true }),
+      },
+    });
+
+    // Proyecto en modo prueba. trialEndsAt se fija al publicar.
+    await this.prisma.project.create({
+      data: {
+        name: `Proyecto ${order.id}`,
+        type: plan,
+        status: 'WAITING_INFO' as any,
+        isTrial: true,
+        trialStatus: 'active',
+        user: { connect: { id: user.id } },
+        order: { connect: { id: order.id } },
+      },
+    });
+
+    const tokens = await this.issueTokens(user.id, fingerprint, userAgent, ip);
+    return { ...tokens, user: { id: user.id, email: user.email, name: user.name } };
+  }
+
   async setPasswordWithToken(token: string, password: string) {
     const record = await this.prisma.passwordSetupToken.findUnique({
       where: { token },

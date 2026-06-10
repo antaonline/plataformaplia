@@ -77,6 +77,33 @@ export class AuthController {
     };
   }
 
+  // Registro FREEMIUM sin pago (website_build). Crea cuenta + proyecto en prueba.
+  @Throttle({ default: { limit: 5, ttl: 600 } })
+  @Post('register-free')
+  async registerFree(
+    @Body() body: { email: string; password: string; plan?: 'LANDING' | 'WEB' },
+    @Req() req: any,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const fingerprint = generateFingerprint(req);
+    const result = await this.authService.registerFree(
+      body.email,
+      body.password,
+      body.plan === 'WEB' ? 'WEB' : 'LANDING',
+      fingerprint,
+      req.headers['user-agent'],
+      req.ip,
+    );
+    res.cookie('refresh_token', result.refresh_token, {
+      httpOnly: true,
+      secure: false,
+      sameSite: 'strict',
+      path: '/auth/refresh',
+      maxAge: 1000 * 60 * 60 * 24 * 7,
+    });
+    return { access_token: result.access_token, user: result.user };
+  }
+
   @Throttle({
     default: {
       limit: 10,

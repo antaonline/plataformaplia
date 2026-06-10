@@ -116,6 +116,13 @@ model Project {
   createdAt             DateTime             @default(now())
   updatedAt             DateTime             @updatedAt
   hostingSubscriptionId Int?
+  // ── Freemium / Trial (solo website_build: landing y web institucional) ──
+  // isTrial: el proyecto se creó en modo prueba gratuita (sin pago).
+  // trialEndsAt: fecha límite de la prueba (publicación + 30 días).
+  // trialStatus: 'active' (en prueba) | 'suspended' (pausada día 30) | 'converted' (pagó).
+  isTrial               Boolean              @default(false)
+  trialEndsAt           DateTime?
+  trialStatus           String?
   // ── Dominio propio del cliente (vinculado vía LiteSpeed vhAlias) ──
   // Cuando el cliente conecta su dominio propio (ej. "mi-marca.com"), se
   // configura como vhAlias del vhost del subdominio plia.pe correspondiente

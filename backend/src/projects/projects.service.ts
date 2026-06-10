@@ -832,6 +832,12 @@ var timer = setInterval(tick,1000);
       revisionWindowEndsAt: revisionWindowEndsAt.toISOString(),
     };
 
+    // Freemium: al publicar, arranca el contador de 30 días de prueba.
+    const trialPatch =
+      (project as any).isTrial && !(project as any).trialEndsAt
+        ? { trialEndsAt: new Date(publishedAt.getTime() + 30 * 24 * 60 * 60 * 1000), trialStatus: 'active' }
+        : {};
+
     return this.prisma.project.update({
       where: { id },
       data: {
@@ -839,6 +845,7 @@ var timer = setInterval(tick,1000);
         status: ProjectStatus.DELIVERED,
         completed: true,
         completedAt: publishedAt,
+        ...trialPatch,
       },
     });
   }
