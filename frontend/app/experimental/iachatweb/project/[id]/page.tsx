@@ -168,6 +168,9 @@ export default function projectPage() {
     zoom: 1,
     pan: { x: 0, y: 0 },
   });
+  // Zoom como estado SOLO para la contra-escala de la UI de los items
+  // (toolbar/handles a tamaño constante). El pan no necesita re-render.
+  const [canvasZoom, setCanvasZoom] = useState(1);
 
   /** Dimensiones del artboard según el dispositivo activo. */
   const artboardDims = useCallback(() => {
@@ -1803,6 +1806,7 @@ export default function projectPage() {
                     artboardHeight={dims.h}
                     onTransformChange={(t) => {
                       canvasTransformRef.current = t;
+                      setCanvasZoom((prev) => (prev !== t.zoom ? t.zoom : prev));
                     }}
                     onBackgroundMouseDown={() => setSelectedItemId(null)}
                   >
@@ -1826,6 +1830,7 @@ export default function projectPage() {
                       selectedId={selectedItemId}
                       onSelect={setSelectedItemId}
                       transformRef={canvasTransformRef}
+                      zoom={canvasZoom}
                       iframeRef={iframeRef}
                       apiBase={apiBase}
                       authToken={typeof window !== 'undefined' ? localStorage.getItem('access_token') || '' : ''}

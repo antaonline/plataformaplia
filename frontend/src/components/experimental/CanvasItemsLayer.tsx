@@ -56,6 +56,12 @@ interface Props {
   authToken: string;
   /** Insertar el asset en la web vía chat (para videos u otros casos). */
   onInsertViaChat?: (url: string, kind: 'image' | 'video') => void;
+  /**
+   * Zoom actual del lienzo. La toolbar y los handles se CONTRA-ESCALAN
+   * (scale 1/zoom) para mantener tamaño visual constante como Kittl —
+   * sin esto, al alejar el zoom los botones quedan microscópicos.
+   */
+  zoom: number;
 }
 
 export const CanvasItemsLayer: React.FC<Props> = ({
@@ -68,7 +74,10 @@ export const CanvasItemsLayer: React.FC<Props> = ({
   apiBase,
   authToken,
   onInsertViaChat,
+  zoom,
 }) => {
+  // Factor de contra-escala para UI de tamaño constante (toolbar, handles).
+  const inv = 1 / Math.max(zoom, 0.01);
   // Drag de un item: { id, mode: move|resize, startX/Y (pantalla), origX/Y/W,
   // snapBack: posición original por si el drop reemplaza una imagen del sitio }
   const drag = useRef<{
@@ -248,10 +257,17 @@ export const CanvasItemsLayer: React.FC<Props> = ({
             style={{ left: it.x, top: it.y, width: it.w }}
             onMouseDown={(e) => e.stopPropagation()}
           >
-            {/* Toolbar del item (al seleccionar) */}
+            {/* Toolbar del item (al seleccionar). Contra-escalada (1/zoom)
+                para mantener tamaño visual constante como Kittl: al alejar
+                el lienzo, los botones siguen siendo clickeables. */}
             {selected && (
               <div
-                className="absolute -top-9 left-0 flex items-center gap-1 bg-zinc-900 rounded-lg shadow-xl px-1 py-1 z-10"
+                className="absolute left-0 flex items-center gap-1 bg-zinc-900 rounded-lg shadow-xl px-1 py-1 z-10"
+                style={{
+                  top: -44 * inv,
+                  transform: `scale(${inv})`,
+                  transformOrigin: 'left top',
+                }}
                 onMouseDown={(e) => e.stopPropagation()}
               >
                 {it.kind === 'image' && (
@@ -352,11 +368,13 @@ export const CanvasItemsLayer: React.FC<Props> = ({
               <p className="mt-1 text-[10px] text-red-500 bg-white/90 rounded px-1.5 py-0.5">{it.error}</p>
             )}
 
-            {/* Handle de resize (abajo-derecha) */}
+            {/* Handle de resize (abajo-derecha), contra-escalado para que
+                siga siendo agarrable en cualquier zoom. */}
             {selected && (
               <div
                 onMouseDown={(e) => startDrag(it.id, 'resize', e)}
                 className="absolute -bottom-1.5 -right-1.5 w-4 h-4 rounded-full bg-violet-500 border-2 border-white shadow cursor-nwse-resize"
+                style={{ transform: `scale(${inv})`, transformOrigin: 'center' }}
                 title="Redimensionar"
               />
             )}

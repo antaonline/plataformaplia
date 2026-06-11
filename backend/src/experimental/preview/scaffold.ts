@@ -282,6 +282,65 @@ function forceHashRouter(content: string): string {
   return out;
 }
 
+// Extensiones que Vite resuelve automáticamente en un import sin extensión.
+const RESOLVE_EXTS = ['.tsx', '.ts', '.jsx', '.js'];
+
+/** ¿El path (sin extensión) resuelve a algún archivo del pool? */
+function resolvesInPool(base: string, pool: Set<string>): boolean {
+  if (pool.has(base)) return true;
+  for (const e of RESOLVE_EXTS) if (pool.has(base + e)) return true;
+  for (const e of RESOLVE_EXTS) if (pool.has(base + '/index' + e)) return true;
+  return false;
+}
+
+// Paths que el scaffold base SIEMPRE provee aunque no estén en el pool del
+// delta generado (viven en el scaffold maestro): shadcn, utils, hooks, App.
+const SCAFFOLD_PROVIDED_RE =
+  /^src\/(components\/ui\/|lib\/utils$|hooks\/use-toast$|hooks\/use-mobile$|App$|main$|App\.css$|globals\.css$)/;
+
+/**
+ * Reescribe imports relativos que NO resuelven (./components/X desde
+ * src/pages/) al alias @/ cuando el destino con alias SÍ existe. Deja
+ * intactos los imports relativos correctos y los de assets (css, etc.).
+ */
+function fixBrokenRelativeImports(
+  rel: string,
+  content: string,
+  pool: Set<string>,
+): string {
+  if (!content || !/from\s+['"]\.\.?\//.test(content)) return content;
+  const dirParts = rel.split('/').slice(0, -1);
+
+  return content.replace(
+    /from\s+(['"])(\.\.?\/[^'"]+)\1/g,
+    (match, quote: string, src: string) => {
+      // Resolver el path relativo contra el directorio del importador.
+      const parts = [...dirParts];
+      for (const seg of src.split('/')) {
+        if (seg === '.' || seg === '') continue;
+        if (seg === '..') parts.pop();
+        else parts.push(seg);
+      }
+      const resolved = parts.join('/');
+      if (resolvesInPool(resolved, pool)) return match; // correcto, no tocar
+
+      // Candidato con alias: src/<resto sin ./ y ../>.
+      const stripped = src.replace(/^(\.\.?\/)+/, '');
+      const aliasTarget = 'src/' + stripped;
+      if (
+        resolvesInPool(aliasTarget, pool) ||
+        SCAFFOLD_PROVIDED_RE.test(aliasTarget)
+      ) {
+        console.warn(
+          `[scaffold] import relativo roto reparado en ${rel}: "${src}" -> "@/${stripped}"`,
+        );
+        return `from ${quote}@/${stripped}${quote}`;
+      }
+      return match; // no sabemos arreglarlo: dejar (Vite mostrará el error real)
+    },
+  );
+}
+
 /**
  * Vuelca los archivos generados por la IA en el workspace.
  * - Soporta paths con o sin prefijo `src/` (la IA usa `src/...` en Sprint 1+).
@@ -345,6 +404,18 @@ export async function writeGeneratedFiles(
   // y pierde el truco. Esto lo reaplica a TODO archivo generado.
   for (const item of normalized) {
     item.content = forceHashRouter(item.content);
+  }
+
+  // Reparar imports RELATIVOS rotos. Caso clásico de la IA:
+  //   src/pages/Index.tsx hace `import Navbar from './components/Navbar'`
+  //   -> resuelve a src/pages/components/Navbar (NO existe), el archivo
+  //   real está en src/components/Navbar -> Vite tira "Failed to resolve
+  //   import" y el preview muere con overlay rojo.
+  // Si el destino relativo NO existe pero la versión con alias @/ SÍ,
+  // reescribimos el import al alias. Determinístico, sin IA.
+  const poolPaths = new Set(normalized.map((f) => f.rel));
+  for (const item of normalized) {
+    item.content = fixBrokenRelativeImports(item.rel, item.content, poolPaths);
   }
 
   // Normalizar exports cruzados: si A.tsx solo exporta default pero B.tsx
