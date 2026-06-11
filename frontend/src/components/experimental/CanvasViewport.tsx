@@ -26,6 +26,19 @@ export interface CanvasViewportHandle {
   resetZoom: () => void;
   zoomIn: () => void;
   zoomOut: () => void;
+  /**
+   * Aplica un evento de rueda originado DENTRO del iframe del preview
+   * (el bridge lo reenvía con PLIA_WHEEL porque los eventos del iframe
+   * cross-origin no llegan al lienzo). Coordenadas en px de PANTALLA.
+   */
+  applyExternalWheel: (e: {
+    screenX: number;
+    screenY: number;
+    deltaX: number;
+    deltaY: number;
+    ctrlKey: boolean;
+    shiftKey: boolean;
+  }) => void;
 }
 
 interface Props {
@@ -123,6 +136,17 @@ export const CanvasViewport = React.forwardRef<CanvasViewportHandle, Props>(
       },
       zoomIn: () => zoomBy(1.2),
       zoomOut: () => zoomBy(1 / 1.2),
+      applyExternalWheel: (e) => {
+        if (e.ctrlKey) {
+          const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+          zoomAt(e.screenX, e.screenY, factor);
+        } else {
+          setPan((p) => ({
+            x: p.x - (e.shiftKey ? e.deltaY : e.deltaX),
+            y: p.y - (e.shiftKey ? 0 : e.deltaY),
+          }));
+        }
+      },
     }));
 
     // ─── Zoom hacia el cursor ─────────────────────────────────────────────

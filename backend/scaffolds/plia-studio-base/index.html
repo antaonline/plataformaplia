@@ -153,8 +153,36 @@
           };
         }
 
+        // REENVÍO DE RUEDA AL LIENZO: cuando el editor está en modo lienzo,
+        // los eventos de rueda sobre el sitio NO deben hacer zoom/scroll
+        // del navegador — se reenvían al editor padre para que el zoom/pan
+        // del canvas siga funcionando aunque el cursor esté sobre la web.
+        var canvasMode = false;
+        window.addEventListener(
+          'wheel',
+          function (e) {
+            // Ctrl/Cmd+rueda SIEMPRE se intercepta (evita el zoom del
+            // navegador dentro del iframe). Rueda sola solo en modo lienzo.
+            if (!canvasMode && !(e.ctrlKey || e.metaKey)) return;
+            e.preventDefault();
+            send('PLIA_WHEEL', {
+              ctrlKey: e.ctrlKey || e.metaKey,
+              shiftKey: e.shiftKey,
+              deltaX: e.deltaX,
+              deltaY: e.deltaY,
+              clientX: e.clientX,
+              clientY: e.clientY,
+            });
+          },
+          { passive: false }
+        );
+
         window.addEventListener('message', function (e) {
           if (!e.data) return;
+          if (e.data.type === 'PLIA_SET_CANVAS_MODE') {
+            canvasMode = !!e.data.on;
+            return;
+          }
           if (e.data.type === 'PLIA_SET_TOOL') {
             mode = e.data.tool === 'select' ? 'select' : 'none';
             if (mode === 'none') {

@@ -610,6 +610,25 @@ export default function projectPage() {
         setSiteDocHeight(Math.min(e.data.height, 30000)); // tope sanidad
         return;
       }
+      // 3.6. Rueda reenviada desde DENTRO del iframe (los eventos del
+      // iframe cross-origin no llegan al lienzo). Convertimos las coords
+      // internas del iframe a coords de pantalla (el rect ya incluye el
+      // zoom del lienzo) y aplicamos zoom/pan del canvas.
+      if (e.data?.type === 'PLIA_WHEEL') {
+        const ifr = iframeRef.current;
+        if (!ifr || !canvasRef.current) return;
+        const r = ifr.getBoundingClientRect();
+        const scale = ifr.offsetWidth > 0 ? r.width / ifr.offsetWidth : 1;
+        canvasRef.current.applyExternalWheel({
+          screenX: r.left + (e.data.clientX || 0) * scale,
+          screenY: r.top + (e.data.clientY || 0) * scale,
+          deltaX: e.data.deltaX || 0,
+          deltaY: e.data.deltaY || 0,
+          ctrlKey: !!e.data.ctrlKey,
+          shiftKey: !!e.data.shiftKey,
+        });
+        return;
+      }
       // 4. Texto editado inline -> aplicar al código via visual-edit.
       if (e.data?.type === 'PLIA_TEXT_CHANGED' && e.data.oldText) {
         await applyVisualEdit({
@@ -680,6 +699,26 @@ export default function projectPage() {
     );
     if (!editMode) setSelectedEl(null);
   }, [editMode, previewUrl, previewNonce]);
+
+  // Comunicar el modo lienzo al bridge: con lienzo activo, la rueda sobre
+  // el sitio se reenvía al canvas (zoom/pan) en vez de scrollear/zoomear
+  // dentro del iframe. Reintento corto porque el iframe puede no haber
+  // terminado de cargar cuando corre este effect.
+  useEffect(() => {
+    const on = canvasMode && rightPaneMode !== 'code';
+    const send = () =>
+      iframeRef.current?.contentWindow?.postMessage(
+        { type: 'PLIA_SET_CANVAS_MODE', on },
+        '*',
+      );
+    send();
+    const t1 = setTimeout(send, 800);
+    const t2 = setTimeout(send, 2500);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, [canvasMode, rightPaneMode, previewUrl, previewNonce, previewStatus]);
 
   // Cuando el servidor pasa a 'running' (recien listo), recargamos el iframe
   // UNA vez. Sin esto, si el iframe cargo la URL antes de que Vite estuviera
