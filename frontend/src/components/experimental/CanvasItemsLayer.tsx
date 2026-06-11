@@ -78,6 +78,24 @@ export const CanvasItemsLayer: React.FC<Props> = ({
 }) => {
   // Factor de contra-escala para UI de tamaño constante (toolbar, handles).
   const inv = 1 / Math.max(zoom, 0.01);
+  // Root del layer (coincide con el origen del stage): para convertir
+  // coordenadas de pantalla -> coordenadas del stage.
+  const rootRef = useRef<HTMLDivElement>(null);
+  // Cable puerto-a-puerto (estilo Kittl): se arrastra desde el puerto de
+  // salida de un item de imagen. Soltar en vacío genera un VIDEO conectado
+  // en ese punto; soltar sobre una imagen del sitio la REEMPLAZA.
+  const [portDrag, setPortDrag] = useState<{ fromId: string; x: number; y: number } | null>(null);
+
+  /** Pantalla -> coords del stage (el rect del root ya incluye pan/zoom). */
+  const toStage = useCallback(
+    (clientX: number, clientY: number) => {
+      const r = rootRef.current?.getBoundingClientRect();
+      if (!r) return { x: 0, y: 0 };
+      const z = transformRef.current.zoom || 1;
+      return { x: (clientX - r.left) / z, y: (clientY - r.top) / z };
+    },
+    [transformRef],
+  );
   // Drag de un item: { id, mode: move|resize, startX/Y (pantalla), origX/Y/W,
   // snapBack: posición original por si el drop reemplaza una imagen del sitio }
   const drag = useRef<{
@@ -188,7 +206,9 @@ export const CanvasItemsLayer: React.FC<Props> = ({
   };
 
   // ─── Convertir imagen → video (nodo conectado en el lienzo) ──────────
-  const convertToVideo = async (item: CanvasItem) => {
+  // `at` (opcional): posición destino del video — la usa el cable
+  // puerto-a-puerto para crear el video EXACTAMENTE donde se soltó.
+  const convertToVideo = async (item: CanvasItem, at?: { x: number; y: number }) => {
     update(item.id, { converting: true, error: undefined });
     try {
       const res = await fetch(`${apiBase}/experimental/creative/image-to-video`, {
@@ -200,13 +220,13 @@ export const CanvasItemsLayer: React.FC<Props> = ({
       if (!res.ok) throw new Error(data.message || data.error || 'Error generando video');
       const url = data.localUrl || data.url;
       if (!url) throw new Error('No se recibió el video');
-      // El video aparece como un item NUEVO a la derecha, conectado al origen.
+      // El video aparece como un item NUEVO conectado al origen.
       const fresh: CanvasItem = {
         id: `vid-${Date.now()}`,
         kind: 'video',
         url,
-        x: item.x + item.w + 90,
-        y: item.y,
+        x: at ? at.x : item.x + item.w + 90,
+        y: at ? at.y : item.y,
         w: item.w,
         ar: item.ar,
         fromId: item.id,
@@ -221,9 +241,50 @@ export const CanvasItemsLayer: React.FC<Props> = ({
     }
   };
 
+  // ─── Cable puerto-a-puerto (mousemove/mouseup globales) ──────────────
+  useEffect(() => {
+    if (!portDrag) return;
+    const win = iframeRef.current?.contentWindow;
+    const onMove = (e: MouseEvent) => {
+      const s = toStage(e.clientX, e.clientY);
+      setPortDrag((p) => (p ? { ...p, x: s.x, y: s.y } : p));
+      // Resaltar imagen del sitio bajo el cable (destino de reemplazo).
+      const c = toIframeCoords(e.clientX, e.clientY);
+      if (c && win) {
+        win.postMessage({ type: 'PLIA_DRAG_OVER', x: c.x, y: c.y }, '*');
+        setOverSiteImg(true);
+      } else {
+        if (overSiteImg) win?.postMessage({ type: 'PLIA_DRAG_END' }, '*');
+        setOverSiteImg(false);
+      }
+    };
+    const onUp = (e: MouseEvent) => {
+      const source = items.find((it) => it.id === portDrag.fromId);
+      const c = toIframeCoords(e.clientX, e.clientY);
+      if (c && win && source) {
+        // Soltado sobre el sitio: reemplazar la imagen bajo el cursor.
+        win.postMessage({ type: 'PLIA_DRAG_DROP', x: c.x, y: c.y, url: source.url }, '*');
+      } else if (source && source.kind === 'image') {
+        // Soltado en el vacío del lienzo: generar VIDEO conectado ahí.
+        const s = toStage(e.clientX, e.clientY);
+        convertToVideo(source, { x: s.x, y: s.y - source.w / source.ar / 2 });
+      }
+      win?.postMessage({ type: 'PLIA_DRAG_END' }, '*');
+      setOverSiteImg(false);
+      setPortDrag(null);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [portDrag, items, overSiteImg]);
+
   return (
-    <div className="absolute inset-0 pointer-events-none" style={{ overflow: 'visible' }}>
-      {/* Conexiones origen→video */}
+    <div ref={rootRef} className="absolute inset-0 pointer-events-none" style={{ overflow: 'visible' }}>
+      {/* Conexiones origen→video + cable en vivo del puerto */}
       <svg className="absolute pointer-events-none" style={{ overflow: 'visible', left: 0, top: 0, width: 1, height: 1 }}>
         {items.map((it) => {
           if (!it.fromId) return null;
@@ -245,6 +306,25 @@ export const CanvasItemsLayer: React.FC<Props> = ({
             />
           );
         })}
+        {/* Cable en vivo mientras se arrastra desde un puerto (Kittl). */}
+        {portDrag && (() => {
+          const from = items.find((x) => x.id === portDrag.fromId);
+          if (!from) return null;
+          const x1 = from.x + from.w;
+          const y1 = from.y + from.w / from.ar / 2;
+          const mid = (x1 + portDrag.x) / 2;
+          return (
+            <>
+              <path
+                d={`M ${x1} ${y1} C ${mid} ${y1}, ${mid} ${portDrag.y}, ${portDrag.x} ${portDrag.y}`}
+                stroke="#a855f7"
+                strokeWidth={2.5}
+                fill="none"
+              />
+              <circle cx={portDrag.x} cy={portDrag.y} r={5 * inv} fill="#a855f7" />
+            </>
+          );
+        })()}
       </svg>
 
       {items.map((it) => {
@@ -366,6 +446,30 @@ export const CanvasItemsLayer: React.FC<Props> = ({
 
             {it.error && (
               <p className="mt-1 text-[10px] text-red-500 bg-white/90 rounded px-1.5 py-0.5">{it.error}</p>
+            )}
+
+            {/* PUERTO de salida (derecha-centro, estilo Kittl). Arrastrá el
+                cable: soltarlo en el vacío genera un VIDEO conectado en ese
+                punto; soltarlo sobre una imagen del sitio la reemplaza. */}
+            {it.kind === 'image' && (
+              <button
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onSelect(it.id);
+                  setPortDrag({ fromId: it.id, x: it.x + it.w + 10, y: it.y + h / 2 });
+                }}
+                title="Arrastra el cable: al vacío genera un video · sobre una imagen del sitio la reemplaza"
+                className={`absolute z-10 w-4 h-4 rounded-full border-2 border-white shadow-md cursor-crosshair transition-colors ${
+                  portDrag?.fromId === it.id ? 'bg-violet-600' : 'bg-violet-400 hover:bg-violet-600'
+                } ${selected || portDrag?.fromId === it.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+                style={{
+                  right: -8 * inv,
+                  top: '50%',
+                  transform: `translateY(-50%) scale(${inv})`,
+                  transformOrigin: 'center',
+                }}
+              />
             )}
 
             {/* Handle de resize (abajo-derecha), contra-escalado para que

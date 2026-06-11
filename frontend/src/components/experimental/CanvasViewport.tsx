@@ -76,26 +76,33 @@ export const CanvasViewport = React.forwardRef<CanvasViewportHandle, Props>(
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [zoom, pan]);
 
-    // ─── Fit: centra el artboard y ajusta el zoom para que entre ──────────
+    // La altura vive en un ref para que `fit` NO se recree (ni re-encuadre)
+    // cuando el sitio reporta su altura completa y el artboard crece hacia
+    // abajo — solo re-encuadramos al cambiar de dispositivo (ancho).
+    const artboardHeightRef = useRef(artboardHeight);
+    artboardHeightRef.current = artboardHeight;
+
+    // ─── Fit: encuadra el artboard ─────────────────────────────────────────
+    // Para páginas ALTAS (web completa desplegada), ajusta al ANCHO y alinea
+    // arriba (como Framer/Kittl): el usuario panea hacia abajo para recorrer.
     const fit = useCallback(() => {
       const el = containerRef.current;
       if (!el) return;
       const cw = el.clientWidth;
       const ch = el.clientHeight;
       const pad = 80;
-      const scale = Math.min(
-        (cw - pad) / artboardWidth,
-        (ch - pad) / artboardHeight,
-        1,
-      );
+      const h = artboardHeightRef.current;
+      const zw = (cw - pad) / artboardWidth;
+      const zh = (ch - pad) / h;
+      const isTall = h * Math.min(zw, 1) > ch * 1.4;
+      const scale = isTall ? Math.min(zw, 1) : Math.min(zw, zh, 1);
       const z = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, scale));
       setZoom(z);
-      // Centrar.
       setPan({
         x: (cw - artboardWidth * z) / 2,
-        y: (ch - artboardHeight * z) / 2,
+        y: isTall ? 40 : (ch - h * z) / 2,
       });
-    }, [artboardWidth, artboardHeight]);
+    }, [artboardWidth]);
 
     // Auto-fit al montar y cuando cambia el tamaño del artboard.
     useEffect(() => {

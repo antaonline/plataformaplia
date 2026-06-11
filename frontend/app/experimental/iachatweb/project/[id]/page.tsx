@@ -171,6 +171,11 @@ export default function projectPage() {
   // Zoom como estado SOLO para la contra-escala de la UI de los items
   // (toolbar/handles a tamaño constante). El pan no necesita re-render.
   const [canvasZoom, setCanvasZoom] = useState(1);
+  // Altura REAL del documento del sitio (la reporta el bridge del scaffold
+  // via PLIA_DOC_HEIGHT). En modo lienzo, el artboard se estira a esta
+  // altura para mostrar la web COMPLETA de arriba a abajo (estilo Framer),
+  // sin scroll interno.
+  const [siteDocHeight, setSiteDocHeight] = useState<number>(0);
 
   /** Dimensiones del artboard según el dispositivo activo. */
   const artboardDims = useCallback(() => {
@@ -598,6 +603,11 @@ export default function projectPage() {
       // 3. EDICIÓN VISUAL (Fase B): elemento seleccionado en el lienzo.
       if (e.data?.type === 'PLIA_ELEMENT_SELECTED') {
         setSelectedEl(e.data);
+        return;
+      }
+      // 3.5. Altura del documento del sitio (para desplegar la web completa).
+      if (e.data?.type === 'PLIA_DOC_HEIGHT' && typeof e.data.height === 'number') {
+        setSiteDocHeight(Math.min(e.data.height, 30000)); // tope sanidad
         return;
       }
       // 4. Texto editado inline -> aplicar al código via visual-edit.
@@ -1799,11 +1809,14 @@ export default function projectPage() {
                     : viewport === 'mobile'
                       ? { w: 390, h: 844 }
                       : { w: 1440, h: 900 };
+                // Web COMPLETA: el artboard se estira a la altura real del
+                // documento (la reporta el bridge), no a una ventana fija.
+                const fullH = Math.max(dims.h, siteDocHeight);
                 return (
                   <CanvasViewport
                     ref={canvasRef}
                     artboardWidth={dims.w}
-                    artboardHeight={dims.h}
+                    artboardHeight={fullH}
                     onTransformChange={(t) => {
                       canvasTransformRef.current = t;
                       setCanvasZoom((prev) => (prev !== t.zoom ? t.zoom : prev));
@@ -1812,12 +1825,13 @@ export default function projectPage() {
                   >
                     <div
                       className="bg-white shadow-2xl rounded-2xl overflow-hidden relative"
-                      style={{ width: dims.w, height: dims.h }}
+                      style={{ width: dims.w, height: fullH }}
                     >
                       <iframe
                         key={`preview-iframe-${id}-${previewNonce}`}
                         ref={iframeRef}
                         src={previewUrl}
+                        scrolling="no"
                         className="w-full h-full border-none"
                       />
                     </div>

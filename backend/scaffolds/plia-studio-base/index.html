@@ -69,6 +69,39 @@
       este listener queda mudo y html2canvas NUNCA se carga -> 0 overhead.
     -->
     <!--
+      PLIA Studio: REPORTE DE ALTURA del documento. El editor lo usa para
+      desplegar la web COMPLETA (de arriba a abajo) en el artboard del
+      lienzo, en vez de una ventana con scroll interno. Solo activo dentro
+      de PLIA Studio (parent !== self).
+    -->
+    <script>
+      (function () {
+        if (window.parent === window) return;
+        var last = 0;
+        var send = function () {
+          var h = Math.max(
+            document.documentElement.scrollHeight,
+            document.body ? document.body.scrollHeight : 0
+          );
+          if (Math.abs(h - last) > 4) {
+            last = h;
+            try {
+              window.parent.postMessage({ type: 'PLIA_DOC_HEIGHT', height: h }, '*');
+            } catch (_) {}
+          }
+        };
+        var t;
+        var debounced = function () { clearTimeout(t); t = setTimeout(send, 150); };
+        window.addEventListener('load', debounced);
+        if (window.ResizeObserver) {
+          new ResizeObserver(debounced).observe(document.documentElement);
+        }
+        // Fallback para cambios async (imágenes/fuentes que cargan tarde).
+        setInterval(debounced, 2000);
+      })();
+    </script>
+
+    <!--
       PLIA Studio: BRIDGE DE SELECCIÓN (editor visual, Fase B). Permite que
       el editor padre active un "modo selección": al pasar el cursor se
       resalta el elemento, al hacer click se selecciona y se reporta su
