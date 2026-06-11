@@ -28,6 +28,11 @@ const DESIGN_BAR = `ESTANDAR DE DISENO (obligatorio, sin excepciones):
   El sistema PLIA lo convierte en fotos reales y relevantes desde Pexels.
   PROHIBIDO https://images.unsplash.com/..., picsum, loremflickr o cualquier URL directa.
   Todo <img> debe llevar width/height y onError que oculte la imagen.
+  ADEMAS (CRITICO para el editor visual): todo <img> debe tener su caja
+  definida por el LAYOUT, no por la imagen: clases de tamano explicitas
+  (h-64, h-full, aspect-video, aspect-square, etc.) + object-cover SIEMPRE.
+  Asi, cuando el cliente reemplaza una imagen por otra con distinta
+  proporcion, la seccion NO se deforma — la imagen encaja en la caja.
 - Responsive mobile-first impecable. Estados hover/focus cuidados. Accesibilidad basica (contraste, alt, aria).
 - Detalle premium: sombras suaves, bordes redondeados coherentes, gradientes sutiles, glassmorphism solo si encaja.
 - EFECTOS SCROLL-DRIVEN (cuando el estilo pedido es premium/cinematografico/Apple-style, son OBLIGATORIOS):

@@ -127,6 +127,33 @@
         function send(type, payload) {
           try { window.parent.postMessage(Object.assign({ type: type }, payload || {}), '*'); } catch (_) {}
         }
+        // Reemplaza el src de una imagen RESPETANDO el layout del código:
+        // congela la altura renderizada actual y fuerza object-fit cover,
+        // así una imagen con otra proporción ENCAJA en la caja existente
+        // en vez de deformar la sección.
+        function swapImg(el, url) {
+          var rect = el.getBoundingClientRect();
+          var oldSrc = el.getAttribute('src');
+          if (rect.height > 0) el.style.height = rect.height + 'px';
+          el.style.objectFit = 'cover';
+          el.setAttribute('src', url);
+          send('PLIA_IMG_REPLACED', { oldSrc: oldSrc, newUrl: url });
+        }
+        // Deshacer/rehacer: reenviar Ctrl+Z / Ctrl+Shift+Z (o Ctrl+Y) al
+        // editor aunque el foco esté dentro del sitio. No interferimos si
+        // el usuario está editando texto inline (undo nativo del campo).
+        window.addEventListener('keydown', function (e) {
+          var t = e.target;
+          if (t && (t.isContentEditable || t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return;
+          var k = (e.key || '').toLowerCase();
+          if ((e.ctrlKey || e.metaKey) && k === 'z' && !e.shiftKey) {
+            e.preventDefault();
+            send('PLIA_UNDO', {});
+          } else if ((e.ctrlKey || e.metaKey) && (k === 'y' || (k === 'z' && e.shiftKey))) {
+            e.preventDefault();
+            send('PLIA_REDO', {});
+          }
+        });
         // No queremos seleccionar elementos enormes (body, #root). Subimos al
         // elemento "significativo" más cercano (con texto o que sea media).
         function isSelectable(el) {
@@ -205,9 +232,7 @@
             };
             selected.addEventListener('blur', onBlur);
           } else if (e.data.type === 'PLIA_REPLACE_IMG' && selected && selected.tagName === 'IMG') {
-            var oldSrc = selected.getAttribute('src');
-            selected.setAttribute('src', e.data.url);
-            send('PLIA_IMG_REPLACED', { oldSrc: oldSrc, newUrl: e.data.url });
+            swapImg(selected, e.data.url);
           } else if (e.data.type === 'PLIA_DRAG_OVER') {
             // Drag de un asset desde el editor (coords en el viewport del
             // iframe). Resaltamos la imagen bajo el cursor como destino.
@@ -226,9 +251,7 @@
             if (dropTarget) dropTarget.classList.remove('plia-drop');
             dropTarget = null;
             if (dropEl && dropEl.tagName === 'IMG') {
-              var prevSrc = dropEl.getAttribute('src');
-              dropEl.setAttribute('src', e.data.url);
-              send('PLIA_IMG_REPLACED', { oldSrc: prevSrc, newUrl: e.data.url });
+              swapImg(dropEl, e.data.url);
             }
           } else if (e.data.type === 'PLIA_DRAG_END') {
             if (dropTarget) { dropTarget.classList.remove('plia-drop'); dropTarget = null; }

@@ -629,6 +629,17 @@ export default function projectPage() {
         });
         return;
       }
+      // 3.7. Ctrl+Z / Ctrl+Shift+Z presionados con el foco DENTRO del sitio
+      // (el bridge los reenvía porque el keydown del iframe no llega acá).
+      if (e.data?.type === 'PLIA_UNDO') {
+        performUndo();
+        return;
+      }
+      if (e.data?.type === 'PLIA_REDO') {
+        performRedo();
+        return;
+      }
+
       // 4. Texto editado inline -> aplicar al código via visual-edit.
       if (e.data?.type === 'PLIA_TEXT_CHANGED' && e.data.oldText) {
         await applyVisualEdit({
@@ -653,19 +664,28 @@ export default function projectPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiBase, id]);
 
+  // Historial de ediciones visuales para Ctrl+Z / Ctrl+Shift+Z.
+  type VisualEdit =
+    | { kind: 'text'; oldText: string; newText: string }
+    | { kind: 'image'; oldSrc: string; newUrl: string };
+  const undoStack = useRef<VisualEdit[]>([]);
+  const redoStack = useRef<VisualEdit[]>([]);
+  const invertEdit = (e: VisualEdit): VisualEdit =>
+    e.kind === 'text'
+      ? { kind: 'text', oldText: e.newText, newText: e.oldText }
+      : { kind: 'image', oldSrc: e.newUrl, newUrl: e.oldSrc };
+
   /**
    * Aplica una edición visual (texto/imagen) llamando al backend, que
    * reemplaza en los archivos. Luego actualiza `pages` con los archivos
    * devueltos -> el useEffect de sync recarga el preview (Vite HMR).
+   * Las ediciones exitosas entran al historial (Ctrl+Z), salvo que
+   * vengan del propio undo/redo (skipHistory).
    */
   const applyVisualEdit = useCallback(
-    async (
-      edit:
-        | { kind: 'text'; oldText: string; newText: string }
-        | { kind: 'image'; oldSrc: string; newUrl: string },
-    ) => {
+    async (edit: VisualEdit, opts?: { skipHistory?: boolean }) => {
       const token = localStorage.getItem('access_token');
-      if (!token) return;
+      if (!token) return false;
       try {
         const res = await fetch(`${apiBase}/experimental/iachat/${id}/visual-edit`, {
           method: 'POST',
@@ -678,18 +698,63 @@ export default function projectPage() {
         const data = await res.json();
         if (data.ok && data.files && Object.keys(data.files).length > 0) {
           setPages(data.files);
+          if (!opts?.skipHistory) {
+            undoStack.current.push(edit);
+            redoStack.current = []; // una edición nueva invalida los redo
+          }
           toast.success(
             edit.kind === 'text' ? 'Texto actualizado' : 'Imagen reemplazada',
           );
+          return true;
         } else if (data.replacements === 0) {
           toast.error('No se encontró el contenido en el código. Probá editarlo desde el chat.');
         }
       } catch {
         toast.error('No se pudo aplicar el cambio');
       }
+      return false;
     },
     [apiBase, id],
   );
+
+  /** Ctrl+Z: revierte la última edición visual (texto o imagen). */
+  const performUndo = useCallback(async () => {
+    const last = undoStack.current.pop();
+    if (!last) {
+      toast.info('Nada que deshacer');
+      return;
+    }
+    const ok = await applyVisualEdit(invertEdit(last), { skipHistory: true });
+    if (ok) redoStack.current.push(last);
+    else undoStack.current.push(last); // falló: lo devolvemos a la pila
+  }, [applyVisualEdit]);
+
+  /** Ctrl+Shift+Z / Ctrl+Y: re-aplica la última edición deshecha. */
+  const performRedo = useCallback(async () => {
+    const last = redoStack.current.pop();
+    if (!last) return;
+    const ok = await applyVisualEdit(last, { skipHistory: true });
+    if (ok) undoStack.current.push(last);
+    else redoStack.current.push(last);
+  }, [applyVisualEdit]);
+
+  // Atajos de teclado del editor (fuera de inputs/textarea).
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      const k = (e.key || '').toLowerCase();
+      if ((e.ctrlKey || e.metaKey) && k === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        performUndo();
+      } else if ((e.ctrlKey || e.metaKey) && (k === 'y' || (k === 'z' && e.shiftKey))) {
+        e.preventDefault();
+        performRedo();
+      }
+    };
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+  }, [performUndo, performRedo]);
 
   // Comunicar el modo de selección al iframe cuando cambia editMode.
   useEffect(() => {
