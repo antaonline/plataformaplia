@@ -37,13 +37,31 @@ interface Props {
   children: React.ReactNode;
   /** Color de fondo del lienzo. */
   background?: string;
+  /**
+   * Notifica cada cambio de transformación (zoom/pan). El padre lo usa
+   * para convertir coordenadas de pantalla → coordenadas del stage (los
+   * items del lienzo unificado necesitan esta matemática al arrastrar).
+   */
+  onTransformChange?: (t: { zoom: number; pan: { x: number; y: number } }) => void;
+  /** Click directo sobre el fondo del lienzo (no sobre un hijo). */
+  onBackgroundMouseDown?: () => void;
 }
 
 const MIN_ZOOM = 0.1;
 const MAX_ZOOM = 3;
 
 export const CanvasViewport = React.forwardRef<CanvasViewportHandle, Props>(
-  ({ artboardWidth, artboardHeight, children, background = '#eef1f5' }, ref) => {
+  (
+    {
+      artboardWidth,
+      artboardHeight,
+      children,
+      background = '#eef1f5',
+      onTransformChange,
+      onBackgroundMouseDown,
+    },
+    ref,
+  ) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const [zoom, setZoom] = useState(1);
     const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -51,6 +69,12 @@ export const CanvasViewport = React.forwardRef<CanvasViewportHandle, Props>(
     const [isPanning, setIsPanning] = useState(false);
     const [spaceHeld, setSpaceHeld] = useState(false);
     const panStart = useRef({ x: 0, y: 0, panX: 0, panY: 0 });
+
+    // Reportar la transformación al padre en cada cambio.
+    useEffect(() => {
+      onTransformChange?.({ zoom, pan });
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [zoom, pan]);
 
     // ─── Fit: centra el artboard y ajusta el zoom para que entre ──────────
     const fit = useCallback(() => {
@@ -152,6 +176,11 @@ export const CanvasViewport = React.forwardRef<CanvasViewportHandle, Props>(
     const canPan = tool === 'hand' || spaceHeld;
 
     const onMouseDown = (e: React.MouseEvent) => {
+      // Click directo en el fondo (no en el artboard ni en items) →
+      // deseleccionar items del lienzo unificado.
+      if (e.target === e.currentTarget) {
+        onBackgroundMouseDown?.();
+      }
       // Pan con: herramienta mano, espacio, o botón central.
       if (canPan || e.button === 1) {
         e.preventDefault();

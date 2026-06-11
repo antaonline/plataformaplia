@@ -26,7 +26,7 @@ import { Templates3DDialog } from '@/components/experimental/Templates3DDialog';
 import { CreativeStudioDialog } from '@/components/experimental/CreativeStudioDialog';
 import { NodeCanvasDialog } from '@/components/experimental/NodeCanvasDialog';
 import { CanvasViewport, CanvasViewportHandle } from '@/components/experimental/CanvasViewport';
-import { CanvasAssetDock } from '@/components/experimental/CanvasAssetDock';
+import { CanvasItemsLayer, CanvasItem } from '@/components/experimental/CanvasItemsLayer';
 import type { CreativeAsset } from '@/components/experimental/CreativeStudioDialog';
 import { toast } from 'sonner';
 import ThinkingSection from '@/components/chat/ThinkingSection';
@@ -157,13 +157,74 @@ export default function projectPage() {
   // Drop de imágenes externas (desde el PC) al lienzo.
   const [fileDragActive, setFileDragActive] = useState(false);
 
-  /** Sube imágenes arrastradas desde el PC y las agrega al dock de assets. */
+  // LIENZO UNIFICADO (estilo Kittl): los assets viven como items flotantes
+  // en el mismo lienzo que el artboard. Se mueven, redimensionan, convierten
+  // a video y se arrastran sobre el sitio para reemplazar imágenes.
+  const [canvasItems, setCanvasItems] = useState<CanvasItem[]>([]);
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  // Transformación actual del lienzo (zoom/pan) — la reporta el
+  // CanvasViewport; los items la usan para la matemática de arrastre.
+  const canvasTransformRef = useRef<{ zoom: number; pan: { x: number; y: number } }>({
+    zoom: 1,
+    pan: { x: 0, y: 0 },
+  });
+
+  /** Dimensiones del artboard según el dispositivo activo. */
+  const artboardDims = useCallback(() => {
+    return viewport === 'tablet'
+      ? { w: 820, h: 1180 }
+      : viewport === 'mobile'
+        ? { w: 390, h: 844 }
+        : { w: 1440, h: 900 };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewport]);
+
+  /** Agrega un asset como item del lienzo, a la derecha del artboard. */
+  const addCanvasItem = useCallback(
+    (url: string, kind: 'image' | 'video', at?: { x: number; y: number }) => {
+      const dims = artboardDims();
+      setCanvasItems((prev) => {
+        const pos = at || {
+          x: dims.w + 70,
+          y: 40 + (prev.length % 6) * 70,
+        };
+        return [
+          ...prev,
+          {
+            id: `it-${Date.now()}-${Math.round(Math.random() * 1e6)}`,
+            kind,
+            url,
+            x: pos.x,
+            y: pos.y,
+            w: 240,
+            ar: 4 / 3, // se corrige al cargar el media
+          },
+        ];
+      });
+    },
+    [artboardDims],
+  );
+
+  /**
+   * Sube imágenes arrastradas desde el PC y las coloca COMO ITEMS en el
+   * lienzo, en el punto donde se soltaron (coords pantalla → stage).
+   */
   const handleExternalFiles = useCallback(
-    async (files: FileList | File[]) => {
+    async (files: FileList | File[], dropPoint?: { clientX: number; clientY: number; rect: DOMRect }) => {
       const token = localStorage.getItem('access_token');
       if (!token) return;
       const imgs = Array.from(files).filter((f) => f.type.startsWith('image/'));
       if (imgs.length === 0) return;
+      // Punto de drop en coords del stage (si lo tenemos).
+      let at: { x: number; y: number } | undefined;
+      if (dropPoint) {
+        const { zoom, pan } = canvasTransformRef.current;
+        at = {
+          x: (dropPoint.clientX - dropPoint.rect.left - pan.x) / zoom - 120,
+          y: (dropPoint.clientY - dropPoint.rect.top - pan.y) / zoom - 80,
+        };
+      }
+      let offset = 0;
       for (const file of imgs) {
         const form = new FormData();
         form.append('file', file);
@@ -175,6 +236,13 @@ export default function projectPage() {
           });
           const data = await res.json();
           if (data.url) {
+            addCanvasItem(
+              data.url,
+              'image',
+              at ? { x: at.x + offset, y: at.y + offset } : undefined,
+            );
+            offset += 30;
+            // También al catálogo del Estudio Creativo (pestaña Mis Assets).
             setCreativeAssets((prev) => [
               { id: `up-${Date.now()}-${Math.random()}`, kind: 'image', url: data.url, createdAt: Date.now() },
               ...prev,
@@ -185,7 +253,7 @@ export default function projectPage() {
         }
       }
     },
-    [apiBase],
+    [apiBase, addCanvasItem],
   );
   const [isDragging, setIsDragging] = useState(false);
 
@@ -1689,7 +1757,11 @@ export default function projectPage() {
               if (Array.from(e.dataTransfer.types).includes('Files')) {
                 e.preventDefault();
                 setFileDragActive(false);
-                handleExternalFiles(e.dataTransfer.files);
+                handleExternalFiles(e.dataTransfer.files, {
+                  clientX: e.clientX,
+                  clientY: e.clientY,
+                  rect: e.currentTarget.getBoundingClientRect(),
+                });
               }
             }}
           >
@@ -1729,6 +1801,10 @@ export default function projectPage() {
                     ref={canvasRef}
                     artboardWidth={dims.w}
                     artboardHeight={dims.h}
+                    onTransformChange={(t) => {
+                      canvasTransformRef.current = t;
+                    }}
+                    onBackgroundMouseDown={() => setSelectedItemId(null)}
                   >
                     <div
                       className="bg-white shadow-2xl rounded-2xl overflow-hidden relative"
@@ -1741,6 +1817,24 @@ export default function projectPage() {
                         className="w-full h-full border-none"
                       />
                     </div>
+                    {/* Items flotantes del lienzo unificado (estilo Kittl):
+                        imágenes/videos junto al sitio, manipulables. Soltar
+                        una imagen sobre una imagen del sitio la reemplaza. */}
+                    <CanvasItemsLayer
+                      items={canvasItems}
+                      onChange={setCanvasItems}
+                      selectedId={selectedItemId}
+                      onSelect={setSelectedItemId}
+                      transformRef={canvasTransformRef}
+                      iframeRef={iframeRef}
+                      apiBase={apiBase}
+                      authToken={typeof window !== 'undefined' ? localStorage.getItem('access_token') || '' : ''}
+                      onInsertViaChat={(url, kind) => {
+                        handleSend(
+                          `Usa este ${kind === 'video' ? 'video' : 'imagen'} en la web: ${url}\n\nInsértalo donde mejor quede (hero, galería, fondo de sección). ${kind === 'video' ? 'Si va en el hero, usalo como <video autoPlay muted loop playsInline> de fondo con overlay.' : ''}`,
+                        );
+                      }}
+                    />
                   </CanvasViewport>
                 );
               })()
@@ -1837,11 +1931,8 @@ export default function projectPage() {
               </div>
             )}
 
-            {/* DOCK de assets arrastrables (Fase C). Solo en modo lienzo
-                con preview, cuando hay imágenes generadas para arrastrar. */}
-            {previewUrl && rightPaneMode !== 'code' && canvasMode && (
-              <CanvasAssetDock assets={creativeAssets} iframeRef={iframeRef} />
-            )}
+            {/* (El dock de assets fue reemplazado por los items flotantes
+                del lienzo unificado — CanvasItemsLayer dentro del canvas.) */}
 
             {/* Overlay de drop para imágenes externas (arrastradas del PC). */}
             {fileDragActive && (
@@ -2001,7 +2092,11 @@ export default function projectPage() {
         authToken={typeof window !== 'undefined' ? localStorage.getItem('access_token') || '' : ''}
         onClose={() => setShowCreative(false)}
         externalAssets={creativeAssets}
-        onAssetGenerated={(a) => setCreativeAssets((prev) => [a, ...prev])}
+        onAssetGenerated={(a) => {
+          setCreativeAssets((prev) => [a, ...prev]);
+          // El asset generado aparece también como item del lienzo.
+          addCanvasItem(a.url, a.kind);
+        }}
         onUseAsset={(asset) => {
           setShowCreative(false);
           // CASO 1: venimos del inspector "Reemplazar imagen" -> reemplazo
@@ -2033,13 +2128,14 @@ export default function projectPage() {
         onClose={() => setShowNodeCanvas(false)}
         onUseAsset={(url, kind) => {
           setShowNodeCanvas(false);
-          // El resultado del workflow se agrega al dock de assets para
-          // arrastrarlo, y se anuncia por chat.
+          // El resultado del workflow aparece como item del lienzo,
+          // listo para mover/arrastrar sobre el sitio.
           setCreativeAssets((prev) => [
             { id: `wf-${Date.now()}`, kind, url, createdAt: Date.now() },
             ...prev,
           ]);
-          toast.success(`${kind === 'video' ? 'Video' : 'Imagen'} agregado al dock de assets`);
+          addCanvasItem(url, kind);
+          toast.success(`${kind === 'video' ? 'Video' : 'Imagen'} agregado al lienzo`);
         }}
       />
       <Toaster />

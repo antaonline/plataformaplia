@@ -29,7 +29,21 @@ const DESIGN_BAR = `ESTANDAR DE DISENO (obligatorio, sin excepciones):
   PROHIBIDO https://images.unsplash.com/..., picsum, loremflickr o cualquier URL directa.
   Todo <img> debe llevar width/height y onError que oculte la imagen.
 - Responsive mobile-first impecable. Estados hover/focus cuidados. Accesibilidad basica (contraste, alt, aria).
-- Detalle premium: sombras suaves, bordes redondeados coherentes, gradientes sutiles, glassmorphism solo si encaja.`;
+- Detalle premium: sombras suaves, bordes redondeados coherentes, gradientes sutiles, glassmorphism solo si encaja.
+- EFECTOS SCROLL-DRIVEN (cuando el estilo pedido es premium/cinematografico/Apple-style, son OBLIGATORIOS):
+  Usa los hooks de framer-motion useScroll + useTransform (ya instalado, NO agregues three.js ni gsap como deps):
+    const { scrollYProgress } = useScroll({ target: ref, offset: ["start end", "end start"] });
+    const y = useTransform(scrollYProgress, [0, 1], [80, -80]);   // parallax
+    const scale = useTransform(scrollYProgress, [0, 0.5], [0.85, 1]); // zoom-in al entrar
+    const opacity = useTransform(scrollYProgress, [0, 0.3], [0, 1]);
+  Patrones premium a usar segun encaje:
+  * Hero con imagen/video de fondo en parallax (la imagen se mueve mas lento que el scroll).
+  * Seccion "sticky scene": contenedor h-[300vh] con un hijo sticky top-0 h-screen cuyo contenido
+    (imagen que escala, texto que cambia) se anima con scrollYProgress — efecto Apple product page.
+  * Imagenes de producto que escalan/rotan levemente al entrar al viewport.
+  * Texto gigante que se desliza horizontalmente con el scroll (useTransform a translateX).
+  * Numeros/contadores y barras que se animan con whileInView.
+  Si el cliente sube o genera un VIDEO, usalo como fondo de hero: <video autoPlay muted loop playsInline className="absolute inset-0 w-full h-full object-cover" /> con overlay de gradiente y el contenido encima.`;
 
 const TECH_RULES = `STACK YA INSTALADO (Vite + React 19 + TypeScript + Tailwind + shadcn/ui completo):
 
