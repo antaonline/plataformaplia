@@ -339,6 +339,8 @@ Todo en un solo HTML con anchors.`;
       // Servicios y contenido específico
       services.length ? `SERVICIOS/PRODUCTOS PRINCIPALES: ${services.join(' | ')}` : '',
       smartContent.menuHighlights ? `MENÚ/CATÁLOGO: ${smartContent.menuHighlights}` : '',
+      // Contenido REAL extraído del PDF que subió el cliente (menú/catálogo/precios)
+      input.catalogPdfText ? `📄 CONTENIDO REAL DEL CATÁLOGO/MENÚ (extraído del PDF del cliente — ÚSALO con sus productos y precios reales, NO inventes):\n${input.catalogPdfText}` : '',
       smartContent.promotionsDetails ? `PROMOCIONES VIGENTES: ${smartContent.promotionsDetails}` : '',
       smartContent.deliveryInfo ? `INFO DELIVERY: ${smartContent.deliveryInfo}` : '',
       smartContent.locationAddress ? `DIRECCIÓN FÍSICA: ${smartContent.locationAddress}` : '',

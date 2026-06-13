@@ -1190,10 +1190,35 @@ p{color:#cbd5e1;font-size:1.05rem;line-height:1.7;margin-bottom:28px}
     }
 
     const currentData = JSON.parse((project.onboardingData as string) || '{}');
-    const mergedData = {
+    const mergedData: any = {
       ...currentData,
       [fieldKey]: documentUrl,
     };
+
+    // Si es un PDF (catálogo/menú), extraer su TEXTO para que la IA use el
+    // contenido REAL del cliente (productos, precios) en la web. Cap a 6000
+    // caracteres para controlar tokens.
+    if (/\.pdf($|\?)/i.test(documentUrl)) {
+      try {
+        const filename = documentUrl.split('/').pop()?.split('?')[0] || '';
+        const localPath = join(process.cwd(), 'uploads', 'documents', filename);
+        if (filename && fs.existsSync(localPath)) {
+          // pdf-parse v2: clase PDFParse → .getText()
+          const { PDFParse } = await import('pdf-parse');
+          const buffer = fs.readFileSync(localPath);
+          const parser = new (PDFParse as any)({ data: buffer });
+          const result = await parser.getText();
+          await parser.destroy?.();
+          const text = ((result?.text || '') as string).replace(/\s+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+          if (text) {
+            mergedData.catalogPdfText = text.slice(0, 6000);
+            this.logger.log(`saveDocument project=${projectId}: PDF extraído (${mergedData.catalogPdfText.length} chars).`);
+          }
+        }
+      } catch (e: any) {
+        this.logger.warn(`saveDocument project=${projectId}: no se pudo leer el PDF: ${e?.message}`);
+      }
+    }
 
     return this.prisma.project.update({
       where: { id: projectId },

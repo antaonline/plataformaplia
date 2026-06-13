@@ -69,28 +69,28 @@ export const SITE_INTENTS: SiteIntent[] = [
     plan: 'WEB',
     label: 'Web corporativa',
     description: 'Sitio completo de varias páginas: inicio, nosotros, servicios y contacto. Para proyectar profesionalismo y solidez de tu empresa.',
-    directive: `OBJETIVO: WEB CORPORATIVA multipágina. Páginas: inicio (resumen + propuesta), nosotros (historia/misión/visión/equipo), servicios (detalle), y contacto. Tono profesional y sólido. Proyecta confianza empresarial. Navegación clara entre páginas.`,
+    directive: `OBJETIVO: WEB CORPORATIVA multipágina. ESTRUCTURA: inicio (hero institucional + propuesta de valor + áreas de negocio + indicadores de confianza), nosotros (historia, misión, visión, valores, equipo con fotos), servicios (grid detallado), y contacto (formulario + datos + mapa). Tono PROFESIONAL, sobrio y sólido. Paleta corporativa. Proyecta confianza empresarial y trayectoria. Navegación clara entre páginas.`,
   },
   {
     id: 'services',
     plan: 'WEB',
     label: 'Web de servicios',
     description: 'Detalla tus servicios, tu proceso de trabajo y resultados. Para consultoras, agencias y profesionales que venden servicios.',
-    directive: `OBJETIVO: WEB DE SERVICIOS. Foco en: servicios detallados (qué incluye cada uno), proceso/metodología de trabajo paso a paso, casos/resultados, y contacto/cotización. Tono experto y orientado a resultados. CTA de "Solicitar cotización"/"Agendar consulta".`,
+    directive: `OBJETIVO: WEB DE SERVICIOS. ESTRUCTURA: hero (propuesta clara + CTA cotización), servicios detallados (cada uno: qué incluye, beneficios, para quién), proceso/metodología de trabajo en PASOS numerados (timeline visual), casos de éxito/resultados con métricas, testimonios, y contacto/cotización destacado. Tono EXPERTO y orientado a resultados. CTA "Solicitar cotización"/"Agendar consulta" repetido. El PROCESO de trabajo es protagonista — muéstralo visualmente.`,
   },
   {
     id: 'portfolio',
     plan: 'WEB',
     label: 'Portafolio',
     description: 'Muestra tus mejores trabajos o proyectos con galerías visuales. Ideal para fotógrafos, diseñadores, arquitectos y creativos.',
-    directive: `OBJETIVO: PORTAFOLIO visual. Foco en: showcase de trabajos/proyectos con galerías grandes y de alta calidad, breve sobre mí/nosotros, servicios ofrecidos, y contacto. El TRABAJO es el protagonista — diseño visual, minimalista, deja respirar las imágenes. Tono creativo.`,
+    directive: `OBJETIVO: PORTAFOLIO visual. ESTRUCTURA: hero minimalista e impactante (nombre + especialidad + una imagen potente), GALERÍA DE TRABAJOS protagonista (grid masonry/bento grande, cada proyecto con su imagen a máxima calidad, hover elegante, posible lightbox), proyectos destacados con detalle, breve "sobre mí/nosotros", servicios ofrecidos, y contacto. El TRABAJO VISUAL es el 80% de la página — imágenes GRANDES que respiran, mucho espacio en blanco, tipografía de carácter, minimalista. Tono CREATIVO y sofisticado. NADA de cards pequeñas de texto: aquí mandan las imágenes.`,
   },
   {
     id: 'catalog',
     plan: 'WEB',
     label: 'Catálogo',
     description: 'Organiza y exhibe tus productos o servicios de forma ordenada y atractiva. Para tiendas y negocios con variedad de oferta.',
-    directive: `OBJETIVO: CATÁLOGO de productos/servicios. Foco en: exhibición organizada por categorías, cards de producto con imagen/nombre/precio/descripción, filtros visuales si aplica, y contacto/pedido (WhatsApp). Tono comercial y claro. Fácil de navegar la oferta.`,
+    directive: `OBJETIVO: CATÁLOGO de productos/servicios. ESTRUCTURA: hero breve (qué vendes + CTA "Ver catálogo"/"Pedir por WhatsApp"), CATÁLOGO protagonista organizado POR CATEGORÍAS (cada categoría con su título y un grid de cards de producto: imagen + nombre + precio + descripción corta + botón "Pedir"), barra de categorías/filtros visuales arriba, sección de cómo pedir/envíos, y contacto (WhatsApp prominente). Si hay contenido del PDF del catálogo, usa esos productos y precios REALES. Tono COMERCIAL y claro. Fácil de navegar y pedir. El GRID DE PRODUCTOS es el corazón de la página.`,
   },
 ];
 
@@ -98,7 +98,15 @@ export const SITE_INTENTS: SiteIntent[] = [
 export function getIntentDirective(intentId?: string): string {
   if (!intentId) return '';
   const intent = SITE_INTENTS.find((i) => i.id === intentId);
-  return intent ? `\n=== OBJETIVO DE LA WEB (define estructura y tono) ===\n${intent.directive}` : '';
+  if (!intent) return '';
+  return `\n═══════════════════════════════════════════
+🎯 OBJETIVO DE LA WEB — "${intent.label}" (OBLIGATORIO)
+═══════════════════════════════════════════
+Esta selección DEFINE la estructura, las secciones y el tono. NO uses una estructura
+genérica: adapta TODO a este objetivo específico. Un "${intent.label}" debe verse y
+funcionar distinto a cualquier otro tipo de web.
+${intent.directive}
+═══════════════════════════════════════════`;
 }
 
 /** Intenciones disponibles para un plan (para el frontend). */
