@@ -1,0 +1,72 @@
+/* INMOBILIARIO Y CONSTRUCCIÓN — 3 rubros (inmobiliaria está en base). */
+const CAT = 'Inmobiliario y construcción';
+
+module.exports = [
+  /* Constructora */
+  {
+    slug: 'constructora', category: CAT, label: 'Constructora', brand: 'Cimientos Constructora',
+    fonts: { heading: 'Sora', body: 'Inter' },
+    palette: { primary: '#E0641E', secondary: '#1E2326', accent: '#F0B030', bg: '#F7F6F4', text: '#1E2024' },
+    plan: ['nav', 'heroFullBg', 'stats', 'servicesGrid', 'gallery', 'process', 'testimonials', 'contact', 'footer'],
+    nav: ['Inicio', 'Servicios', 'Proyectos', 'Contacto'], navCta: 'Cotiza tu obra',
+    eyebrow: 'Constructora · Perú', h1: 'Construimos lo que imaginas', sub: 'Edificaciones, remodelaciones y obras a la medida, con calidad garantizada y entrega a tiempo.',
+    cta1: 'Cotiza tu obra', cta2: 'Ver proyectos',
+    stats: [{ n: '150+', l: 'obras entregadas' }, { n: '18 años', l: 'construyendo' }, { n: '100%', l: 'a tiempo' }, { n: '4.9★', l: 'clientes satisfechos' }],
+    servicesEyebrow: 'Servicios', servicesTitle: 'Soluciones de construcción integral',
+    services: [{ t: 'Construcción de viviendas', d: 'Casas y edificios desde cero, llave en mano.' }, { t: 'Remodelaciones', d: 'Renovamos y ampliamos tus espacios.' }, { t: 'Obras comerciales', d: 'Locales, oficinas y proyectos corporativos.' }, { t: 'Acabados', d: 'Pisos, pintura, carpintería y detalles finos.' }, { t: 'Diseño y planos', d: 'Proyecto arquitectónico y de ingeniería.' }, { t: 'Gestión de licencias', d: 'Tramitamos permisos municipales por ti.' }],
+    galleryEyebrow: 'Proyectos', galleryTitle: 'Obras que nos enorgullecen',
+    processTitle: 'Cómo construimos tu proyecto',
+    process: [{ t: 'Cotización', d: 'Evaluamos tu proyecto y te damos un presupuesto claro.' }, { t: 'Diseño', d: 'Definimos planos, materiales y cronograma.' }, { t: 'Construcción', d: 'Ejecutamos con supervisión y calidad.' }, { t: 'Entrega', d: 'Te entregamos tu obra terminada y a tiempo.' }],
+    testiTitle: 'Clientes que ya viven su sueño',
+    testimonials: [{ q: 'Construyeron nuestra casa tal cual la soñamos y dentro del presupuesto.', n: 'Familia Salcedo', r: 'Casa en La Molina' }, { q: 'Remodelaron mi local en tiempo récord. Trabajo impecable.', n: 'Óscar Benites', r: 'Local comercial' }, { q: 'Serios, ordenados y cumplidos. Los recomiendo sin dudar.', n: 'Marisol Cárdenas', r: 'Ampliación de vivienda' }],
+    contactTitle: 'Cotiza tu obra', contactSub: 'Cuéntanos qué quieres construir y te damos un presupuesto sin compromiso.',
+    phone: '+51 1 655 2020', address: 'Av. Los Ingenieros 240, Ate, Lima', hours: 'Lun–Sáb · 8:00 – 18:00', contactCta: 'Solicitar cotización', email: 'obras@cimientos.pe',
+    footerAbout: 'Constructora con 18 años edificando casas, locales y obras a la medida en todo el Perú.',
+    whatsappHref: 'https://wa.me/5116552020',
+    pexels: { hero: 'construction building house site', gallery: ['modern house construction', 'building site workers', 'house exterior new', 'interior finishing work', 'construction crane building', 'residential building modern'] },
+  },
+
+  /* Ferretería / materiales */
+  {
+    slug: 'ferreteria', category: CAT, label: 'Ferretería / Materiales', brand: 'Ferretería El Constructor',
+    fonts: { heading: 'Sora', body: 'Inter' },
+    palette: { primary: '#C8451F', secondary: '#2A1A14', accent: '#F0A030', bg: '#F8F6F3', text: '#221A16' },
+    plan: ['nav', 'heroSplit', 'stats', 'cards', 'servicesGrid', 'testimonials', 'ctaBanner', 'contact', 'footer'],
+    nav: ['Inicio', 'Productos', 'Servicios', 'Contacto'], navCta: 'Pedir por WhatsApp',
+    eyebrow: 'Ferretería · Lima', h1: 'Todo para tu obra, en un solo lugar', sub: 'Materiales de construcción, herramientas y acabados de las mejores marcas, con delivery a tu obra.',
+    cta1: 'Ver productos', cta2: 'Pide por WhatsApp', heroPills: ['Delivery a obra', 'Precios de mayorista'],
+    stats: [{ n: '10,000+', l: 'productos' }, { n: '22 años', l: 'de confianza' }, { n: 'Mismo día', l: 'delivery en Lima' }, { n: '4.8★', l: 'clientes' }],
+    cardsEyebrow: 'Categorías', cardsTitle: 'Nuestra línea de productos', cardsCta: 'Cotizar',
+    cards: [{ t: 'Cemento y agregados', d: 'Cemento, arena, piedra y ladrillos', p: 'Mejor precio' }, { t: 'Herramientas', d: 'Manuales y eléctricas de marca', p: 'Gran variedad' }, { t: 'Fierro y acero', d: 'Varillas, mallas y estructuras', p: 'Por kilo o unidad' }, { t: 'Pinturas', d: 'Látex, esmalte y todo color', p: 'Marcas top' }, { t: 'Gasfitería', d: 'Tuberías, llaves y accesorios', p: 'Stock completo' }, { t: 'Electricidad', d: 'Cables, llaves y luminarias', p: 'Todo lo que necesitas' }],
+    servicesEyebrow: 'Servicios', servicesTitle: 'Más que una ferretería',
+    services: [{ t: 'Delivery a obra', d: 'Llevamos tu pedido el mismo día en Lima.' }, { t: 'Precios de mayorista', d: 'Descuentos por volumen para constructores.' }, { t: 'Asesoría técnica', d: 'Te ayudamos a elegir el material correcto.' }],
+    ctaTitle: '¿Necesitas materiales hoy?', ctaSub: 'Pídenos por WhatsApp y coordinamos el delivery a tu obra.',
+    contactTitle: 'Haz tu pedido', contactSub: 'Cotiza tus materiales y te los llevamos donde los necesites.',
+    phone: '+51 945 660 220', address: 'Av. Túpac Amaru 1820, Comas, Lima', hours: 'Lun–Sáb · 7:00 – 19:00', contactCta: 'Pedir cotización', email: 'ventas@elconstructor.pe',
+    footerAbout: 'Ferretería con 22 años surtiendo obras en Lima. Materiales, herramientas y delivery el mismo día.',
+    whatsappHref: 'https://wa.me/51945660220',
+    pexels: { hero: 'hardware store tools construction', cards: ['cement bags construction', 'power tools hardware', 'steel rebar', 'paint cans colorful', 'plumbing pipes', 'electrical supplies'] },
+  },
+
+  /* Diseño de interiores */
+  {
+    slug: 'interiores', category: CAT, label: 'Diseño de interiores', brand: 'Casa Atelier',
+    fonts: { heading: 'Cormorant Garamond', body: 'Jost' },
+    palette: { primary: '#8C7350', secondary: '#2A2419', accent: '#B8A07C', bg: '#F8F5F0', text: '#2A251E' },
+    plan: ['nav', 'heroMinimal', 'stats', 'gallery', 'servicesGrid', 'process', 'contact', 'footer'],
+    nav: ['Inicio', 'Proyectos', 'Servicios', 'Contacto'], navCta: 'Conversemos',
+    eyebrow: 'Interiorismo', h1: 'Espacios que cuentan tu historia', sub: 'Diseño de interiores a medida que combina estética, funcionalidad y la calidez de un hogar bien pensado.',
+    cta1: 'Ver proyectos', cta2: 'Conversemos',
+    stats: [{ n: '120+', l: 'espacios diseñados' }, { n: '10 años', l: 'de trayectoria' }, { n: '100%', l: 'personalizado' }, { n: '4.9★', l: 'clientes' }],
+    galleryEyebrow: 'Portafolio', galleryTitle: 'Ambientes que enamoran',
+    servicesEyebrow: 'Servicios', servicesTitle: 'Diseñamos cada detalle',
+    services: [{ t: 'Diseño residencial', d: 'Hogares con estilo, función y personalidad.' }, { t: 'Diseño comercial', d: 'Locales y oficinas que transmiten tu marca.' }, { t: 'Home staging', d: 'Preparamos tu inmueble para venderlo mejor.' }, { t: 'Asesoría exprés', d: 'Orientación de color, mobiliario y deco.' }],
+    processTitle: 'Nuestro proceso creativo',
+    process: [{ t: 'Inspiración', d: 'Conocemos tu estilo y necesidades.' }, { t: 'Propuesta', d: 'Diseñamos con moodboards y render 3D.' }, { t: 'Implementación', d: 'Coordinamos mobiliario y ejecución.' }, { t: 'Entrega', d: 'Disfrutas un espacio listo para vivir.' }],
+    contactTitle: 'Conversemos sobre tu espacio', contactSub: 'Cuéntanos qué ambiente sueñas y lo hacemos realidad.',
+    phone: '+51 987 220 660', address: 'Calle Tutumo 180, Surco, Lima', hours: 'Lun–Vie · 10:00 – 18:00', contactCta: 'Iniciar proyecto', email: 'hola@casaatelier.pe',
+    footerAbout: 'Estudio de diseño de interiores en Lima. Creamos espacios con estética, función y calidez.',
+    whatsappHref: 'https://wa.me/51987220660',
+    pexels: { hero: 'interior design living room elegant', gallery: ['interior design bedroom', 'modern kitchen design', 'living room cozy', 'office interior design', 'dining room elegant', 'bathroom luxury design'] },
+  },
+];

@@ -10,6 +10,8 @@
  *                   (React). En HTML el generador lo omite o lo simplifica.
  */
 
+import { pickFrom } from './_seed';
+
 export interface HeroArchetype {
   id: string;
   name: string;
@@ -178,30 +180,60 @@ export const HERO_ARCHETYPES: HeroArchetype[] = [
   },
 ];
 
-/** Elige un hero según el vibe/sector y si necesitamos versión HTML-safe. */
+/** Devuelve el CONJUNTO de heros compatibles con el vibe/rubro (varios, no uno). */
+function compatibleHeroes(vibe?: string, brief?: string): string[] {
+  const hay = `${vibe || ''} ${brief || ''}`.toLowerCase();
+  const match = (kw: string[]) => kw.some((k) => hay.includes(k));
+  const pool = new Set<string>();
+
+  if (match(['restaur', 'cafe', 'hotel', 'bar', 'gastron', 'comida', 'polleria', 'evento'])) {
+    ['fullbleed-overlay', 'video-background', 'noise-grain-gradient', 'gallery-scroll'].forEach((x) => pool.add(x));
+  }
+  if (match(['tech', 'software', 'saas', 'app', 'startup', 'digital', 'ai', 'plataforma', 'soporte', 'agencia digital'])) {
+    ['gradient-aurora', 'spotlight-glow', 'grid-dot-pattern', 'badge-pill-centered', 'meteors-beams', 'product-mockup'].forEach((x) => pool.add(x));
+  }
+  if (match(['empresa', 'corporat', 'b2b', 'consultor', 'servicio', 'legal', 'juridic', 'contab', 'ingenier', 'industri', 'logist', 'transport'])) {
+    ['enterprise-dual-cta', 'split-image-text', 'minimal-clean', 'glassmorphism-trust', 'badge-pill-centered'].forEach((x) => pool.add(x));
+  }
+  if (match(['foto', 'portfolio', 'inmobil', 'galer', 'lifestyle', 'arquitect', 'interior'])) {
+    ['gallery-scroll', 'minimal-clean', 'fullbleed-overlay', 'split-image-text', 'noise-grain-gradient'].forEach((x) => pool.add(x));
+  }
+  if (match(['fintech', 'finanz', 'salud', 'clinic', 'dental', 'segur', 'laboratorio', 'fisio'])) {
+    ['glassmorphism-trust', 'split-image-text', 'badge-pill-centered', 'enterprise-dual-cta'].forEach((x) => pool.add(x));
+  }
+  if (match(['producto', 'tienda', 'ecommerce', 'shop', 'retail', 'boutique', 'comercio', 'petshop'])) {
+    ['product-mockup', 'split-image-text', 'gallery-scroll', 'badge-pill-centered'].forEach((x) => pool.add(x));
+  }
+  if (match(['creativ', 'agencia', 'estudio', 'musica', 'moda', 'arte', 'belleza', 'barber'])) {
+    ['gradient-bar-side', 'text-animation', 'shape-geometric', 'gallery-scroll', 'meteors-beams'].forEach((x) => pool.add(x));
+  }
+  if (match(['profesional', 'minimal', 'abogad', 'coach', 'educac', 'colegio', 'academ', 'idioma'])) {
+    ['minimal-clean', 'enterprise-dual-cta', 'split-image-text', 'badge-pill-centered', 'text-animation'].forEach((x) => pool.add(x));
+  }
+
+  // Sin match suficiente → variedad amplia por defecto.
+  if (pool.size < 2) {
+    return ['split-image-text', 'badge-pill-centered', 'fullbleed-overlay', 'gradient-aurora', 'shape-geometric', 'gallery-scroll'];
+  }
+  return [...pool];
+}
+
+/**
+ * Elige un hero ROTANDO entre los compatibles (HTML-safe si htmlOnly).
+ * @param seed  texto estable (ej. nombre de marca) para variar entre proyectos.
+ */
 export function pickHeroArchetype(
   vibe: string | undefined,
   brief: string | undefined,
   htmlOnly: boolean,
+  seed?: string,
 ): HeroArchetype {
-  const hay = `${vibe || ''} ${brief || ''}`.toLowerCase();
-  const pool = htmlOnly ? HERO_ARCHETYPES.filter((h) => h.htmlSafe) : HERO_ARCHETYPES;
-  const match = (kw: string[]) => kw.some((k) => hay.includes(k));
-
-  let id = '';
-  if (match(['restaur', 'cafe', 'hotel', 'bar', 'gastron', 'comida'])) id = 'fullbleed-overlay';
-  else if (match(['cafe gourmet', 'editorial', 'premium', 'artesan'])) id = 'noise-grain-gradient';
-  else if (match(['tech', 'software', 'saas', 'app', 'startup', 'digital', 'ai', 'plataforma'])) id = 'gradient-aurora';
-  else if (match(['empresa', 'corporat', 'b2b', 'consultor', 'servicio', 'legal', 'contab'])) id = 'enterprise-dual-cta';
-  else if (match(['foto', 'portfolio', 'inmobil', 'galer', 'lifestyle', 'arquitect'])) id = 'gallery-scroll';
-  else if (match(['fintech', 'salud', 'clinic', 'dental', 'segur'])) id = 'glassmorphism-trust';
-  else if (match(['producto', 'tienda', 'ecommerce', 'shop'])) id = 'product-mockup';
-  else if (match(['creativ', 'agencia', 'estudio', 'musica', 'moda', 'arte'])) id = 'gradient-bar-side';
-  else if (match(['profesional', 'minimal', 'abogad', 'coach'])) id = 'minimal-clean';
-  else id = 'split-image-text';
-
-  const found = pool.find((h) => h.id === id);
-  if (found) return found;
-  // Fallback a uno HTML-safe sólido
-  return pool.find((h) => h.id === 'fullbleed-overlay') || pool[0];
+  const safe = htmlOnly ? new Set(HERO_ARCHETYPES.filter((h) => h.htmlSafe).map((h) => h.id)) : null;
+  let ids = compatibleHeroes(vibe, brief);
+  if (safe) ids = ids.filter((id) => safe.has(id));
+  if (!ids.length) ids = HERO_ARCHETYPES.filter((h) => !htmlOnly || h.htmlSafe).map((h) => h.id);
+  const chosen = pickFrom(ids, seed);
+  return HERO_ARCHETYPES.find((h) => h.id === chosen)
+    || HERO_ARCHETYPES.find((h) => h.id === 'fullbleed-overlay')
+    || HERO_ARCHETYPES[0];
 }

@@ -846,6 +846,46 @@ p{color:#cbd5e1;font-size:1.05rem;line-height:1.7;margin-bottom:28px}
     });
   }
 
+  /**
+   * Proyectos REALES marcados como showcase (isShowcase) para la galería pública
+   * plia.pe/ejemplos. Se mezclan en el frontend con los demos estáticos.
+   * Usa $queryRaw (no depende de regenerar el cliente Prisma) y es defensivo:
+   * si la columna/feature aún no está desplegada, devuelve [].
+   */
+  async getShowcase(): Promise<Array<{
+    slug: string; brand: string; label: string; category: string; url: string; thumb: string; accent: string;
+  }>> {
+    try {
+      const rows = await this.prisma.$queryRawUnsafe<
+        Array<{ id: number; onboardingData: string | null; showcaseSector: string | null }>
+      >(
+        `SELECT id, onboardingData, showcaseSector FROM Project
+         WHERE isShowcase = true AND status = 'DELIVERED'
+         ORDER BY updatedAt DESC LIMIT 100`,
+      );
+      return rows
+        .map((r) => {
+          let o: any = {};
+          try { o = JSON.parse(r.onboardingData || '{}'); } catch { /* ignore */ }
+          const domain = String(o.publicDomain || '').toLowerCase();
+          const brand = o.businessName || o.brandName || 'Proyecto';
+          const thumb = Array.isArray(o.images) && typeof o.images[0] === 'string' ? o.images[0] : '';
+          return {
+            slug: `p-${r.id}`,
+            brand,
+            label: brand,
+            category: r.showcaseSector || 'Destacados',
+            url: domain ? `https://${domain}` : '',
+            thumb,
+            accent: '#111827',
+          };
+        })
+        .filter((x) => x.url && x.thumb);
+    } catch {
+      return [];
+    }
+  }
+
   async findByUser(userId: number) {
     return this.prisma.project.findFirst({
       where: { userId },

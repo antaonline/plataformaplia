@@ -123,6 +123,10 @@ model Project {
   isTrial               Boolean              @default(false)
   trialEndsAt           DateTime?
   trialStatus           String?
+  // isShowcase: el proyecto se exhibe públicamente en plia.pe/ejemplos.
+  // showcaseSector: etiqueta de rubro para agrupar/filtrar en la galería.
+  isShowcase            Boolean              @default(false)
+  showcaseSector        String?
   // ── Dominio propio del cliente (vinculado vía LiteSpeed vhAlias) ──
   // Cuando el cliente conecta su dominio propio (ej. "mi-marca.com"), se
   // configura como vhAlias del vhost del subdominio plia.pe correspondiente

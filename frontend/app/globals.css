@@ -158,6 +158,15 @@ header.bg-transparent .hablarsoporte, header.bg-customheader .hablarsoporte {
   color: hsl(var(--primary-foreground));
 }
 
+/* Header del BLOG: tema claro sólido con texto oscuro legible. */
+header.bg-blogheader {
+  background-color: rgba(255, 255, 255, 0.88);
+  border: 1px solid hsl(var(--border));
+}
+header.bg-blogheader .hablarsoporte {
+  color: hsl(var(--foreground));
+}
+
 
 html.lenis {
   height: auto;

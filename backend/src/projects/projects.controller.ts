@@ -55,6 +55,13 @@ export class ProjectsController {
     return this.projectsService.findByUser(req.user.id);
   }
 
+  // PÚBLICO: proyectos marcados como showcase para la galería plia.pe/ejemplos.
+  // Debe ir ANTES de @Get(':id') para no ser capturado como un id.
+  @Get('showcase')
+  async showcase() {
+    return this.projectsService.getShowcase();
+  }
+
   @UseGuards(JwtAuthGuard)
   @Get(':id')
   async findOne(

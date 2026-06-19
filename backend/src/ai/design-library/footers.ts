@@ -9,6 +9,8 @@
  * según el vibe del proyecto (o aleatorio para variedad).
  */
 
+import { pickFrom } from './_seed';
+
 export interface FooterArchetype {
   id: string;
   name: string;
@@ -67,30 +69,64 @@ export const FOOTER_ARCHETYPES: FooterArchetype[] = [
     bestFor: 'negocios orientados a conversión, servicios, reservas',
     pattern: `Footer precedido por un BANNER CTA full-width: fondo con gradiente o color accent, titular grande ("¿Listo para empezar?"/"Visítanos hoy"), subtítulo y botón grande contrastante. Debajo, el footer real multi-columna con marca, links, redes y copyright sobre fondo oscuro. El banner cierra la venta antes del footer. Alto impacto de conversión.`,
   },
+  {
+    id: 'bento-footer',
+    name: 'Bento Grid Footer',
+    bestFor: 'tecnología, productos, marcas modernas, SaaS',
+    pattern: `Footer en BENTO GRID: una retícula de tarjetas redondeadas (rounded-2xl/3xl, gap-3) de distintos tamaños sobre fondo oscuro. Una tarjeta grande con marca + claim, una con mapa/ubicación, una con newsletter (input + botón), una con redes (íconos grandes), una con links rápidos. Cada tarjeta con su propio fondo (color-mix sutil) y hover. Moderno, modular, tipo dashboard.`,
+  },
+  {
+    id: 'newsletter-spotlight',
+    name: 'Newsletter Spotlight Footer',
+    bestFor: 'medios, e-commerce, comunidades, marcas que captan leads',
+    pattern: `Footer cuyo PROTAGONISTA es la suscripción: bloque superior centrado con titular grande ("Únete a la comunidad"), input + botón pill en una fila ancha, y nota de privacidad pequeña. Debajo, fila inferior con marca a la izquierda, columnas de links compactas al centro y redes a la derecha, separadas por un borde fino. Fondo oscuro con un spotlight radial sutil detrás del titular.`,
+  },
+  {
+    id: 'split-editorial',
+    name: 'Split Editorial Footer',
+    bestFor: 'estudios, arquitectura, moda, marcas editoriales premium',
+    pattern: `Footer EDITORIAL a dos mitades: izquierda con un titular tipográfico grande tipo manifiesto ("Construyamos algo memorable") y un botón de contacto; derecha con columnas de links bien espaciadas en tipografía serif/elegante. Línea divisoria vertical fina entre ambas. Abajo, una franja con copyright, ubicación y redes en texto pequeño tracking-wide. Mucho aire, sofisticado.`,
+  },
 ];
 
-/** Elige un arquetipo de footer según el vibe del negocio (o aleatorio). */
-export function pickFooterArchetype(vibe?: string, sector?: string): FooterArchetype {
+/**
+ * Devuelve el CONJUNTO de footers compatibles con el vibe/rubro (no uno solo).
+ * Así dos negocios del mismo rubro pueden recibir footers distintos.
+ */
+function compatibleFooters(vibe?: string, sector?: string): string[] {
   const hay = `${vibe || ''} ${sector || ''}`.toLowerCase();
   const match = (kw: string[]) => kw.some((k) => hay.includes(k));
+  const pool = new Set<string>();
 
-  if (match(['tech', 'software', 'startup', 'saas', 'app', 'digital'])) {
-    return byId('glassmorphism-glow');
+  if (match(['tech', 'software', 'startup', 'saas', 'app', 'digital', 'soporte'])) {
+    ['glassmorphism-glow', 'bento-footer', 'animated-underline', 'minimal-clean', 'newsletter-spotlight'].forEach((x) => pool.add(x));
   }
-  if (match(['empresa', 'corporat', 'consultor', 'b2b', 'legal', 'institucional', 'inmobil'])) {
-    return byId('multi-column-corporate');
+  if (match(['empresa', 'corporat', 'consultor', 'b2b', 'legal', 'juridic', 'institucional', 'inmobil', 'contab', 'finanz', 'seguro', 'ingenier'])) {
+    ['multi-column-corporate', 'minimal-clean', 'cta-banner-footer', 'split-editorial'].forEach((x) => pool.add(x));
   }
-  if (match(['cafe', 'restaur', 'tienda', 'local', 'food', 'bar', 'panader'])) {
-    return byId('gradient-social');
+  if (match(['cafe', 'restaur', 'tienda', 'local', 'food', 'bar', 'panader', 'polleria', 'comercio', 'retail'])) {
+    ['gradient-social', 'large-name', 'cta-banner-footer', 'stacked-circular', 'newsletter-spotlight'].forEach((x) => pool.add(x));
   }
-  if (match(['creativ', 'agencia', 'estudio', 'portfolio', 'diseñ', 'arte', 'foto'])) {
-    return byId('large-name');
+  if (match(['creativ', 'agencia', 'estudio', 'portfolio', 'diseñ', 'arte', 'foto', 'arquitect', 'moda', 'boutique', 'joyer'])) {
+    ['large-name', 'animated-underline', 'stacked-circular', 'split-editorial', 'minimal-clean'].forEach((x) => pool.add(x));
   }
-  if (match(['spa', 'bienestar', 'yoga', 'salud', 'belleza'])) {
-    return byId('glassmorphism-glow');
+  if (match(['spa', 'bienestar', 'yoga', 'salud', 'belleza', 'estetic', 'dental', 'fitness', 'gimnasio'])) {
+    ['glassmorphism-glow', 'gradient-social', 'stacked-circular', 'cta-banner-footer'].forEach((x) => pool.add(x));
   }
-  // Default: variedad — elige uno con buena conversión
-  return byId('cta-banner-footer');
+
+  // Si no hubo match (o para garantizar variedad), usa TODOS los arquetipos.
+  if (pool.size < 2) return FOOTER_ARCHETYPES.map((f) => f.id);
+  return [...pool];
+}
+
+/**
+ * Elige un arquetipo de footer ROTANDO entre los compatibles.
+ * @param seed  texto estable (ej. nombre de marca) → mismo proyecto = mismo footer,
+ *              distintos proyectos del mismo rubro = footers distintos.
+ *              Si se omite, elige aleatorio (máxima variedad).
+ */
+export function pickFooterArchetype(vibe?: string, sector?: string, seed?: string): FooterArchetype {
+  return byId(pickFrom(compatibleFooters(vibe, sector), seed));
 }
 
 function byId(id: string): FooterArchetype {

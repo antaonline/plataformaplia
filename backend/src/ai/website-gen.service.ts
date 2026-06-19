@@ -7,6 +7,7 @@ import { pickFooterArchetype } from './design-library/footers';
 import { pickHeroArchetype } from './design-library/heroes';
 import { pickPricingArchetype } from './design-library/pricing';
 import { pickTestimonialArchetype } from './design-library/testimonials';
+import { pickReferenceSnippets } from './design-library/snippets-21st';
 
 export type WebMode = 'LANDING' | 'WEB';
 
@@ -369,10 +370,13 @@ if(document.readyState!=='loading')run();else document.addEventListener('DOMCont
         ? plan.sections.map((s, i) => `${i + 1}. [${s.id}] ${s.title}: ${s.brief}`).join('\n')
         : 'Decide las secciones óptimas para vender este negocio según el brief.';
 
-      // Elegir arquetipos de nuestra biblioteca según el vibe del negocio.
+      // Elegir arquetipos de nuestra biblioteca ROTANDO entre los compatibles.
+      // seed estable por proyecto (brief) → reproducible, pero distinto entre
+      // negocios del mismo rubro (con sal por tipo para descorrelacionar).
       // htmlOnly=true → solo heros ligeros (CSS), nada de WebGL/three.js en landings.
-      const footer = pickFooterArchetype(ds.vibe, brief);
-      const hero = pickHeroArchetype(ds.vibe, brief, true);
+      const seed = (ds.palette?.primary || '') + '|' + brief.slice(0, 200);
+      const footer = pickFooterArchetype(ds.vibe, brief, seed + '#footer');
+      const hero = pickHeroArchetype(ds.vibe, brief, true, seed + '#hero');
       const heroGuide = `\nHERO — usa este estilo de nuestra biblioteca (adáptalo al negocio, código fresco, SOLO CSS/Tailwind, sin WebGL):\n"${hero.name}": ${hero.pattern}`;
       const footerGuide = `\nFOOTER — usa este estilo de nuestra biblioteca (adáptalo al negocio, código fresco):\n"${footer.name}": ${footer.pattern}`;
 
@@ -380,13 +384,20 @@ if(document.readyState!=='loading')run();else document.addEventListener('DOMCont
       const sectionIds = (plan.sections || []).map((s) => (s.id || '').toLowerCase()).join(' ');
       let extraGuides = '';
       if (/precio|pricing|plan|tarifa|membres/.test(sectionIds + ' ' + brief.toLowerCase())) {
-        const pr = pickPricingArchetype(ds.vibe, brief);
+        const pr = pickPricingArchetype(ds.vibe, brief, seed + '#pricing');
         extraGuides += `\nPRECIOS — si generas sección de precios, usa este estilo:\n"${pr.name}": ${pr.pattern}`;
       }
       if (/testimon|reseñ|review|opinion/.test(sectionIds + ' ' + brief.toLowerCase())) {
-        const te = pickTestimonialArchetype(ds.vibe, brief);
+        const te = pickTestimonialArchetype(ds.vibe, brief, seed + '#testimonial');
         extraGuides += `\nTESTIMONIOS — usa este estilo:\n"${te.name}": ${te.pattern}`;
       }
+
+      // REFERENCIA 21st: un trozo de CÓDIGO HTML real (destilado de 21st.dev) como
+      // ejemplo concreto del nivel/estructura esperada. Claude lo adapta al negocio.
+      const refSnips = pickReferenceSnippets(ds.vibe, brief, seed + '#snip', 2);
+      const refGuide = refSnips.length
+        ? `\n\nREFERENCIAS DE CÓDIGO (patrones reales de nuestra biblioteca 21st — adáptalos al negocio con su contenido/paleta REAL, NO los copies literal; reemplaza IMG_URL por una imagen disponible):\n${refSnips.map((r) => `<!-- patrón "${r.id}" (${r.type}) -->\n${r.html}`).join('\n\n')}`
+        : '';
 
       const system = `${STATIC_RULES}
 
@@ -407,7 +418,7 @@ ANTI-SOLAPAMIENTO (CRÍTICO): flujo normal de documento, secciones apiladas. PRO
 
 GENERA LA PÁGINA COMPLETA Y RICA: TODAS las secciones del plan, con detalle premium. Tienes presupuesto amplio de tokens — NO te limites, pero DEBE terminar con </body></html>. Cada sección rica, contenido real, diseño nivel Awwwards. nav, hero, todas las secciones del plan, contacto y footer.`;
 
-      const user = `Brief del negocio:\n${brief}\n\nGenera la LANDING COMPLETA Y RICA (documento HTML entero: <!DOCTYPE html> hasta </html>).\nSecciones (en orden, adapta al brief, hazlas todas ricas y detalladas):\n${sectionsGuide}\n${heroGuide}\n${footerGuide}${extraGuides}\n\nDebe terminar COMPLETA con </body></html>. Diseño nivel Awwwards, español real, sin solapamientos.${hasLogo ? ' La primera imagen adjunta es el logo.' : ''}`;
+      const user = `Brief del negocio:\n${brief}\n\nGenera la LANDING COMPLETA Y RICA (documento HTML entero: <!DOCTYPE html> hasta </html>).\nSecciones (en orden, adapta al brief, hazlas todas ricas y detalladas):\n${sectionsGuide}\n${heroGuide}\n${footerGuide}${extraGuides}${refGuide}\n\nDebe terminar COMPLETA con </body></html>. Diseño nivel Awwwards, español real, sin solapamientos.${hasLogo ? ' La primera imagen adjunta es el logo.' : ''}`;
 
       let html = await this.completeClaudeWithRetry(
         system,

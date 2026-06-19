@@ -10,6 +10,8 @@
     "prisma:generate": "prisma generate",
     "prisma:verify-client": "node ./scripts/verify-prisma-client.js",
     "ai:diagnose": "ts-node -r tsconfig-paths/register ./scripts/diagnose-ai-generation.ts",
+    "demos:build": "node ./scripts/demos/build.js",
+    "demos:deploy": "ts-node -r tsconfig-paths/register ./scripts/deploy-demos.ts",
     "deploy:vps": "bash ./scripts/deploy-vps-backend.sh",
     "postinstall": "npm run prisma:generate",
     "build": "npm run clean && npm run prisma:generate && nest build",

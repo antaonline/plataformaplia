@@ -4,6 +4,8 @@
  * componentes descargados de 21st.dev.
  */
 
+import { pickFrom } from './_seed';
+
 export interface TestimonialArchetype {
   id: string;
   name: string;
@@ -50,13 +52,29 @@ export const TESTIMONIAL_ARCHETYPES: TestimonialArchetype[] = [
   },
 ];
 
-export function pickTestimonialArchetype(vibe?: string, brief?: string): TestimonialArchetype {
+/** Conjunto de testimonios compatibles con el vibe/rubro (varios, no uno). */
+function compatibleTestimonials(vibe?: string, brief?: string): string[] {
   const hay = `${vibe || ''} ${brief || ''}`.toLowerCase();
   const has = (kw: string[]) => kw.some((k) => hay.includes(k));
-  let id = 'cards-grid';
-  if (has(['premium', 'elegante', 'lujo', 'exclusiv'])) id = 'glass-swiper';
-  else if (has(['marca personal', 'coach', 'caso de exito', 'consultor'])) id = 'single-featured';
-  else if (has(['startup', 'saas', 'tech', 'traccion', 'muchos'])) id = 'masonry-columns';
-  else if (has(['rating', 'reseñas', 'confianza', 'numeros'])) id = 'with-stats-bar';
-  return TESTIMONIAL_ARCHETYPES.find((t) => t.id === id) || TESTIMONIAL_ARCHETYPES[0];
+  const pool = new Set<string>();
+  if (has(['premium', 'elegante', 'lujo', 'exclusiv', 'spa', 'estetic', 'joyer', 'hotel'])) {
+    ['glass-swiper', 'single-featured', 'cards-grid'].forEach((x) => pool.add(x));
+  }
+  if (has(['marca personal', 'coach', 'caso de exito', 'consultor', 'abogad', 'juridic'])) {
+    ['single-featured', 'cards-grid', 'with-stats-bar'].forEach((x) => pool.add(x));
+  }
+  if (has(['startup', 'saas', 'tech', 'traccion', 'muchos', 'software', 'app'])) {
+    ['masonry-columns', 'cards-grid', 'carousel-slider', 'with-stats-bar'].forEach((x) => pool.add(x));
+  }
+  if (has(['rating', 'reseñas', 'confianza', 'numeros', 'salud', 'clinic', 'restaur', 'tienda'])) {
+    ['with-stats-bar', 'cards-grid', 'carousel-slider'].forEach((x) => pool.add(x));
+  }
+  if (pool.size < 2) return TESTIMONIAL_ARCHETYPES.map((t) => t.id);
+  return [...pool];
+}
+
+/** Elige testimonios rotando entre los compatibles (seed = marca para variar). */
+export function pickTestimonialArchetype(vibe?: string, brief?: string, seed?: string): TestimonialArchetype {
+  const chosen = pickFrom(compatibleTestimonials(vibe, brief), seed);
+  return TESTIMONIAL_ARCHETYPES.find((t) => t.id === chosen) || TESTIMONIAL_ARCHETYPES[0];
 }

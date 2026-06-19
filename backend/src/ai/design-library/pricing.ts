@@ -5,6 +5,8 @@
  * generador inyecta para que Claude genere precios frescos adaptados.
  */
 
+import { pickFrom } from './_seed';
+
 export interface PricingArchetype {
   id: string;
   name: string;
@@ -51,14 +53,32 @@ export const PRICING_ARCHETYPES: PricingArchetype[] = [
   },
 ];
 
-export function pickPricingArchetype(vibe?: string, brief?: string): PricingArchetype {
+/** Conjunto de pricings compatibles con el vibe/rubro (varios, no uno). */
+function compatiblePricing(vibe?: string, brief?: string): string[] {
   const hay = `${vibe || ''} ${brief || ''}`.toLowerCase();
   const has = (kw: string[]) => kw.some((k) => hay.includes(k));
-  let id = 'three-tier-highlight';
-  if (has(['b2b', 'empresa', 'software', 'comparar', 'features'])) id = 'pricing-table-comparison';
-  else if (has(['suscrip', 'membres', 'mensual', 'anual', 'plan'])) id = 'toggle-monthly-annual';
-  else if (has(['premium', 'elegante', 'lujo', 'exclusiv'])) id = 'glassy-animated';
-  else if (has(['startup', 'tech', 'moderno'])) id = 'bento-pricing';
-  else if (has(['unico', 'lifetime', 'producto'])) id = 'single-pricing-card';
-  return PRICING_ARCHETYPES.find((p) => p.id === id) || PRICING_ARCHETYPES[0];
+  const pool = new Set<string>();
+  if (has(['b2b', 'empresa', 'software', 'comparar', 'features', 'saas'])) {
+    ['pricing-table-comparison', 'three-tier-highlight', 'bento-pricing'].forEach((x) => pool.add(x));
+  }
+  if (has(['suscrip', 'membres', 'mensual', 'anual', 'plan', 'gimnasio', 'fitness', 'idioma'])) {
+    ['toggle-monthly-annual', 'three-tier-highlight', 'glassy-animated'].forEach((x) => pool.add(x));
+  }
+  if (has(['premium', 'elegante', 'lujo', 'exclusiv', 'spa', 'estetic', 'belleza'])) {
+    ['glassy-animated', 'three-tier-highlight', 'single-pricing-card'].forEach((x) => pool.add(x));
+  }
+  if (has(['startup', 'tech', 'moderno', 'app', 'digital'])) {
+    ['bento-pricing', 'three-tier-highlight', 'glassy-animated', 'toggle-monthly-annual'].forEach((x) => pool.add(x));
+  }
+  if (has(['unico', 'lifetime', 'producto', 'curso'])) {
+    ['single-pricing-card', 'three-tier-highlight'].forEach((x) => pool.add(x));
+  }
+  if (pool.size < 2) return PRICING_ARCHETYPES.map((p) => p.id);
+  return [...pool];
+}
+
+/** Elige un pricing rotando entre los compatibles (seed = marca para variar). */
+export function pickPricingArchetype(vibe?: string, brief?: string, seed?: string): PricingArchetype {
+  const chosen = pickFrom(compatiblePricing(vibe, brief), seed);
+  return PRICING_ARCHETYPES.find((p) => p.id === chosen) || PRICING_ARCHETYPES[0];
 }

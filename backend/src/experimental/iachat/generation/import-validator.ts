@@ -230,6 +230,8 @@ export function validateImports(
         // viven en el scaffold base por symlink, no en allFiles.
         if (
           imp.importSource.startsWith('@/components/ui/') ||
+          // bloques premium 21st pre-instalados en el scaffold (Lovable-style).
+          imp.importSource.startsWith('@/components/blocks/') ||
           imp.importSource === '@/hooks/use-toast' ||
           imp.importSource === '@/hooks/use-mobile'
         ) {

@@ -7,6 +7,8 @@
  * y AI_RULES.md adjunto.
  */
 
+import { installedBlocksPrompt } from '../generation/installed-blocks';
+
 const PLIA_ROLE_BLOCK = `<role>
 Eres el Agente Constructor de PLIA Studio, una IA de elite especializada en la creacion de aplicaciones web premium para CLIENTES externos.
 Tu mision es construir apps web React + TypeScript de altisima fidelidad que reflejen la identidad unica de cada negocio.
@@ -115,6 +117,9 @@ export function constructSystemPrompt({
     CODE_QUALITY_BLOCK,
     RESPONSE_FORMAT_BLOCK,
   ].join('\n\n');
+
+  // Bloques premium 21st pre-instalados (si los hay) — el LLM puede importarlos.
+  prompt += installedBlocksPrompt();
 
   const rules = aiRules || DEFAULT_AI_RULES;
   prompt += `\n\n<ai_rules>\n${rules}\n</ai_rules>`;

@@ -4,6 +4,7 @@ import Script from "next/script";
 import "./globals.css";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
+import MetaPixel from "@/components/MetaPixel";
 
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://plia.pe';
@@ -15,16 +16,16 @@ export const metadata: Metadata = {
     template: "%s • PLIA",
   },
   description:
-    "PLIA crea tu página web profesional con IA en minutos. Hosting, dominio, diseño y soporte 24/7 — todo incluido. Pensado para emprendedores peruanos.",
+    "PLIA crea tu página web profesional en 24 horas. Dominio, hosting, diseño y soporte — todo incluido. La plataforma web para emprendedores peruanos.",
   keywords: [
     "PLIA",
     "Tu Web Fácil",
     "página web Peru",
+    "diseño de páginas web Perú",
     "hosting Peru",
     "crear página web",
     "diseño web Lima",
-    "página web con IA",
-    "página web sin programar",
+    "página web profesional",
     "alojamiento web Peru",
     "dominio .pe",
     "web emprendedor",
@@ -32,7 +33,7 @@ export const metadata: Metadata = {
     "ecommerce Lima",
     "página web pyme",
     "hosting WordPress Peru",
-    "página web profesional",
+    "páginas web baratas Perú",
   ],
   authors: [{ name: "PLIA", url: siteUrl }],
   creator: "PLIA",
@@ -55,7 +56,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "PLIA • Tu Web Fácil — Páginas web y hosting en Perú",
     description:
-      "Crea tu página web con IA en minutos. Hosting, dominio y soporte 24/7 — todo incluido. Pensado para emprendedores peruanos.",
+      "Tu página web profesional lista en 24 horas. Dominio, hosting y soporte incluidos. La plataforma para emprendedores peruanos.",
     url: siteUrl,
     siteName: "PLIA",
     images: [
@@ -73,7 +74,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "PLIA • Tu Web Fácil — Páginas web y hosting en Perú",
     description:
-      "Crea tu página web con IA en minutos. Hosting, dominio y soporte 24/7 — todo incluido.",
+      "Tu página web lista en 24 horas. Dominio, hosting y soporte incluidos — todo en una sola plataforma.",
     images: ["/pliaportadaurl.png"],
     creator: "@plia_pe",
   },
@@ -107,7 +108,8 @@ export default function RootLayout({
     logo: `${siteUrl}/iconblack-plia-cuadrado.svg`,
     image: `${siteUrl}/pliaportadaurl.png`,
     description:
-      "PLIA es la plataforma peruana que permite crear páginas web con inteligencia artificial. Incluye hosting, dominio, diseño y soporte 24/7.",
+      "PLIA es la plataforma peruana para crear tu página web profesional. Incluye dominio, hosting, diseño y soporte — tu web lista en 24 horas, todo incluido.",
+    areaServed: { "@type": "Country", name: "Perú" },
     address: {
       "@type": "PostalAddress",
       addressLocality: "Lima",
@@ -116,10 +118,12 @@ export default function RootLayout({
     contactPoint: {
       "@type": "ContactPoint",
       contactType: "customer service",
-      email: "soporte@plia.pe",
+      telephone: "+51958617185",
+      email: "hola@plia.pe",
       availableLanguage: ["es"],
       areaServed: "PE",
     },
+    // sameAs: agregar aquí las URLs de redes oficiales cuando estén confirmadas.
     sameAs: [],
   };
   const websiteJsonLd = {
@@ -172,6 +176,7 @@ export default function RootLayout({
           data-public-key={process.env.NEXT_PUBLIC_MCW_PUBLIC_KEY}
         />
 
+        <MetaPixel />
         <div className="min-h-screen flex flex-col">
 
             <main style={{ padding: "0px" }}>
