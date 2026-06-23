@@ -210,12 +210,29 @@
             canvasMode = !!e.data.on;
             return;
           }
+          if (e.data.type === 'PLIA_SET_ZOOM') {
+            padZoom = e.data.zoom || 1;
+            layoutPadHandles();
+            return;
+          }
+          if (e.data.type === 'PLIA_APPLY_OVERRIDES') {
+            pendingOverrides = e.data.overrides || {};
+            var tries = 0;
+            var iv = setInterval(function () {
+              tries++;
+              applyOverrides();
+              if (tries >= 8) clearInterval(iv);
+            }, 350);
+            return;
+          }
           if (e.data.type === 'PLIA_SET_TOOL') {
             mode = e.data.tool === 'select' ? 'select' : 'none';
             if (mode === 'none') {
               if (hovered) { hovered.classList.remove('plia-hover'); hovered = null; }
+              hidePadHandles();
             }
           } else if (e.data.type === 'PLIA_EDIT_TEXT' && selected) {
+            hidePadHandles();
             // Hacer editable el elemento seleccionado.
             var before = selected.textContent;
             selected.setAttribute('contenteditable', 'true');
@@ -283,9 +300,188 @@
             selected = el;
             el.classList.add('plia-selected');
             send('PLIA_ELEMENT_SELECTED', describe(el));
+            showPadHandles();
           },
           true
         );
+
+        // ─── PADDING estilo Framer ────────────────────────────────────────
+        // Marcadores en los 4 lados del elemento seleccionado. Arrastrar un
+        // marcador hacia adentro/afuera cambia el padding de ESE lado en vivo
+        // (con etiqueta en px). Al soltar se persiste (el editor lo guarda por
+        // proyecto y lo re-aplica al recargar).
+        var padZoom = 1;
+        var padHandles = null; // { wrap, sides:{top,right,bottom,left} }
+        var padDrag = null;
+        var PAD_SIDES = ['top', 'right', 'bottom', 'left'];
+
+        function pxOf(el, prop) {
+          var v = parseFloat(window.getComputedStyle(el)[prop]);
+          return isNaN(v) ? 0 : v;
+        }
+        // Ruta estable desde #root (robusta a cambios en otras ramas del DOM).
+        function pathOf(el) {
+          var parts = [];
+          var root = document.getElementById('root') || document.body;
+          while (el && el !== root && el !== document.body) {
+            var p = el.parentNode;
+            if (!p) break;
+            var idx = Array.prototype.indexOf.call(p.children, el);
+            parts.unshift(el.tagName + ':' + idx);
+            el = p;
+          }
+          return parts.join('>');
+        }
+        function elByPath(path) {
+          if (!path) return null;
+          var cur = document.getElementById('root') || document.body;
+          var parts = path.split('>');
+          for (var i = 0; i < parts.length; i++) {
+            var idx = parseInt(parts[i].split(':')[1], 10);
+            if (!cur.children || !cur.children[idx]) return null;
+            cur = cur.children[idx];
+          }
+          return cur;
+        }
+        function ensurePadHandles() {
+          if (padHandles) return padHandles;
+          var wrap = document.createElement('div');
+          wrap.setAttribute('data-plia-ui', '1');
+          wrap.style.cssText = 'position:absolute;left:0;top:0;z-index:2147483600;pointer-events:none;';
+          var sides = {};
+          PAD_SIDES.forEach(function (side) {
+            var vertical = side === 'top' || side === 'bottom';
+            var h = document.createElement('div');
+            h.setAttribute('data-plia-ui', '1');
+            h.style.cssText =
+              'position:absolute;pointer-events:auto;background:#ec4899;border:2px solid #fff;' +
+              'box-shadow:0 1px 5px rgba(0,0,0,.35);' +
+              (vertical
+                ? 'width:28px;height:9px;border-radius:5px;cursor:ns-resize;'
+                : 'width:9px;height:28px;border-radius:5px;cursor:ew-resize;');
+            var label = document.createElement('div');
+            label.setAttribute('data-plia-ui', '1');
+            label.style.cssText =
+              'position:absolute;display:none;background:#ec4899;color:#fff;' +
+              'font:700 11px/1 ui-sans-serif,system-ui,sans-serif;padding:3px 6px;' +
+              'border-radius:5px;white-space:nowrap;pointer-events:none;box-shadow:0 1px 4px rgba(0,0,0,.3);';
+            h.appendChild(label);
+            h._label = label;
+            h.addEventListener('mousedown', (function (s) {
+              return function (ev) { startPadDrag(ev, s); };
+            })(side));
+            wrap.appendChild(h);
+            sides[side] = h;
+          });
+          document.body.appendChild(wrap);
+          padHandles = { wrap: wrap, sides: sides };
+          return padHandles;
+        }
+        function layoutPadHandles() {
+          if (!padHandles || !selected) return;
+          var r = selected.getBoundingClientRect();
+          var sx = window.scrollX || 0;
+          var sy = window.scrollY || 0;
+          var pads = {
+            top: pxOf(selected, 'paddingTop'),
+            right: pxOf(selected, 'paddingRight'),
+            bottom: pxOf(selected, 'paddingBottom'),
+            left: pxOf(selected, 'paddingLeft'),
+          };
+          var cx = r.left + sx + r.width / 2;
+          var cy = r.top + sy + r.height / 2;
+          var inv = 1 / (padZoom || 1);
+          // Cada marcador se ancla en el borde INTERNO del padding de su lado.
+          var pts = {
+            top: [cx, r.top + sy + pads.top],
+            bottom: [cx, r.bottom + sy - pads.bottom],
+            left: [r.left + sx + pads.left, cy],
+            right: [r.right + sx - pads.right, cy],
+          };
+          PAD_SIDES.forEach(function (side) {
+            var h = padHandles.sides[side];
+            h.style.left = pts[side][0] + 'px';
+            h.style.top = pts[side][1] + 'px';
+            // Contra-escala (1/zoom) → tamaño visual constante como Kittl.
+            h.style.transform = 'translate(-50%,-50%) scale(' + inv + ')';
+            h.style.transformOrigin = 'center';
+            if (h._label.style.display !== 'none') h._label.textContent = Math.round(pads[side]) + 'px';
+          });
+        }
+        function showPadHandles() {
+          if (!selected || selected.tagName === 'IMG') { hidePadHandles(); return; }
+          ensurePadHandles();
+          padHandles.wrap.style.display = 'block';
+          layoutPadHandles();
+        }
+        function hidePadHandles() {
+          if (padHandles) padHandles.wrap.style.display = 'none';
+        }
+        function startPadDrag(e, side) {
+          e.preventDefault();
+          e.stopPropagation();
+          if (!selected) return;
+          var prop = 'padding' + side.charAt(0).toUpperCase() + side.slice(1);
+          padDrag = { side: side, prop: prop, startX: e.clientX, startY: e.clientY, startVal: pxOf(selected, prop) };
+          var lbl = padHandles.sides[side]._label;
+          lbl.style.display = 'block';
+          // Etiqueta hacia AFUERA del elemento (no tapa el contenido).
+          if (side === 'top') { lbl.style.cssText += ';left:50%;top:-24px;transform:translateX(-50%);'; }
+          else if (side === 'bottom') { lbl.style.cssText += ';left:50%;top:14px;transform:translateX(-50%);'; }
+          else if (side === 'left') { lbl.style.cssText += ';top:50%;left:-12px;transform:translate(-100%,-50%);'; }
+          else { lbl.style.cssText += ';top:50%;left:14px;transform:translateY(-50%);'; }
+          document.addEventListener('mousemove', onPadMove, true);
+          document.addEventListener('mouseup', onPadUp, true);
+        }
+        function onPadMove(e) {
+          if (!padDrag || !selected) return;
+          e.preventDefault();
+          // Dentro del iframe, el delta de clientX/Y YA está en px reales del
+          // sitio (el navegador reporta coords en el espacio CSS del iframe,
+          // no el escalado del lienzo), así que NO hay que dividir por zoom.
+          var d;
+          if (padDrag.side === 'top') d = e.clientY - padDrag.startY;        // abajo = +
+          else if (padDrag.side === 'bottom') d = padDrag.startY - e.clientY; // arriba = +
+          else if (padDrag.side === 'left') d = e.clientX - padDrag.startX;   // derecha = +
+          else d = padDrag.startX - e.clientX;                                // izquierda = +
+          var val = Math.max(0, Math.round(padDrag.startVal + d));
+          selected.style[padDrag.prop] = val + 'px';
+          var lbl = padHandles.sides[padDrag.side]._label;
+          lbl.textContent = val + 'px';
+          layoutPadHandles();
+        }
+        function onPadUp() {
+          document.removeEventListener('mousemove', onPadMove, true);
+          document.removeEventListener('mouseup', onPadUp, true);
+          if (padDrag && selected) {
+            send('PLIA_PADDING_CHANGED', {
+              path: pathOf(selected),
+              padding: {
+                paddingTop: Math.round(pxOf(selected, 'paddingTop')) + 'px',
+                paddingRight: Math.round(pxOf(selected, 'paddingRight')) + 'px',
+                paddingBottom: Math.round(pxOf(selected, 'paddingBottom')) + 'px',
+                paddingLeft: Math.round(pxOf(selected, 'paddingLeft')) + 'px',
+              },
+            });
+            padHandles.sides[padDrag.side]._label.style.display = 'none';
+          }
+          padDrag = null;
+        }
+        // Re-aplica overrides guardados (el editor los re-envía al cargar).
+        // Reintentamos porque React monta el árbol de forma asíncrona.
+        var pendingOverrides = null;
+        function applyOverrides() {
+          if (!pendingOverrides) return;
+          for (var path in pendingOverrides) {
+            if (!pendingOverrides.hasOwnProperty(path)) continue;
+            var el = elByPath(path);
+            if (!el) continue;
+            var st = pendingOverrides[path];
+            for (var k in st) { if (st.hasOwnProperty(k)) el.style[k] = st[k]; }
+          }
+          if (selected) layoutPadHandles();
+        }
+        window.addEventListener('resize', layoutPadHandles);
       })();
     </script>
 

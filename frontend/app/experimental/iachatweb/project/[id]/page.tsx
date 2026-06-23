@@ -161,7 +161,11 @@ export default function projectPage() {
   // en el mismo lienzo que el artboard. Se mueven, redimensionan, convierten
   // a video y se arrastran sobre el sitio para reemplazar imágenes.
   const [canvasItems, setCanvasItems] = useState<CanvasItem[]>([]);
-  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  // Multi-selección (marquee / Shift+click) de items flotantes del lienzo.
+  const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
+  // Overrides de padding (estilo Framer): { [rutaDOM]: { paddingTop, ... } }.
+  // Se guardan por proyecto y se re-aplican al recargar el preview.
+  const padOverridesRef = useRef<Record<string, Record<string, string>>>({});
   // Transformación actual del lienzo (zoom/pan) — la reporta el
   // CanvasViewport; los items la usan para la matemática de arrastre.
   const canvasTransformRef = useRef<{ zoom: number; pan: { x: number; y: number } }>({
@@ -658,6 +662,18 @@ export default function projectPage() {
         });
         return;
       }
+      // 6. Padding ajustado (estilo Framer): se persiste por proyecto+ruta y
+      // se re-aplica al recargar (el bridge ya lo aplicó en vivo).
+      if (e.data?.type === 'PLIA_PADDING_CHANGED' && e.data.path) {
+        const map = padOverridesRef.current;
+        map[e.data.path] = { ...(map[e.data.path] || {}), ...e.data.padding };
+        try {
+          localStorage.setItem(`pliaPadOverrides:${id}`, JSON.stringify(map));
+        } catch {
+          /* cuota llena: el cambio sigue vivo en pantalla */
+        }
+        return;
+      }
     };
     window.addEventListener('message', onMsg);
     return () => window.removeEventListener('message', onMsg);
@@ -784,6 +800,49 @@ export default function projectPage() {
       clearTimeout(t2);
     };
   }, [canvasMode, rightPaneMode, previewUrl, previewNonce, previewStatus]);
+
+  // Cargar overrides de padding guardados de este proyecto (localStorage).
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(`pliaPadOverrides:${id}`);
+      padOverridesRef.current = raw ? JSON.parse(raw) : {};
+    } catch {
+      padOverridesRef.current = {};
+    }
+  }, [id]);
+
+  // Informar al bridge el zoom del lienzo → contra-escala los marcadores de
+  // padding para que mantengan tamaño visual constante (como Kittl/Framer).
+  useEffect(() => {
+    iframeRef.current?.contentWindow?.postMessage(
+      { type: 'PLIA_SET_ZOOM', zoom: canvasZoom || 1 },
+      '*',
+    );
+  }, [canvasZoom]);
+
+  // Re-aplicar los overrides de padding cada vez que (re)carga el preview.
+  // El bridge reintenta internamente porque React monta el árbol async.
+  useEffect(() => {
+    const post = () => {
+      const w = iframeRef.current?.contentWindow;
+      if (!w) return;
+      w.postMessage(
+        { type: 'PLIA_APPLY_OVERRIDES', overrides: padOverridesRef.current },
+        '*',
+      );
+      w.postMessage(
+        { type: 'PLIA_SET_ZOOM', zoom: canvasTransformRef.current.zoom || 1 },
+        '*',
+      );
+    };
+    post();
+    const t1 = setTimeout(post, 900);
+    const t2 = setTimeout(post, 2600);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, [previewUrl, previewNonce, previewStatus, id]);
 
   // Cuando el servidor pasa a 'running' (recien listo), recargamos el iframe
   // UNA vez. Sin esto, si el iframe cargo la URL antes de que Vite estuviera
@@ -1925,7 +1984,26 @@ export default function projectPage() {
                       canvasTransformRef.current = t;
                       setCanvasZoom((prev) => (prev !== t.zoom ? t.zoom : prev));
                     }}
-                    onBackgroundMouseDown={() => setSelectedItemId(null)}
+                    onBackgroundMouseDown={() => setSelectedItemIds([])}
+                    onMarquee={(rect, additive) => {
+                      // Hit-test: items flotantes cuyo box intersecta el área.
+                      // Criterio del producto: NO se seleccionan ni el artboard
+                      // del sitio ni sus elementos internos (se editan con click
+                      // → edición inline), ni items en plena generación.
+                      const hit = canvasItems
+                        .filter((it) => !it.converting)
+                        .filter((it) => {
+                          const l = it.x;
+                          const t = it.y;
+                          const r = it.x + it.w;
+                          const b = it.y + it.w / it.ar;
+                          return !(r < rect.x || l > rect.x + rect.w || b < rect.y || t > rect.y + rect.h);
+                        })
+                        .map((it) => it.id);
+                      setSelectedItemIds((prev) =>
+                        additive ? Array.from(new Set([...prev, ...hit])) : hit,
+                      );
+                    }}
                   >
                     <div
                       className="bg-white shadow-2xl rounded-2xl overflow-hidden relative"
@@ -1945,8 +2023,8 @@ export default function projectPage() {
                     <CanvasItemsLayer
                       items={canvasItems}
                       onChange={setCanvasItems}
-                      selectedId={selectedItemId}
-                      onSelect={setSelectedItemId}
+                      selectedIds={selectedItemIds}
+                      onSelect={setSelectedItemIds}
                       transformRef={canvasTransformRef}
                       zoom={canvasZoom}
                       iframeRef={iframeRef}

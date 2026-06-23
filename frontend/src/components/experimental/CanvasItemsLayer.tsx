@@ -46,8 +46,10 @@ export interface CanvasItem {
 interface Props {
   items: CanvasItem[];
   onChange: (items: CanvasItem[]) => void;
-  selectedId: string | null;
-  onSelect: (id: string | null) => void;
+  /** IDs seleccionados (multi-selección por marquee o Shift+click). */
+  selectedIds: string[];
+  /** Reemplaza la selección completa. */
+  onSelect: (ids: string[]) => void;
   /** Transformación actual del lienzo (la mantiene el padre via ref). */
   transformRef: React.MutableRefObject<{ zoom: number; pan: { x: number; y: number } }>;
   /** Iframe del preview, para el drop-para-reemplazar. */
@@ -67,7 +69,7 @@ interface Props {
 export const CanvasItemsLayer: React.FC<Props> = ({
   items,
   onChange,
-  selectedId,
+  selectedIds,
   onSelect,
   transformRef,
   iframeRef,
@@ -76,6 +78,9 @@ export const CanvasItemsLayer: React.FC<Props> = ({
   onInsertViaChat,
   zoom,
 }) => {
+  const isSelected = useCallback((id: string) => selectedIds.includes(id), [selectedIds]);
+  // El item "primario" (último seleccionado) ancla la toolbar individual.
+  const primaryId = selectedIds.length ? selectedIds[selectedIds.length - 1] : null;
   // Factor de contra-escala para UI de tamaño constante (toolbar, handles).
   const inv = 1 / Math.max(zoom, 0.01);
   // Root del layer (coincide con el origen del stage): para convertir
@@ -106,6 +111,8 @@ export const CanvasItemsLayer: React.FC<Props> = ({
     origX: number;
     origY: number;
     origW: number;
+    /** Posiciones originales de TODOS los items movidos (move en grupo). */
+    group: { id: string; ox: number; oy: number }[];
   } | null>(null);
   const [overSiteImg, setOverSiteImg] = useState(false);
 
@@ -140,11 +147,12 @@ export const CanvasItemsLayer: React.FC<Props> = ({
       const dx = (e.clientX - d.startX) / z;
       const dy = (e.clientY - d.startY) / z;
       if (d.mode === 'move') {
-        onChange(
-          items.map((it) => (it.id === d.id ? { ...it, x: d.origX + dx, y: d.origY + dy } : it)),
-        );
-        // ¿Estamos sobre una imagen del sitio? Avisar al bridge para resaltar.
-        const c = toIframeCoords(e.clientX, e.clientY);
+        // Mueve todo el grupo por el mismo delta (coords del stage).
+        const moves = new Map(d.group.map((g) => [g.id, { x: g.ox + dx, y: g.oy + dy }]));
+        onChange(items.map((it) => (moves.has(it.id) ? { ...it, ...moves.get(it.id)! } : it)));
+        // Reemplazo sobre el sitio solo aplica al arrastrar UN item (no grupo).
+        const single = d.group.length <= 1;
+        const c = single ? toIframeCoords(e.clientX, e.clientY) : null;
         const win = iframeRef.current?.contentWindow;
         if (c && win) {
           win.postMessage({ type: 'PLIA_DRAG_OVER', x: c.x, y: c.y }, '*');
@@ -164,7 +172,8 @@ export const CanvasItemsLayer: React.FC<Props> = ({
       drag.current = null;
       if (d.mode === 'move') {
         const item = items.find((it) => it.id === d.id);
-        const c = toIframeCoords(e.clientX, e.clientY);
+        // Reemplazar imagen del sitio solo al soltar UN item (no un grupo).
+        const c = d.group.length <= 1 ? toIframeCoords(e.clientX, e.clientY) : null;
         const win = iframeRef.current?.contentWindow;
         if (c && win && item && item.kind === 'image') {
           // Soltado sobre el sitio: si hay un <img> debajo, el bridge lo
@@ -193,7 +202,16 @@ export const CanvasItemsLayer: React.FC<Props> = ({
     e.stopPropagation();
     const it = items.find((x) => x.id === id);
     if (!it) return;
-    onSelect(id);
+    // Shift+click: alternar este item en la selección (sin iniciar arrastre).
+    if (mode === 'move' && e.shiftKey) {
+      onSelect(isSelected(id) ? selectedIds.filter((x) => x !== id) : [...selectedIds, id]);
+      return;
+    }
+    // Si arrastras un item que YA es parte de una multi-selección, se mueve
+    // todo el grupo. Si no, el arrastre selecciona solo ese item.
+    const inGroup = isSelected(id) && selectedIds.length > 1;
+    const groupIds = inGroup ? selectedIds : [id];
+    if (!inGroup) onSelect([id]);
     drag.current = {
       id,
       mode,
@@ -202,6 +220,13 @@ export const CanvasItemsLayer: React.FC<Props> = ({
       origX: it.x,
       origY: it.y,
       origW: it.w,
+      group:
+        mode === 'move'
+          ? groupIds
+              .map((gid) => items.find((x) => x.id === gid))
+              .filter((x): x is CanvasItem => !!x)
+              .map((x) => ({ id: x.id, ox: x.x, oy: x.y }))
+          : [],
     };
   };
 
@@ -282,6 +307,22 @@ export const CanvasItemsLayer: React.FC<Props> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [portDrag, items, overSiteImg]);
 
+  // ─── Suprimir: eliminar los items seleccionados ──────────────────────
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+      if (!selectedIds.length) return;
+      const t = e.target as HTMLElement;
+      const tag = t?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || t?.isContentEditable) return;
+      e.preventDefault();
+      onChange(items.filter((x) => !selectedIds.includes(x.id)));
+      onSelect([]);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [selectedIds, items, onChange, onSelect]);
+
   return (
     <div ref={rootRef} className="absolute inset-0 pointer-events-none" style={{ overflow: 'visible' }}>
       {/* Conexiones origen→video + cable en vivo del puerto */}
@@ -329,7 +370,8 @@ export const CanvasItemsLayer: React.FC<Props> = ({
 
       {items.map((it) => {
         const h = it.w / it.ar;
-        const selected = selectedId === it.id;
+        const selected = isSelected(it.id);
+        const multi = selectedIds.length > 1;
         return (
           <div
             key={it.id}
@@ -337,10 +379,33 @@ export const CanvasItemsLayer: React.FC<Props> = ({
             style={{ left: it.x, top: it.y, width: it.w }}
             onMouseDown={(e) => e.stopPropagation()}
           >
-            {/* Toolbar del item (al seleccionar). Contra-escalada (1/zoom)
-                para mantener tamaño visual constante como Kittl: al alejar
-                el lienzo, los botones siguen siendo clickeables. */}
-            {selected && (
+            {/* Toolbar de GRUPO (multi-selección): contador + eliminar todo.
+                Se ancla al item primario. */}
+            {multi && it.id === primaryId && (
+              <div
+                className="absolute left-0 flex items-center gap-2 bg-zinc-900 rounded-lg shadow-xl px-2 py-1 z-10"
+                style={{ top: -44 * inv, transform: `scale(${inv})`, transformOrigin: 'left top' }}
+                onMouseDown={(e) => e.stopPropagation()}
+              >
+                <span className="text-[11px] font-bold text-white/80 pl-0.5">
+                  {selectedIds.length} seleccionados
+                </span>
+                <button
+                  onClick={() => {
+                    onChange(items.filter((x) => !selectedIds.includes(x.id)));
+                    onSelect([]);
+                  }}
+                  title="Eliminar selección del lienzo"
+                  className="p-1.5 rounded-md text-red-300 hover:bg-white/10"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+
+            {/* Toolbar del item individual (selección única). Contra-escalada
+                (1/zoom) para mantener tamaño visual constante como Kittl. */}
+            {selected && !multi && (
               <div
                 className="absolute left-0 flex items-center gap-1 bg-zinc-900 rounded-lg shadow-xl px-1 py-1 z-10"
                 style={{
@@ -380,7 +445,7 @@ export const CanvasItemsLayer: React.FC<Props> = ({
                 <button
                   onClick={() => {
                     onChange(items.filter((x) => x.id !== it.id));
-                    onSelect(null);
+                    onSelect([]);
                   }}
                   title="Eliminar del lienzo"
                   className="p-1.5 rounded-md text-red-300 hover:bg-white/10"
@@ -456,7 +521,7 @@ export const CanvasItemsLayer: React.FC<Props> = ({
                 onMouseDown={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
-                  onSelect(it.id);
+                  onSelect([it.id]);
                   setPortDrag({ fromId: it.id, x: it.x + it.w + 10, y: it.y + h / 2 });
                 }}
                 title="Arrastra el cable: al vacío genera un video · sobre una imagen del sitio la reemplaza"
@@ -473,8 +538,8 @@ export const CanvasItemsLayer: React.FC<Props> = ({
             )}
 
             {/* Handle de resize (abajo-derecha), contra-escalado para que
-                siga siendo agarrable en cualquier zoom. */}
-            {selected && (
+                siga siendo agarrable en cualquier zoom. Solo en selección única. */}
+            {selected && !multi && (
               <div
                 onMouseDown={(e) => startDrag(it.id, 'resize', e)}
                 className="absolute -bottom-1.5 -right-1.5 w-4 h-4 rounded-full bg-violet-500 border-2 border-white shadow cursor-nwse-resize"
