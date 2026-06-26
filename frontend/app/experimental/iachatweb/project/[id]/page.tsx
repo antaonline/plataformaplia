@@ -27,6 +27,7 @@ import { CreativeStudioDialog } from '@/components/experimental/CreativeStudioDi
 import { NodeCanvasDialog } from '@/components/experimental/NodeCanvasDialog';
 import { CanvasViewport, CanvasViewportHandle } from '@/components/experimental/CanvasViewport';
 import { CanvasItemsLayer, CanvasItem } from '@/components/experimental/CanvasItemsLayer';
+import { StyleInspector } from '@/components/experimental/StyleInspector';
 import type { CreativeAsset } from '@/components/experimental/CreativeStudioDialog';
 import { toast } from 'sonner';
 import ThinkingSection from '@/components/chat/ThinkingSection';
@@ -753,6 +754,31 @@ export default function projectPage() {
     if (ok) undoStack.current.push(last);
     else redoStack.current.push(last);
   }, [applyVisualEdit]);
+
+  /**
+   * Inspector lateral: aplica una propiedad de estilo al elemento
+   * seleccionado. (1) la manda al iframe para verla en vivo, (2) la persiste
+   * por proyecto+ruta DOM (mismo mecanismo que el padding del lienzo) y
+   * (3) la refleja en el panel para que el input quede sincronizado.
+   */
+  const applyElementStyle = useCallback(
+    (style: Record<string, string>) => {
+      const path = selectedEl?.path;
+      if (!path) return;
+      iframeRef.current?.contentWindow?.postMessage({ type: 'PLIA_SET_STYLE', style }, '*');
+      const map = padOverridesRef.current;
+      map[path] = { ...(map[path] || {}), ...style };
+      try {
+        localStorage.setItem(`pliaPadOverrides:${id}`, JSON.stringify(map));
+      } catch {
+        /* cuota llena: el cambio sigue vivo en pantalla */
+      }
+      setSelectedEl((prev: any) =>
+        prev ? { ...prev, styles: { ...(prev.styles || {}), ...style } } : prev,
+      );
+    },
+    [selectedEl, id],
+  );
 
   // Atajos de teclado del editor (fuera de inputs/textarea).
   useEffect(() => {
@@ -2161,7 +2187,7 @@ export default function projectPage() {
                     <X className="h-4 w-4" />
                   </button>
                 </div>
-                <div className="p-4 space-y-3">
+                <div className="p-4 space-y-3 max-h-[72vh] overflow-y-auto">
                   {selectedEl.isImage ? (
                     <>
                       {selectedEl.src && (
@@ -2195,6 +2221,12 @@ export default function projectPage() {
                       )}
                     </>
                   )}
+
+                  {/* Inspector numérico de propiedades (tamaño, padding,
+                      margen, tipografía, apariencia) estilo Framer/Figma. */}
+                  <div className="border-t border-slate-100 pt-3">
+                    <StyleInspector el={selectedEl} onApply={applyElementStyle} />
+                  </div>
                 </div>
               </div>
             )}

@@ -181,14 +181,25 @@
           }
           text = (text || el.textContent || '').trim();
           var rect = el.getBoundingClientRect();
+          var cs = window.getComputedStyle(el);
           return {
             tag: el.tagName.toLowerCase(),
             text: text.slice(0, 500),
             fullText: (el.textContent || '').trim().slice(0, 500),
             classes: el.className && typeof el.className === 'string' ? el.className : '',
             isImage: el.tagName === 'IMG',
+            isContainer: isContainer(el),
             src: el.tagName === 'IMG' ? el.getAttribute('src') : null,
+            path: pathOf(el),
             rect: { x: rect.left, y: rect.top, w: rect.width, h: rect.height },
+            // Estilos computados actuales → alimentan el inspector lateral.
+            styles: {
+              paddingTop: cs.paddingTop, paddingRight: cs.paddingRight, paddingBottom: cs.paddingBottom, paddingLeft: cs.paddingLeft,
+              marginTop: cs.marginTop, marginRight: cs.marginRight, marginBottom: cs.marginBottom, marginLeft: cs.marginLeft,
+              width: cs.width, height: cs.height,
+              fontSize: cs.fontSize, fontWeight: cs.fontWeight, lineHeight: cs.lineHeight, textAlign: cs.textAlign,
+              color: cs.color, backgroundColor: cs.backgroundColor, borderRadius: cs.borderTopLeftRadius,
+            },
           };
         }
 
@@ -235,6 +246,14 @@
               applyOverrides();
               if (tries >= 8) clearInterval(iv);
             }, 350);
+            return;
+          }
+          if (e.data.type === 'PLIA_SET_STYLE' && selected && e.data.style) {
+            // El inspector lateral cambió una propiedad → aplicar en vivo al
+            // elemento seleccionado. El editor persiste el override por su lado.
+            var st = e.data.style;
+            for (var sk in st) { if (st.hasOwnProperty(sk)) selected.style[sk] = st[sk]; }
+            layoutPadHandles();
             return;
           }
           if (e.data.type === 'PLIA_SET_TOOL') {
