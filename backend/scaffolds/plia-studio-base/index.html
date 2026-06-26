@@ -144,6 +144,10 @@
           // `~=` exige el token EXACTO (separado por espacios), así
           // `h-[100vh]` no pisa a `min-h-[100vh]` por subcadena.
           el.textContent =
+            // CLAVE: html/body/#root suelen traer `min-height:100vh` por CSS
+            // (no por clase). Sin esto, el body se infla a la altura del iframe
+            // estirado y el artboard crece sin fin (espacio en blanco enorme).
+            'html,body,#root{min-height:' + H + 'px !important}' +
             '.min-h-screen,.min-h-dvh,.min-h-svh,.min-h-lvh,' +
             '[class~="min-h-[100vh]"],[class~="min-h-[100dvh]"],[class~="min-h-[100svh]"],[class~="min-h-[100lvh]"]' +
             '{min-height:' + H + 'px !important}' +
