@@ -155,6 +155,56 @@
             '[class~="h-[100vh]"],[class~="h-[100dvh]"],[class~="h-[100svh]"],[class~="h-[100lvh]"]' +
             '{height:' + H + 'px !important}';
         }
+
+        // ─── Overrides EN VIVO del editor (media-aware) ───────────────────
+        // Espejo de src/plia-overrides.css: el editor escribe acá los ajustes
+        // (padding/tamaño/tipografía/color) por breakpoint. Al cambiar de
+        // dispositivo el ancho del iframe cambia y las @media muestran el valor
+        // correcto solas — sin estilos inline que se filtren entre vistas.
+        var bpNow = 'desktop';
+        var BP_MAX = { tablet: 1024, mobile: 640 };
+        var liveOv = {}; // { desktop|tablet|mobile: { rutaDOM: {prop:val} } }
+        function camelKebab(p) { return p.replace(/[A-Z]/g, function (m) { return '-' + m.toLowerCase(); }); }
+        function selOf(path) {
+          var parts = path.split('>').map(function (seg) {
+            var a = seg.split(':'); var n = parseInt(a[1], 10);
+            return (!a[0] || isNaN(n)) ? '' : a[0].toLowerCase() + ':nth-child(' + (n + 1) + ')';
+          }).filter(Boolean);
+          return ['#root'].concat(parts).join(' > ');
+        }
+        function ovBlock(bpMap) {
+          var out = '';
+          for (var path in bpMap) {
+            if (!bpMap.hasOwnProperty(path)) continue;
+            var s = bpMap[path], d = '', any = false;
+            for (var p in s) { if (s.hasOwnProperty(p) && s[p] !== '' && s[p] != null) { d += camelKebab(p) + ':' + s[p] + ';'; any = true; } }
+            if (any) out += selOf(path) + '{' + d + '}';
+          }
+          return out;
+        }
+        function renderLiveOverrides() {
+          var el = document.getElementById('plia-ov-live');
+          if (!el) {
+            el = document.createElement('style');
+            el.id = 'plia-ov-live';
+            el.setAttribute('data-plia-ui', '1');
+            (document.head || document.documentElement).appendChild(el);
+          }
+          var css = liveOv.desktop ? ovBlock(liveOv.desktop) : '';
+          if (liveOv.tablet) css += '@media(max-width:' + BP_MAX.tablet + 'px){' + ovBlock(liveOv.tablet) + '}';
+          if (liveOv.mobile) css += '@media(max-width:' + BP_MAX.mobile + 'px){' + ovBlock(liveOv.mobile) + '}';
+          el.textContent = css;
+          if (selected) layoutPadHandles();
+        }
+        function setOv(bp, path, style) {
+          if (bp !== 'tablet' && bp !== 'mobile') bp = 'desktop';
+          var m = liveOv[bp] || (liveOv[bp] = {});
+          var cur = m[path] || (m[path] = {});
+          for (var k in style) { if (style.hasOwnProperty(k)) { if (style[k] === '' || style[k] == null) delete cur[k]; else cur[k] = style[k]; } }
+          if (!Object.keys(cur).length) delete m[path];
+          if (!Object.keys(m).length) delete liveOv[bp];
+          renderLiveOverrides();
+        }
         // Reemplaza el src de una imagen RESPETANDO el layout del código:
         // congela la altura renderizada actual y fuerza object-fit cover,
         // así una imagen con otra proporción ENCAJA en la caja existente
@@ -271,33 +321,27 @@
             layoutPadHandles();
             return;
           }
+          if (e.data.type === 'PLIA_SET_BREAKPOINT') {
+            bpNow = e.data.bp || 'desktop';
+            return;
+          }
           if (e.data.type === 'PLIA_APPLY_OVERRIDES') {
-            pendingOverrides = e.data.overrides || {};
+            // overrides anidado por breakpoint; tolera el formato viejo (plano).
+            var ov = e.data.overrides || {};
+            var hasBp = ('desktop' in ov) || ('tablet' in ov) || ('mobile' in ov);
+            liveOv = hasBp ? ov : (Object.keys(ov).length ? { desktop: ov } : {});
             var tries = 0;
             var iv = setInterval(function () {
               tries++;
-              applyOverrides();
+              renderLiveOverrides();
               if (tries >= 8) clearInterval(iv);
             }, 350);
             return;
           }
-          if (e.data.type === 'PLIA_SET_STYLE' && selected && e.data.style) {
-            // El inspector lateral cambió una propiedad → aplicar en vivo al
-            // elemento seleccionado. El editor persiste el override por su lado.
-            var st = e.data.style;
-            for (var sk in st) { if (st.hasOwnProperty(sk)) selected.style[sk] = st[sk]; }
-            layoutPadHandles();
-            return;
-          }
           if (e.data.type === 'PLIA_SET_STYLE_AT' && e.data.path && e.data.style) {
-            // Aplicar estilos a un elemento POR RUTA (inspector y undo/redo, que
-            // pueden afectar a un elemento que no es el seleccionado). "" = quitar.
-            var elAt = elByPath(e.data.path);
-            if (elAt) {
-              var sa = e.data.style;
-              for (var ak in sa) { if (sa.hasOwnProperty(ak)) elAt.style[ak] = sa[ak]; }
-              if (elAt === selected) layoutPadHandles();
-            }
+            // Inspector / undo-redo: escribe en la hoja media-aware (no inline),
+            // así el valor queda atado al breakpoint y no se filtra entre vistas.
+            setOv(e.data.bp || bpNow, e.data.path, e.data.style);
             return;
           }
           if (e.data.type === 'PLIA_SET_TOOL') {
@@ -541,8 +585,14 @@
         }
         function sendOverride(style) {
           if (!selected) return;
-          // El editor persiste este mapa de estilos por proyecto+ruta DOM.
-          send('PLIA_PADDING_CHANGED', { path: pathOf(selected), padding: style });
+          var path = pathOf(selected);
+          // Pasar del inline (en vivo durante el drag) a la hoja media-aware:
+          // limpiar el inline y escribir en liveOv para el breakpoint actual,
+          // así el valor queda atado al dispositivo y no se filtra entre vistas.
+          for (var k in style) { if (style.hasOwnProperty(k)) selected.style[k] = ''; }
+          setOv(bpNow, path, style);
+          // El editor además lo persiste en el código (con el breakpoint).
+          send('PLIA_PADDING_CHANGED', { path: path, padding: style, bp: bpNow });
         }
         function placeTip(el, x, y, inv) {
           el.style.left = x + 'px';
@@ -643,20 +693,8 @@
           if (ui) ui.badge.style.display = 'none';
           resizeDrag = null;
         }
-        // Re-aplica overrides guardados (el editor los re-envía al cargar).
-        // Reintentamos porque React monta el árbol de forma asíncrona.
-        var pendingOverrides = null;
-        function applyOverrides() {
-          if (!pendingOverrides) return;
-          for (var path in pendingOverrides) {
-            if (!pendingOverrides.hasOwnProperty(path)) continue;
-            var el = elByPath(path);
-            if (!el) continue;
-            var st = pendingOverrides[path];
-            for (var k in st) { if (st.hasOwnProperty(k)) el.style[k] = st[k]; }
-          }
-          if (selected) layoutPadHandles();
-        }
+        // Los overrides guardados se re-aplican vía la hoja media-aware
+        // (PLIA_APPLY_OVERRIDES → liveOv → renderLiveOverrides).
         window.addEventListener('resize', layoutPadHandles);
       })();
     </script>

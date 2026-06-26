@@ -233,7 +233,7 @@ export class AiChatController {
   styleOverride(
     @Param('id', ParseIntPipe) id: number,
     @Request() req: any,
-    @Body() body: { path: string; style: Record<string, string> },
+    @Body() body: { path: string; style: Record<string, string>; breakpoint?: string },
   ) {
     return this.aiChatService.applyStyleOverride(id, req.user.id, body);
   }

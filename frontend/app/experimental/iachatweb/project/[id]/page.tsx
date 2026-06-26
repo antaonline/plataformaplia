@@ -164,12 +164,17 @@ export default function projectPage() {
   const [canvasItems, setCanvasItems] = useState<CanvasItem[]>([]);
   // Multi-selección (marquee / Shift+click) de items flotantes del lienzo.
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
-  // Overrides de padding (estilo Framer): { [rutaDOM]: { paddingTop, ... } }.
+  // Overrides de estilo (estilo Framer), anidados por breakpoint:
+  // { desktop|tablet|mobile: { [rutaDOM]: { paddingTop, ... } } }.
   // Se guardan por proyecto y se re-aplican al recargar el preview.
-  const padOverridesRef = useRef<Record<string, Record<string, string>>>({});
+  const padOverridesRef = useRef<
+    Record<string, Record<string, Record<string, string>>>
+  >({});
   // Cola para persistir los overrides EN EL CÓDIGO (src/plia-overrides.css del
-  // proyecto, vía backend). Se agrupa y debouncea para no spamear al teclear.
-  const pendingStyleRef = useRef<Record<string, Record<string, string>>>({});
+  // proyecto, vía backend). Se agrupa por breakpoint+ruta y debouncea.
+  const pendingStyleRef = useRef<
+    Record<string, { bp: string; path: string; style: Record<string, string> }>
+  >({});
   const styleFlushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Transformación actual del lienzo (zoom/pan) — la reporta el
   // CanvasViewport; los items la usan para la matemática de arrastre.
@@ -670,11 +675,13 @@ export default function projectPage() {
       // 6. Padding ajustado (estilo Framer): se persiste por proyecto+ruta y
       // se re-aplica al recargar (el bridge ya lo aplicó en vivo).
       if (e.data?.type === 'PLIA_PADDING_CHANGED' && e.data.path) {
-        const map = padOverridesRef.current;
+        const bp: string = e.data.bp || 'desktop';
+        const map = padOverridesRef.current; // { bp: { path: {prop} } }
+        const bpMap = map[bp] || (map[bp] = {});
         // Valores previos (para Ctrl+Z) ANTES de pisar el override.
         const before: Record<string, string> = {};
-        for (const k of Object.keys(e.data.padding)) before[k] = map[e.data.path]?.[k] ?? '';
-        map[e.data.path] = { ...(map[e.data.path] || {}), ...e.data.padding };
+        for (const k of Object.keys(e.data.padding)) before[k] = bpMap[e.data.path]?.[k] ?? '';
+        bpMap[e.data.path] = { ...(bpMap[e.data.path] || {}), ...e.data.padding };
         try {
           localStorage.setItem(`pliaPadOverrides:${id}`, JSON.stringify(map));
         } catch {
@@ -682,8 +689,8 @@ export default function projectPage() {
         }
         // Persistir también en el código del proyecto (durable + exportable)
         // y registrar en el historial (el bridge ya lo aplicó en vivo).
-        queueStyleToCode(e.data.path, e.data.padding);
-        recordStyleEdit(e.data.path, before, e.data.padding);
+        queueStyleToCode(e.data.path, e.data.padding, bp);
+        recordStyleEdit(e.data.path, bp, before, e.data.padding);
         return;
       }
     };
@@ -698,6 +705,7 @@ export default function projectPage() {
   type StyleEdit = {
     kind: 'style';
     path: string;
+    bp: string; // breakpoint: desktop | tablet | mobile
     before: Record<string, string>;
     after: Record<string, string>;
   };
@@ -717,7 +725,7 @@ export default function projectPage() {
       ? { kind: 'text', oldText: e.newText, newText: e.oldText }
       : e.kind === 'image'
         ? { kind: 'image', oldSrc: e.newUrl, newUrl: e.oldSrc }
-        : { kind: 'style', path: e.path, before: e.after, after: e.before };
+        : { kind: 'style', path: e.path, bp: e.bp, before: e.after, after: e.before };
 
   /**
    * Aplica una edición visual (texto/imagen) llamando al backend, que
@@ -791,25 +799,28 @@ export default function projectPage() {
 
   /**
    * Encola un override de estilo para escribirlo en el CÓDIGO del proyecto
-   * (src/plia-overrides.css vía backend). Agrupa por ruta DOM y debouncea para
-   * no disparar una petición por cada tecla/pixel arrastrado.
+   * (src/plia-overrides.css vía backend). Agrupa por breakpoint+ruta DOM y
+   * debouncea para no disparar una petición por cada tecla/pixel arrastrado.
    */
   const queueStyleToCode = useCallback(
-    (path: string, style: Record<string, string>) => {
+    (path: string, style: Record<string, string>, bp: string) => {
       const p = pendingStyleRef.current;
-      p[path] = { ...(p[path] || {}), ...style };
+      const key = bp + '|' + path;
+      const e = p[key] || (p[key] = { bp, path, style: {} });
+      Object.assign(e.style, style);
       if (styleFlushTimer.current) clearTimeout(styleFlushTimer.current);
       styleFlushTimer.current = setTimeout(async () => {
         const batch = pendingStyleRef.current;
         pendingStyleRef.current = {};
         const token = localStorage.getItem('access_token');
         if (!token) return;
-        for (const [pth, st] of Object.entries(batch)) {
+        for (const k of Object.keys(batch)) {
+          const { bp: bpk, path: pth, style: st } = batch[k];
           try {
             await fetch(`${apiBase}/experimental/iachat/${id}/style-override`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-              body: JSON.stringify({ path: pth, style: st }),
+              body: JSON.stringify({ path: pth, style: st, breakpoint: bpk }),
             });
           } catch {
             /* sin red: el cambio sigue vivo en pantalla y en localStorage */
@@ -826,22 +837,27 @@ export default function projectPage() {
    * el panel si es el seleccionado. "" en una prop = quitar el override.
    */
   const applyStyleToPath = useCallback(
-    (path: string, style: Record<string, string>) => {
-      iframeRef.current?.contentWindow?.postMessage({ type: 'PLIA_SET_STYLE_AT', path, style }, '*');
-      const map = padOverridesRef.current;
-      const cur = { ...(map[path] || {}) };
+    (path: string, style: Record<string, string>, bp: string) => {
+      iframeRef.current?.contentWindow?.postMessage(
+        { type: 'PLIA_SET_STYLE_AT', path, style, bp },
+        '*',
+      );
+      const map = padOverridesRef.current; // { bp: { path: {prop} } }
+      const bpMap = map[bp] || (map[bp] = {});
+      const cur = { ...(bpMap[path] || {}) };
       for (const k of Object.keys(style)) {
         if (style[k] === '') delete cur[k];
         else cur[k] = style[k];
       }
-      if (Object.keys(cur).length) map[path] = cur;
-      else delete map[path];
+      if (Object.keys(cur).length) bpMap[path] = cur;
+      else delete bpMap[path];
+      if (!Object.keys(bpMap).length) delete map[bp];
       try {
         localStorage.setItem(`pliaPadOverrides:${id}`, JSON.stringify(map));
       } catch {
         /* cuota llena: el cambio sigue vivo en pantalla */
       }
-      queueStyleToCode(path, style);
+      queueStyleToCode(path, style, bp);
       setSelectedEl((prev: any) =>
         prev && prev.path === path
           ? { ...prev, styles: { ...(prev.styles || {}), ...style } }
@@ -851,10 +867,10 @@ export default function projectPage() {
     [id, queueStyleToCode],
   );
 
-  /** Valores actuales (override) de esas props; "" si no hay override. */
+  /** Valores actuales (override) de esas props en ese breakpoint; "" si no hay. */
   const styleBefore = useCallback(
-    (path: string, props: Record<string, string>): Record<string, string> => {
-      const cur = padOverridesRef.current[path] || {};
+    (path: string, props: Record<string, string>, bp: string): Record<string, string> => {
+      const cur = padOverridesRef.current[bp]?.[path] || {};
       const before: Record<string, string> = {};
       for (const k of Object.keys(props)) before[k] = cur[k] ?? '';
       return before;
@@ -863,17 +879,20 @@ export default function projectPage() {
   );
 
   /** Registra una edición de estilo en el historial, coalesciendo ráfagas
-   *  sobre el mismo elemento (teclear/arrastrar) en un solo paso de undo. */
+   *  sobre el mismo elemento+breakpoint (teclear/arrastrar) en un paso. */
   const recordStyleEdit = useCallback(
-    (path: string, before: Record<string, string>, after: Record<string, string>) => {
+    (path: string, bp: string, before: Record<string, string>, after: Record<string, string>) => {
       const now = Date.now();
       const top = undoStack.current[undoStack.current.length - 1];
       const last = lastStyleEditRef.current;
-      if (top && top.kind === 'style' && top.path === path && last && now - last.t < 1200) {
+      if (
+        top && top.kind === 'style' && top.path === path && top.bp === bp &&
+        last && now - last.t < 1200
+      ) {
         for (const k of Object.keys(before)) if (!(k in top.before)) top.before[k] = before[k];
         Object.assign(top.after, after);
       } else {
-        undoStack.current.push({ kind: 'style', path, before: { ...before }, after: { ...after } });
+        undoStack.current.push({ kind: 'style', path, bp, before: { ...before }, after: { ...after } });
         redoStack.current = [];
       }
       lastStyleEditRef.current = { path, t: now };
@@ -885,7 +904,7 @@ export default function projectPage() {
   // performUndo/Redo (que están definidos más arriba) para evitar TDZ.
   const applyStyleEdit = useCallback(
     async (edit: StyleEdit): Promise<boolean> => {
-      applyStyleToPath(edit.path, edit.after);
+      applyStyleToPath(edit.path, edit.after, edit.bp);
       return true;
     },
     [applyStyleToPath],
@@ -893,18 +912,19 @@ export default function projectPage() {
   applyStyleEditRef.current = applyStyleEdit;
 
   /**
-   * Inspector lateral: aplica una prop al elemento seleccionado (en vivo +
-   * persistencia en código) y la registra en el historial (Ctrl+Z).
+   * Inspector lateral: aplica una prop al elemento seleccionado en el
+   * breakpoint actual (en vivo + persistencia) y la registra (Ctrl+Z).
    */
   const applyElementStyle = useCallback(
     (style: Record<string, string>) => {
       const path = selectedEl?.path;
       if (!path) return;
-      const before = styleBefore(path, style);
-      applyStyleToPath(path, style);
-      recordStyleEdit(path, before, style);
+      const bp = viewport;
+      const before = styleBefore(path, style, bp);
+      applyStyleToPath(path, style, bp);
+      recordStyleEdit(path, bp, before, style);
     },
-    [selectedEl, styleBefore, applyStyleToPath, recordStyleEdit],
+    [selectedEl, viewport, styleBefore, applyStyleToPath, recordStyleEdit],
   );
 
   // Atajos de teclado del editor (fuera de inputs/textarea).
@@ -957,15 +977,35 @@ export default function projectPage() {
     };
   }, [canvasMode, rightPaneMode, previewUrl, previewNonce, previewStatus, artboardDims]);
 
-  // Cargar overrides de padding guardados de este proyecto (localStorage).
+  // Cargar overrides guardados de este proyecto (localStorage). Migra el
+  // formato viejo (plano por ruta) al nuevo anidado por breakpoint.
   useEffect(() => {
     try {
       const raw = localStorage.getItem(`pliaPadOverrides:${id}`);
-      padOverridesRef.current = raw ? JSON.parse(raw) : {};
+      const parsed = raw ? JSON.parse(raw) : {};
+      const hasBp = ['desktop', 'tablet', 'mobile'].some((k) => k in parsed);
+      padOverridesRef.current = hasBp
+        ? parsed
+        : Object.keys(parsed).length
+          ? { desktop: parsed }
+          : {};
     } catch {
       padOverridesRef.current = {};
     }
   }, [id]);
+
+  // Informar al bridge el breakpoint actual (= dispositivo) para que las
+  // ediciones de estilo se guarden en ese bucket (desktop/tablet/mobile).
+  useEffect(() => {
+    const post = () =>
+      iframeRef.current?.contentWindow?.postMessage(
+        { type: 'PLIA_SET_BREAKPOINT', bp: viewport },
+        '*',
+      );
+    post();
+    const t1 = setTimeout(post, 900);
+    return () => clearTimeout(t1);
+  }, [viewport, previewUrl, previewNonce, previewStatus]);
 
   // Informar al bridge el zoom del lienzo → contra-escala los marcadores de
   // padding para que mantengan tamaño visual constante (como Kittl/Framer).
