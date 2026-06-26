@@ -285,6 +285,17 @@
             layoutPadHandles();
             return;
           }
+          if (e.data.type === 'PLIA_SET_STYLE_AT' && e.data.path && e.data.style) {
+            // Aplicar estilos a un elemento POR RUTA (inspector y undo/redo, que
+            // pueden afectar a un elemento que no es el seleccionado). "" = quitar.
+            var elAt = elByPath(e.data.path);
+            if (elAt) {
+              var sa = e.data.style;
+              for (var ak in sa) { if (sa.hasOwnProperty(ak)) elAt.style[ak] = sa[ak]; }
+              if (elAt === selected) layoutPadHandles();
+            }
+            return;
+          }
           if (e.data.type === 'PLIA_SET_TOOL') {
             mode = e.data.tool === 'select' ? 'select' : 'none';
             if (mode === 'none') {

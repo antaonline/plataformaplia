@@ -671,14 +671,19 @@ export default function projectPage() {
       // se re-aplica al recargar (el bridge ya lo aplicó en vivo).
       if (e.data?.type === 'PLIA_PADDING_CHANGED' && e.data.path) {
         const map = padOverridesRef.current;
+        // Valores previos (para Ctrl+Z) ANTES de pisar el override.
+        const before: Record<string, string> = {};
+        for (const k of Object.keys(e.data.padding)) before[k] = map[e.data.path]?.[k] ?? '';
         map[e.data.path] = { ...(map[e.data.path] || {}), ...e.data.padding };
         try {
           localStorage.setItem(`pliaPadOverrides:${id}`, JSON.stringify(map));
         } catch {
           /* cuota llena: el cambio sigue vivo en pantalla */
         }
-        // Persistir también en el código del proyecto (durable + exportable).
+        // Persistir también en el código del proyecto (durable + exportable)
+        // y registrar en el historial (el bridge ya lo aplicó en vivo).
         queueStyleToCode(e.data.path, e.data.padding);
+        recordStyleEdit(e.data.path, before, e.data.padding);
         return;
       }
     };
@@ -688,15 +693,31 @@ export default function projectPage() {
   }, [apiBase, id]);
 
   // Historial de ediciones visuales para Ctrl+Z / Ctrl+Shift+Z.
+  // Incluye estilos (padding/resize/inspector): `before`/`after` son mapas de
+  // props CSS; "" en una prop = sin override (volver al valor generado).
+  type StyleEdit = {
+    kind: 'style';
+    path: string;
+    before: Record<string, string>;
+    after: Record<string, string>;
+  };
   type VisualEdit =
     | { kind: 'text'; oldText: string; newText: string }
-    | { kind: 'image'; oldSrc: string; newUrl: string };
+    | { kind: 'image'; oldSrc: string; newUrl: string }
+    | StyleEdit;
   const undoStack = useRef<VisualEdit[]>([]);
   const redoStack = useRef<VisualEdit[]>([]);
+  // Para coalescer ráfagas de estilo (teclear/arrastrar) en un solo paso undo.
+  const lastStyleEditRef = useRef<{ path: string; t: number } | null>(null);
+  // Puente de orden: performUndo/Redo (definidos aquí) llaman a applyStyleEdit
+  // (definido más abajo) a través de este ref, sin meterlo en sus deps.
+  const applyStyleEditRef = useRef<((edit: StyleEdit) => Promise<boolean>) | null>(null);
   const invertEdit = (e: VisualEdit): VisualEdit =>
     e.kind === 'text'
       ? { kind: 'text', oldText: e.newText, newText: e.oldText }
-      : { kind: 'image', oldSrc: e.newUrl, newUrl: e.oldSrc };
+      : e.kind === 'image'
+        ? { kind: 'image', oldSrc: e.newUrl, newUrl: e.oldSrc }
+        : { kind: 'style', path: e.path, before: e.after, after: e.before };
 
   /**
    * Aplica una edición visual (texto/imagen) llamando al backend, que
@@ -740,14 +761,18 @@ export default function projectPage() {
     [apiBase, id],
   );
 
-  /** Ctrl+Z: revierte la última edición visual (texto o imagen). */
+  /** Ctrl+Z: revierte la última edición visual (texto, imagen o estilo). */
   const performUndo = useCallback(async () => {
     const last = undoStack.current.pop();
     if (!last) {
       toast.info('Nada que deshacer');
       return;
     }
-    const ok = await applyVisualEdit(invertEdit(last), { skipHistory: true });
+    const inv = invertEdit(last);
+    const ok =
+      inv.kind === 'style'
+        ? !!(await applyStyleEditRef.current?.(inv))
+        : await applyVisualEdit(inv, { skipHistory: true });
     if (ok) redoStack.current.push(last);
     else undoStack.current.push(last); // falló: lo devolvemos a la pila
   }, [applyVisualEdit]);
@@ -756,7 +781,10 @@ export default function projectPage() {
   const performRedo = useCallback(async () => {
     const last = redoStack.current.pop();
     if (!last) return;
-    const ok = await applyVisualEdit(last, { skipHistory: true });
+    const ok =
+      last.kind === 'style'
+        ? !!(await applyStyleEditRef.current?.(last))
+        : await applyVisualEdit(last, { skipHistory: true });
     if (ok) undoStack.current.push(last);
     else redoStack.current.push(last);
   }, [applyVisualEdit]);
@@ -793,18 +821,21 @@ export default function projectPage() {
   );
 
   /**
-   * Inspector lateral: aplica una propiedad de estilo al elemento
-   * seleccionado. (1) la manda al iframe para verla en vivo, (2) la persiste
-   * en localStorage (cache instantánea) + en el código del proyecto, y
-   * (3) la refleja en el panel para que el input quede sincronizado.
+   * Aplica props de estilo a un elemento POR SU RUTA DOM: en vivo en el iframe
+   * (PLIA_SET_STYLE_AT), en localStorage (cache), en el código (debounced) y en
+   * el panel si es el seleccionado. "" en una prop = quitar el override.
    */
-  const applyElementStyle = useCallback(
-    (style: Record<string, string>) => {
-      const path = selectedEl?.path;
-      if (!path) return;
-      iframeRef.current?.contentWindow?.postMessage({ type: 'PLIA_SET_STYLE', style }, '*');
+  const applyStyleToPath = useCallback(
+    (path: string, style: Record<string, string>) => {
+      iframeRef.current?.contentWindow?.postMessage({ type: 'PLIA_SET_STYLE_AT', path, style }, '*');
       const map = padOverridesRef.current;
-      map[path] = { ...(map[path] || {}), ...style };
+      const cur = { ...(map[path] || {}) };
+      for (const k of Object.keys(style)) {
+        if (style[k] === '') delete cur[k];
+        else cur[k] = style[k];
+      }
+      if (Object.keys(cur).length) map[path] = cur;
+      else delete map[path];
       try {
         localStorage.setItem(`pliaPadOverrides:${id}`, JSON.stringify(map));
       } catch {
@@ -812,10 +843,68 @@ export default function projectPage() {
       }
       queueStyleToCode(path, style);
       setSelectedEl((prev: any) =>
-        prev ? { ...prev, styles: { ...(prev.styles || {}), ...style } } : prev,
+        prev && prev.path === path
+          ? { ...prev, styles: { ...(prev.styles || {}), ...style } }
+          : prev,
       );
     },
-    [selectedEl, id, queueStyleToCode],
+    [id, queueStyleToCode],
+  );
+
+  /** Valores actuales (override) de esas props; "" si no hay override. */
+  const styleBefore = useCallback(
+    (path: string, props: Record<string, string>): Record<string, string> => {
+      const cur = padOverridesRef.current[path] || {};
+      const before: Record<string, string> = {};
+      for (const k of Object.keys(props)) before[k] = cur[k] ?? '';
+      return before;
+    },
+    [],
+  );
+
+  /** Registra una edición de estilo en el historial, coalesciendo ráfagas
+   *  sobre el mismo elemento (teclear/arrastrar) en un solo paso de undo. */
+  const recordStyleEdit = useCallback(
+    (path: string, before: Record<string, string>, after: Record<string, string>) => {
+      const now = Date.now();
+      const top = undoStack.current[undoStack.current.length - 1];
+      const last = lastStyleEditRef.current;
+      if (top && top.kind === 'style' && top.path === path && last && now - last.t < 1200) {
+        for (const k of Object.keys(before)) if (!(k in top.before)) top.before[k] = before[k];
+        Object.assign(top.after, after);
+      } else {
+        undoStack.current.push({ kind: 'style', path, before: { ...before }, after: { ...after } });
+        redoStack.current = [];
+      }
+      lastStyleEditRef.current = { path, t: now };
+    },
+    [],
+  );
+
+  // Undo/redo de estilos: aplica SIN registrar. Se expone por ref a
+  // performUndo/Redo (que están definidos más arriba) para evitar TDZ.
+  const applyStyleEdit = useCallback(
+    async (edit: StyleEdit): Promise<boolean> => {
+      applyStyleToPath(edit.path, edit.after);
+      return true;
+    },
+    [applyStyleToPath],
+  );
+  applyStyleEditRef.current = applyStyleEdit;
+
+  /**
+   * Inspector lateral: aplica una prop al elemento seleccionado (en vivo +
+   * persistencia en código) y la registra en el historial (Ctrl+Z).
+   */
+  const applyElementStyle = useCallback(
+    (style: Record<string, string>) => {
+      const path = selectedEl?.path;
+      if (!path) return;
+      const before = styleBefore(path, style);
+      applyStyleToPath(path, style);
+      recordStyleEdit(path, before, style);
+    },
+    [selectedEl, styleBefore, applyStyleToPath, recordStyleEdit],
   );
 
   // Atajos de teclado del editor (fuera de inputs/textarea).
