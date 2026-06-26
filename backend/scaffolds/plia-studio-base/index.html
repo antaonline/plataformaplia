@@ -127,6 +127,24 @@
         function send(type, payload) {
           try { window.parent.postMessage(Object.assign({ type: type }, payload || {}), '*'); } catch (_) {}
         }
+        // Capa las utilidades de alto-viewport a la altura del dispositivo
+        // mientras el lienzo está activo (el iframe se estira a toda la web, lo
+        // que inflaría `100vh`). Cubre las utilidades nombradas de Tailwind.
+        function applyVhCap(on, vh) {
+          var id = 'plia-vh-cap';
+          var el = document.getElementById(id);
+          if (!on) { if (el) el.parentNode.removeChild(el); return; }
+          if (!el) {
+            el = document.createElement('style');
+            el.id = id;
+            el.setAttribute('data-plia-ui', '1');
+            (document.head || document.documentElement).appendChild(el);
+          }
+          var H = Math.round(vh || 900);
+          el.textContent =
+            '.min-h-screen,.min-h-dvh,.min-h-svh,.min-h-lvh{min-height:' + H + 'px !important}' +
+            '.h-screen,.h-dvh,.h-svh,.h-lvh{height:' + H + 'px !important}';
+        }
         // Reemplaza el src de una imagen RESPETANDO el layout del código:
         // congela la altura renderizada actual y fuerza object-fit cover,
         // así una imagen con otra proporción ENCAJA en la caja existente
@@ -231,6 +249,11 @@
           if (!e.data) return;
           if (e.data.type === 'PLIA_SET_CANVAS_MODE') {
             canvasMode = !!e.data.on;
+            // En modo lienzo el artboard se estira a la altura COMPLETA de la
+            // web, así que `100vh` (min-h-screen/h-screen) se inflaría a toda
+            // la página. Capamos esas utilidades a la altura del dispositivo
+            // para que el hero mida un viewport, igual que en el preview normal.
+            applyVhCap(canvasMode, e.data.vh);
             return;
           }
           if (e.data.type === 'PLIA_SET_ZOOM') {
@@ -457,15 +480,19 @@
             pB = pxOf(selected, 'paddingBottom'), pL = pxOf(selected, 'paddingLeft');
           var L = r.left + sx, T = r.top + sy, R = r.right + sx, B = r.bottom + sy;
           var cx = L + r.width / 2, cy = T + r.height / 2;
-          var eT = T + pT, eB = B - pB, eL = L + pL, eR = R - pR; // bordes internos
-          // Zonas (banda fina sobre el borde interno) + franjas coloreadas.
-          place(ui.pad.top.zone, L, eT - HIT / 2, r.width, HIT);
+          var eB = B - pB, eR = R - pR; // bordes internos (para las franjas)
+          // La barrita va SIEMPRE en el MEDIO de la franja del padding (no en el
+          // borde): centro = mitad del padding. La zona sensible se centra ahí,
+          // con grosor mínimo (HIT) para poder agarrarla aunque el padding sea 0.
+          var mT = T + pT / 2, mB = B - pB / 2, mL = L + pL / 2, mR = R - pR / 2;
+          var zT = Math.max(pT, HIT), zB = Math.max(pB, HIT), zL = Math.max(pL, HIT), zR = Math.max(pR, HIT);
+          place(ui.pad.top.zone, L, mT - zT / 2, r.width, zT);
           place(ui.pad.top.fill, L, T, r.width, pT);
-          place(ui.pad.bottom.zone, L, eB - HIT / 2, r.width, HIT);
+          place(ui.pad.bottom.zone, L, mB - zB / 2, r.width, zB);
           place(ui.pad.bottom.fill, L, eB, r.width, pB);
-          place(ui.pad.left.zone, eL - HIT / 2, T, HIT, r.height);
+          place(ui.pad.left.zone, mL - zL / 2, T, zL, r.height);
           place(ui.pad.left.fill, L, T, pL, r.height);
-          place(ui.pad.right.zone, eR - HIT / 2, T, HIT, r.height);
+          place(ui.pad.right.zone, mR - zR / 2, T, zR, r.height);
           place(ui.pad.right.fill, eR, T, pR, r.height);
           // Barras contra-escaladas (tamaño visual constante).
           PAD_SIDES.forEach(function (side) {
@@ -527,15 +554,16 @@
           var val = Math.max(0, Math.round(padDrag.startVal + d));
           selected.style[padDrag.prop] = val + 'px';
           layoutPadHandles();
-          // Cuadrito con el valor en px, en la franja del padding (no tapa texto).
+          // Cuadrito con el valor en px, junto a la barrita (que está en el
+          // medio de la franja), desplazado hacia el borde exterior.
           var r = selected.getBoundingClientRect();
           var sx = window.scrollX || 0, sy = window.scrollY || 0, inv = 1 / (padZoom || 1);
-          var cx = r.left + sx + r.width / 2, cy = r.top + sy + r.height / 2, o = 16 * inv;
+          var cx = r.left + sx + r.width / 2, cy = r.top + sy + r.height / 2, o = 18 * inv;
           var pos = {
-            top: [cx, r.top + sy + val - o],
-            bottom: [cx, r.bottom + sy - val + o],
-            left: [r.left + sx + val - o, cy],
-            right: [r.right + sx - val + o, cy],
+            top: [cx, r.top + sy + val / 2 - o],
+            bottom: [cx, r.bottom + sy - val / 2 + o],
+            left: [r.left + sx + val / 2 - o, cy],
+            right: [r.right + sx - val / 2 + o, cy],
           }[padDrag.side];
           ui.tip.textContent = val + ' px';
           placeTip(ui.tip, pos[0], pos[1], inv);

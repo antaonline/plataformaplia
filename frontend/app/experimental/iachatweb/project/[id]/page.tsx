@@ -851,9 +851,12 @@ export default function projectPage() {
   // terminado de cargar cuando corre este effect.
   useEffect(() => {
     const on = canvasMode && rightPaneMode !== 'code';
+    // `vh` = altura del dispositivo: el bridge capa min-h-screen/h-screen a este
+    // valor en modo lienzo, así el hero mide UN viewport (no toda la web).
+    const vh = artboardDims().h;
     const send = () =>
       iframeRef.current?.contentWindow?.postMessage(
-        { type: 'PLIA_SET_CANVAS_MODE', on },
+        { type: 'PLIA_SET_CANVAS_MODE', on, vh },
         '*',
       );
     send();
@@ -863,7 +866,7 @@ export default function projectPage() {
       clearTimeout(t1);
       clearTimeout(t2);
     };
-  }, [canvasMode, rightPaneMode, previewUrl, previewNonce, previewStatus]);
+  }, [canvasMode, rightPaneMode, previewUrl, previewNonce, previewStatus, artboardDims]);
 
   // Cargar overrides de padding guardados de este proyecto (localStorage).
   useEffect(() => {
