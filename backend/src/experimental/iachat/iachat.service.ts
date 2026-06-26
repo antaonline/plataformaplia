@@ -15,6 +15,11 @@ import { CreditService } from './generation/credit.service';
 import { ChatMsg } from './generation/codegen.types';
 import { WorkspaceService } from './workspace.service';
 import { detectTemplate3DInjection } from './template-3d-injector';
+import {
+  parseOverridesCss,
+  mergeOverride,
+  serializeOverrides,
+} from './style-overrides.util';
 
 export type ChatMode = 'build' | 'ask' | 'plan';
 
@@ -186,101 +191,22 @@ export class AiChatService {
     if (!body?.path || !body?.style || typeof body.style !== 'object') {
       return { ok: false };
     }
-    const bp =
-      body.breakpoint === 'tablet' || body.breakpoint === 'mobile'
-        ? body.breakpoint
-        : 'desktop';
     const dir = join(process.cwd(), 'uploads', 'studio-live', String(chatId), 'src');
     const file = join(dir, 'plia-overrides.css');
 
-    const map = await this.loadOverrideMap(file);
-    const bpMap = map[bp] || (map[bp] = {});
-    // Mergear el override del elemento, limpiando props vacías ("" = reset).
-    const next = { ...(bpMap[body.path] || {}), ...body.style };
-    for (const k of Object.keys(next)) {
-      if (next[k] === '' || next[k] == null) delete next[k];
-    }
-    if (Object.keys(next).length === 0) delete bpMap[body.path];
-    else bpMap[body.path] = next;
-    if (Object.keys(bpMap).length === 0) delete map[bp];
-
-    await fs.promises.mkdir(dir, { recursive: true });
-    await fs.promises.writeFile(file, this.serializeOverrides(map), 'utf8');
-    return { ok: true };
-  }
-
-  /**
-   * Mapa anidado por breakpoint: { desktop|tablet|mobile: { rutaDOM: {prop} } }.
-   * Migra el formato viejo (plano por ruta) al bucket `desktop`.
-   */
-  private async loadOverrideMap(
-    file: string,
-  ): Promise<Record<string, Record<string, Record<string, string>>>> {
-    let raw: any = {};
+    // Lógica pura (compartida + testeada) en style-overrides.util.
+    let css = '';
     try {
-      const cur = await fs.promises.readFile(file, 'utf8');
-      const m = cur.match(/PLIA_JSON:([\s\S]*?)\*\//);
-      if (m) raw = JSON.parse(m[1].trim());
+      css = await fs.promises.readFile(file, 'utf8');
     } catch {
       /* aún no existe */
     }
-    if (!raw || typeof raw !== 'object') return {};
-    const hasBp = ['desktop', 'tablet', 'mobile'].some((k) => k in raw);
-    if (hasBp) return raw;
-    return Object.keys(raw).length ? { desktop: raw } : {};
-  }
+    const map = parseOverridesCss(css);
+    mergeOverride(map, body.breakpoint || 'desktop', body.path, body.style);
 
-  /** "DIV:0>SECTION:1" → "#root > div:nth-child(1) > section:nth-child(2)". */
-  private pathToSelector(path: string): string {
-    const segs = path
-      .split('>')
-      .map((seg) => {
-        const [tag, idx] = seg.split(':');
-        const n = parseInt(idx, 10);
-        if (!tag || Number.isNaN(n)) return '';
-        return `${tag.toLowerCase()}:nth-child(${n + 1})`;
-      })
-      .filter(Boolean);
-    // El '#root' (id) le da especificidad alta: gana a las clases de Tailwind
-    // sin necesidad de !important (y los estilos inline del editor en vivo,
-    // que igual son los de mayor prioridad, siguen mandando al arrastrar).
-    return ['#root', ...segs].join(' > ');
-  }
-
-  /**
-   * Reescribe el .css completo: marcador JSON (fuente de verdad) + reglas
-   * agrupadas por breakpoint. Desktop = base; tablet/móvil = @media max-width
-   * (desktop-first), en ese orden para que el más chico gane en pantallas
-   * pequeñas (cascada tipo Framer: tablet hereda a móvil salvo override).
-   */
-  private serializeOverrides(
-    map: Record<string, Record<string, Record<string, string>>>,
-  ): string {
-    const BP_MAX: Record<string, number> = { tablet: 1024, mobile: 640 };
-    const header =
-      '/* PLIA · estilos del editor visual. Generado automáticamente — no editar a mano. */';
-    const json = `/*PLIA_JSON:${JSON.stringify(map)}*/`;
-    const block = (bpMap: Record<string, Record<string, string>>, pad: string) =>
-      Object.keys(bpMap)
-        .map((path) => {
-          const sel = this.pathToSelector(path);
-          const decls = Object.entries(bpMap[path])
-            .map(
-              ([prop, val]) =>
-                `${pad}  ${prop.replace(/[A-Z]/g, (mm) => '-' + mm.toLowerCase())}: ${val};`,
-            )
-            .join('\n');
-          return `${pad}${sel} {\n${decls}\n${pad}}`;
-        })
-        .join('\n\n');
-    const parts: string[] = [];
-    if (map.desktop && Object.keys(map.desktop).length) parts.push(block(map.desktop, ''));
-    for (const bp of ['tablet', 'mobile']) {
-      if (map[bp] && Object.keys(map[bp]).length) {
-        parts.push(`@media (max-width: ${BP_MAX[bp]}px) {\n${block(map[bp], '  ')}\n}`);
-      }
-    }
-    return `${header}\n${json}\n${parts.join('\n\n')}${parts.length ? '\n' : ''}`;
+    await fs.promises.mkdir(dir, { recursive: true });
+    await fs.promises.writeFile(file, serializeOverrides(map), 'utf8');
+    return { ok: true };
   }
 
   // ============================================================
