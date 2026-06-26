@@ -223,6 +223,21 @@ export class AiChatController {
     return this.aiChatService.applyVisualEdit(id, req.user.id, body);
   }
 
+  /**
+   * Override de estilo del editor visual (padding/tamaño/tipografía/color).
+   * Lo escribe en `src/plia-overrides.css` del proyecto para que persista en
+   * el código y viaje al exportar/publicar.
+   */
+  @Post(':id/style-override')
+  @HttpCode(HttpStatus.OK)
+  styleOverride(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req: any,
+    @Body() body: { path: string; style: Record<string, string> },
+  ) {
+    return this.aiChatService.applyStyleOverride(id, req.user.id, body);
+  }
+
   @Patch(':id/rename')
   renameChat(
     @Param('id', ParseIntPipe) id: number,

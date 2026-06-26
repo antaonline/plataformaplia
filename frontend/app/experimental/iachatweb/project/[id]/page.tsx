@@ -167,6 +167,10 @@ export default function projectPage() {
   // Overrides de padding (estilo Framer): { [rutaDOM]: { paddingTop, ... } }.
   // Se guardan por proyecto y se re-aplican al recargar el preview.
   const padOverridesRef = useRef<Record<string, Record<string, string>>>({});
+  // Cola para persistir los overrides EN EL CÓDIGO (src/plia-overrides.css del
+  // proyecto, vía backend). Se agrupa y debouncea para no spamear al teclear.
+  const pendingStyleRef = useRef<Record<string, Record<string, string>>>({});
+  const styleFlushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Transformación actual del lienzo (zoom/pan) — la reporta el
   // CanvasViewport; los items la usan para la matemática de arrastre.
   const canvasTransformRef = useRef<{ zoom: number; pan: { x: number; y: number } }>({
@@ -673,6 +677,8 @@ export default function projectPage() {
         } catch {
           /* cuota llena: el cambio sigue vivo en pantalla */
         }
+        // Persistir también en el código del proyecto (durable + exportable).
+        queueStyleToCode(e.data.path, e.data.padding);
         return;
       }
     };
@@ -756,9 +762,40 @@ export default function projectPage() {
   }, [applyVisualEdit]);
 
   /**
+   * Encola un override de estilo para escribirlo en el CÓDIGO del proyecto
+   * (src/plia-overrides.css vía backend). Agrupa por ruta DOM y debouncea para
+   * no disparar una petición por cada tecla/pixel arrastrado.
+   */
+  const queueStyleToCode = useCallback(
+    (path: string, style: Record<string, string>) => {
+      const p = pendingStyleRef.current;
+      p[path] = { ...(p[path] || {}), ...style };
+      if (styleFlushTimer.current) clearTimeout(styleFlushTimer.current);
+      styleFlushTimer.current = setTimeout(async () => {
+        const batch = pendingStyleRef.current;
+        pendingStyleRef.current = {};
+        const token = localStorage.getItem('access_token');
+        if (!token) return;
+        for (const [pth, st] of Object.entries(batch)) {
+          try {
+            await fetch(`${apiBase}/experimental/iachat/${id}/style-override`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+              body: JSON.stringify({ path: pth, style: st }),
+            });
+          } catch {
+            /* sin red: el cambio sigue vivo en pantalla y en localStorage */
+          }
+        }
+      }, 600);
+    },
+    [apiBase, id],
+  );
+
+  /**
    * Inspector lateral: aplica una propiedad de estilo al elemento
    * seleccionado. (1) la manda al iframe para verla en vivo, (2) la persiste
-   * por proyecto+ruta DOM (mismo mecanismo que el padding del lienzo) y
+   * en localStorage (cache instantánea) + en el código del proyecto, y
    * (3) la refleja en el panel para que el input quede sincronizado.
    */
   const applyElementStyle = useCallback(
@@ -773,11 +810,12 @@ export default function projectPage() {
       } catch {
         /* cuota llena: el cambio sigue vivo en pantalla */
       }
+      queueStyleToCode(path, style);
       setSelectedEl((prev: any) =>
         prev ? { ...prev, styles: { ...(prev.styles || {}), ...style } } : prev,
       );
     },
-    [selectedEl, id],
+    [selectedEl, id, queueStyleToCode],
   );
 
   // Atajos de teclado del editor (fuera de inputs/textarea).

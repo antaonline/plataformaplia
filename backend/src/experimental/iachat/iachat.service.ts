@@ -167,6 +167,97 @@ export class AiChatService {
     return { ok: true, files, replacements };
   }
 
+  /**
+   * Persiste un override de estilo (padding/tamaño/tipografía/color) del editor
+   * visual en el CÓDIGO del proyecto: escribe/mergea `src/plia-overrides.css`,
+   * que el scaffold importa al final y NO sobreescribe ("copiar una sola vez").
+   * Así los ajustes viajan con la web al exportar/publicar — no solo en el
+   * localStorage del navegador. Indexado por la ruta DOM del elemento.
+   */
+  async applyStyleOverride(
+    chatId: number,
+    userId: number,
+    body: { path: string; style: Record<string, string> },
+  ): Promise<{ ok: boolean }> {
+    const chat = await this.prisma.aiChat.findUnique({ where: { id: chatId } });
+    if (!chat || chat.userId !== userId) {
+      throw new NotFoundException('Chat no encontrado');
+    }
+    if (!body?.path || !body?.style || typeof body.style !== 'object') {
+      return { ok: false };
+    }
+    const dir = join(
+      process.cwd(),
+      'uploads',
+      'studio-live',
+      String(chatId),
+      'src',
+    );
+    const file = join(dir, 'plia-overrides.css');
+
+    // Cargar el mapa actual desde el marcador JSON del archivo (fuente de
+    // verdad). Si no existe, arrancamos vacío.
+    let map: Record<string, Record<string, string>> = {};
+    try {
+      const cur = await fs.promises.readFile(file, 'utf8');
+      const m = cur.match(/PLIA_JSON:([\s\S]*?)\*\//);
+      if (m) map = JSON.parse(m[1].trim());
+    } catch {
+      /* aún no existe */
+    }
+
+    // Mergear el override del elemento, limpiando props vacías ("" = reset).
+    const next = { ...(map[body.path] || {}), ...body.style };
+    for (const k of Object.keys(next)) {
+      if (next[k] === '' || next[k] == null) delete next[k];
+    }
+    if (Object.keys(next).length === 0) delete map[body.path];
+    else map[body.path] = next;
+
+    await fs.promises.mkdir(dir, { recursive: true });
+    await fs.promises.writeFile(file, this.serializeOverrides(map), 'utf8');
+    return { ok: true };
+  }
+
+  /** "DIV:0>SECTION:1" → "#root > div:nth-child(1) > section:nth-child(2)". */
+  private pathToSelector(path: string): string {
+    const segs = path
+      .split('>')
+      .map((seg) => {
+        const [tag, idx] = seg.split(':');
+        const n = parseInt(idx, 10);
+        if (!tag || Number.isNaN(n)) return '';
+        return `${tag.toLowerCase()}:nth-child(${n + 1})`;
+      })
+      .filter(Boolean);
+    // El '#root' (id) le da especificidad alta: gana a las clases de Tailwind
+    // sin necesidad de !important (y los estilos inline del editor en vivo,
+    // que igual son los de mayor prioridad, siguen mandando al arrastrar).
+    return ['#root', ...segs].join(' > ');
+  }
+
+  /** Reescribe el .css completo: marcador JSON (fuente de verdad) + reglas. */
+  private serializeOverrides(
+    map: Record<string, Record<string, string>>,
+  ): string {
+    const header =
+      '/* PLIA · estilos del editor visual. Generado automáticamente — no editar a mano. */';
+    const json = `/*PLIA_JSON:${JSON.stringify(map)}*/`;
+    const rules = Object.keys(map)
+      .map((path) => {
+        const sel = this.pathToSelector(path);
+        const decls = Object.entries(map[path])
+          .map(([prop, val]) => {
+            const kebab = prop.replace(/[A-Z]/g, (mm) => '-' + mm.toLowerCase());
+            return `  ${kebab}: ${val};`;
+          })
+          .join('\n');
+        return `${sel} {\n${decls}\n}`;
+      })
+      .join('\n\n');
+    return `${header}\n${json}\n${rules ? rules + '\n' : ''}`;
+  }
+
   // ============================================================
   // CREAR CHAT — Fase de Planificación (3 conceptos iniciales)
   // ============================================================

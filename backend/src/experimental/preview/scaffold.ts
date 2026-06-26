@@ -29,6 +29,12 @@ const EXCLUDE_FROM_COPY = new Set([
   '.plia-deps',
 ]);
 
+// Archivos que se copian del scaffold UNA sola vez (al crear el proyecto) y
+// que luego NO se vuelven a sobrescribir, aunque difieran del maestro: guardan
+// estado propio del proyecto. `plia-overrides.css` lleva los ajustes visuales
+// (padding/tamaño/tipografía) que el cliente hace en el editor.
+const COPY_ONCE = new Set(['plia-overrides.css']);
+
 async function pathExists(p: string): Promise<boolean> {
   try {
     await fs.access(p);
@@ -73,6 +79,9 @@ async function copyRecursive(src: string, dst: string): Promise<void> {
         /* broken symlink */
       }
     } else {
+      // "Copiar una sola vez": si ya existe en el proyecto, respetamos su
+      // contenido (overrides del cliente) y no lo pisamos con el maestro.
+      if (COPY_ONCE.has(entry.name) && (await pathExists(d))) continue;
       // Solo copiar si no existe o difiere para no triggerear Vite HMR.
       try {
         const current = await fs.readFile(d, 'utf8');
