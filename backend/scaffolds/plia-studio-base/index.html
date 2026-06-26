@@ -141,9 +141,15 @@
             (document.head || document.documentElement).appendChild(el);
           }
           var H = Math.round(vh || 900);
+          // `~=` exige el token EXACTO (separado por espacios), así
+          // `h-[100vh]` no pisa a `min-h-[100vh]` por subcadena.
           el.textContent =
-            '.min-h-screen,.min-h-dvh,.min-h-svh,.min-h-lvh{min-height:' + H + 'px !important}' +
-            '.h-screen,.h-dvh,.h-svh,.h-lvh{height:' + H + 'px !important}';
+            '.min-h-screen,.min-h-dvh,.min-h-svh,.min-h-lvh,' +
+            '[class~="min-h-[100vh]"],[class~="min-h-[100dvh]"],[class~="min-h-[100svh]"],[class~="min-h-[100lvh]"]' +
+            '{min-height:' + H + 'px !important}' +
+            '.h-screen,.h-dvh,.h-svh,.h-lvh,' +
+            '[class~="h-[100vh]"],[class~="h-[100dvh]"],[class~="h-[100svh]"],[class~="h-[100lvh]"]' +
+            '{height:' + H + 'px !important}';
         }
         // Reemplaza el src de una imagen RESPETANDO el layout del código:
         // congela la altura renderizada actual y fuerza object-fit cover,
