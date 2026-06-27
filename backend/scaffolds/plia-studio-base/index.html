@@ -160,9 +160,12 @@
             '.min-h-screen,.min-h-dvh,.min-h-svh,.min-h-lvh,' +
             '[class~="min-h-[100vh]"],[class~="min-h-[100dvh]"],[class~="min-h-[100svh]"],[class~="min-h-[100lvh]"]' +
             '{min-height:' + H + 'px !important}' +
+            // `height:auto` para que estas alturas FIJAS (h-screen) pasen a ser
+            // un PISO (min-height) y puedan CRECER con el contenido/padding en
+            // el lienzo, en vez de quedar clavadas y "comerse" el contenido.
             '.h-screen,.h-dvh,.h-svh,.h-lvh,' +
             '[class~="h-[100vh]"],[class~="h-[100dvh]"],[class~="h-[100svh]"],[class~="h-[100lvh]"]' +
-            '{height:' + H + 'px !important}';
+            '{height:auto !important;min-height:' + H + 'px !important}';
         }
 
         // ─── Overrides EN VIVO del editor (media-aware) ───────────────────
@@ -445,7 +448,7 @@
         var resizeDrag = null;
         var PAD_SIDES = ['top', 'right', 'bottom', 'left'];
         var ACCENT = '#8b5cf6';
-        var ACCENT_FILL = 'rgba(139,92,246,0.22)';
+        var ACCENT_FILL = 'rgba(139,92,246,0.14)';
 
         function pxOf(el, prop) {
           var v = parseFloat(window.getComputedStyle(el)[prop]);
@@ -504,7 +507,12 @@
           PAD_SIDES.forEach(function (side) {
             var vertical = side === 'top' || side === 'bottom';
             // Franja coloreada del padding (solo visual, aparece al hover/drag).
-            var fill = mkEl('position:absolute;display:none;background:' + ACCENT_FILL + ';pointer-events:none;');
+            // Lleva una LÍNEA en el borde del CONTENIDO (de qué lado empieza el
+            // padding), para que se lea claro que el espacio se agrega a partir
+            // del objeto y no lo pisa.
+            var edge = side === 'top' ? 'bottom' : side === 'bottom' ? 'top' : side === 'left' ? 'right' : 'left';
+            var fill = mkEl('position:absolute;display:none;background:' + ACCENT_FILL +
+              ';pointer-events:none;border-' + edge + ':2px solid ' + ACCENT + ';box-sizing:border-box;');
             // Zona sensible (banda fina sobre el borde interno): hover + drag.
             var zone = mkEl('position:absolute;pointer-events:auto;background:transparent;' +
               (vertical ? 'cursor:ns-resize;' : 'cursor:ew-resize;'));
