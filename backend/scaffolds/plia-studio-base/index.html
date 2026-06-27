@@ -79,11 +79,20 @@
         if (window.parent === window) return;
         var last = 0;
         var send = function () {
-          var h = Math.max(
-            document.documentElement.scrollHeight,
-            document.body ? document.body.scrollHeight : 0
-          );
-          if (Math.abs(h - last) > 4) {
+          // Altura del CONTENIDO (body), NO documentElement.scrollHeight: este
+          // último está "pisado" por el alto del iframe (viewport). En modo
+          // lienzo el iframe se estira, así que documentElement.scrollHeight
+          // nunca baja aunque cap-emos el hero → el artboard quedaba gigante.
+          // El body (con su min-height cap-eado a la altura del dispositivo) sí
+          // refleja el contenido real. Tomamos también el borde inferior del
+          // último hijo por si el body trae overflow raro.
+          var b = document.body;
+          var h = b ? b.scrollHeight : document.documentElement.scrollHeight;
+          if (b && b.lastElementChild) {
+            var rect = b.lastElementChild.getBoundingClientRect();
+            h = Math.max(h, Math.ceil(rect.bottom + (window.scrollY || 0)));
+          }
+          if (h && Math.abs(h - last) > 4) {
             last = h;
             try {
               window.parent.postMessage({ type: 'PLIA_DOC_HEIGHT', height: h }, '*');
