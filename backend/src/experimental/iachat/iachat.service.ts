@@ -186,8 +186,11 @@ export class AiChatService {
     if (!chat || chat.userId !== userId) {
       throw new NotFoundException('Chat no encontrado');
     }
-    const snippet = (body?.html || '').trim();
-    if (!snippet) return { ok: false, reason: 'empty' };
+    const raw = (body?.html || '').trim();
+    if (!raw) return { ok: false, reason: 'empty' };
+    // Etiqueta única para poder ELIMINARLA después desde el editor.
+    const sid = 's-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    const snippet = raw.replace(/^<section\b/, `<section data-plia-section="${sid}"`);
 
     const messages = await this.prisma.aiMessage.findMany({
       where: { chatId },
@@ -233,7 +236,68 @@ export class AiChatService {
       where: { id: lastWithFiles.id },
       data: { content: newContent },
     });
-    this.logger.log(`[insert-section] chat=${chatId} en ${key}`);
+    this.logger.log(`[insert-section] chat=${chatId} en ${key} (${sid})`);
+    return { ok: true, files };
+  }
+
+  /**
+   * Elimina una sección insertada por la paleta, identificada por su
+   * `data-plia-section`. Solo borra secciones que agregó la herramienta (las
+   * que llevan ese atributo), nunca las secciones originales del sitio.
+   */
+  async deleteSection(
+    chatId: number,
+    userId: number,
+    body: { sectionId: string },
+  ): Promise<{ ok: boolean; files?: Record<string, string>; reason?: string }> {
+    const chat = await this.prisma.aiChat.findUnique({ where: { id: chatId } });
+    if (!chat || chat.userId !== userId) {
+      throw new NotFoundException('Chat no encontrado');
+    }
+    const sid = (body?.sectionId || '').trim();
+    if (!sid) return { ok: false, reason: 'empty' };
+
+    const messages = await this.prisma.aiMessage.findMany({
+      where: { chatId },
+      orderBy: { createdAt: 'asc' },
+    });
+    const lastWithFiles = [...messages]
+      .reverse()
+      .find((m) => m.role === 'assistant' && /\[FILES\]/.test(m.content || ''));
+    if (!lastWithFiles) return { ok: false, reason: 'no-files' };
+    const fm = lastWithFiles.content.match(/\[FILES\]([\s\S]*?)\[\/FILES\]/);
+    let files: Record<string, string> = {};
+    try {
+      files = JSON.parse(fm![1]);
+    } catch {
+      return { ok: false, reason: 'parse' };
+    }
+
+    const esc = sid.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    // <section data-plia-section="id" …> … </section>  (sin <section> anidados)
+    const re = new RegExp('[^\\S\\n]*<section data-plia-section="' + esc + '"[\\s\\S]*?<\\/section>\\n?');
+    let removed = false;
+    for (const k of Object.keys(files)) {
+      if (typeof files[k] !== 'string' || files[k].indexOf(sid) < 0) continue;
+      if (re.test(files[k])) {
+        files[k] = files[k].replace(re, '');
+        removed = true;
+        break;
+      }
+    }
+    if (!removed) return { ok: false, reason: 'not-found' };
+
+    const metaM = lastWithFiles.content.match(/\[META\]([\s\S]*?)\[\/META\]/);
+    const respM = lastWithFiles.content.match(/\[RESPONSE\]([\s\S]*?)\[\/RESPONSE\]/);
+    const newContent =
+      `[META]${metaM ? metaM[1] : '{}'}[/META]` +
+      `[RESPONSE]${respM ? respM[1] : ''}[/RESPONSE]\n\n` +
+      `[FILES]${JSON.stringify(files)}[/FILES]`;
+    await this.prisma.aiMessage.update({
+      where: { id: lastWithFiles.id },
+      data: { content: newContent },
+    });
+    this.logger.log(`[delete-section] chat=${chatId} (${sid})`);
     return { ok: true, files };
   }
 

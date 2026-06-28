@@ -976,6 +976,31 @@ export default function projectPage() {
     },
     [apiBase, id],
   );
+  // Elimina una sección insertada por la paleta (por su data-plia-section).
+  const deleteSection = useCallback(
+    async (sectionId: string) => {
+      const token = localStorage.getItem('access_token');
+      if (!token) return;
+      try {
+        const res = await fetch(`${apiBase}/experimental/iachat/${id}/delete-section`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ sectionId }),
+        });
+        const data = await res.json();
+        if (data.ok && data.files) {
+          setPages(data.files);
+          setSelectedEl(null);
+          toast.success('Sección eliminada');
+        } else {
+          toast.error('No se pudo eliminar la sección');
+        }
+      } catch {
+        toast.error('No se pudo eliminar la sección');
+      }
+    },
+    [apiBase, id],
+  );
   // Al abrir el panel de capas (o al recargar el preview), pedir el árbol.
   // NO al cambiar de selección: el árbol no cambia al clickear y reconstruirlo
   // (hasta 500 nodos) en cada click es trabajo desperdiciado — para refrescar
@@ -2530,6 +2555,17 @@ export default function projectPage() {
                   <div className="border-t border-slate-100 pt-3">
                     <StyleInspector el={selectedEl} onApply={applyElementStyle} />
                   </div>
+
+                  {/* Eliminar sección: solo para las que insertó la paleta
+                      (las que llevan data-plia-section). */}
+                  {selectedEl.pliaSection && (
+                    <button
+                      onClick={() => deleteSection(selectedEl.pliaSection)}
+                      className="w-full mt-1 px-3 py-2 rounded-xl bg-red-50 text-red-600 text-xs font-bold flex items-center justify-center gap-2 hover:bg-red-100 border border-red-100"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" /> Eliminar esta sección
+                    </button>
+                  )}
                 </div>
               </div>
             )}

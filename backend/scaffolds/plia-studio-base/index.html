@@ -281,6 +281,12 @@
             isContainer: isContainer(el),
             src: el.tagName === 'IMG' ? el.getAttribute('src') : null,
             path: pathOf(el),
+            // Si el elemento (o un ancestro) es una sección insertada por la
+            // paleta, su id → para ofrecer "Eliminar sección" en el inspector.
+            pliaSection: (function () {
+              var s = el.closest && el.closest('[data-plia-section]');
+              return s ? s.getAttribute('data-plia-section') : null;
+            })(),
             // Cadena de ancestros (#root → … → el) para el breadcrumb "subir al padre".
             ancestors: ancestorsOf(el),
             rect: { x: rect.left, y: rect.top, w: rect.width, h: rect.height },

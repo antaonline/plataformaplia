@@ -249,6 +249,17 @@ export class AiChatController {
     return this.aiChatService.insertSection(id, req.user.id, body);
   }
 
+  /** Elimina una sección insertada por la paleta (por su data-plia-section). */
+  @Post(':id/delete-section')
+  @HttpCode(HttpStatus.OK)
+  deleteSection(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req: any,
+    @Body() body: { sectionId: string },
+  ) {
+    return this.aiChatService.deleteSection(id, req.user.id, body);
+  }
+
   @Patch(':id/rename')
   renameChat(
     @Param('id', ParseIntPipe) id: number,
