@@ -167,10 +167,50 @@ const ShadowField: React.FC<{ styles: StyleMap; onApply: Props['onApply'] }> = (
   );
 };
 
+const SEG_ALIGN = [
+  { v: 'flex-start', label: 'Ini' },
+  { v: 'center', label: 'Cen' },
+  { v: 'flex-end', label: 'Fin' },
+  { v: 'stretch', label: 'Est' },
+];
+const SEG_JUSTIFY = [
+  { v: 'flex-start', label: 'Ini' },
+  { v: 'center', label: 'Cen' },
+  { v: 'flex-end', label: 'Fin' },
+  { v: 'space-between', label: '↔' },
+];
+const SegRow: React.FC<{
+  label: string;
+  value?: string;
+  options: { v: string; label: string }[];
+  onPick: (v: string) => void;
+}> = ({ label, value, options, onPick }) => (
+  <div className="flex flex-col gap-0.5">
+    <Cap>{label}</Cap>
+    <div className="flex gap-0.5">
+      {options.map((o) => (
+        <button
+          key={o.v}
+          onClick={() => onPick(o.v)}
+          className={`flex-1 h-7 rounded-md border text-[10px] font-bold ${
+            value === o.v
+              ? 'bg-violet-600 border-violet-600 text-white'
+              : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100'
+          }`}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  </div>
+);
+
 export const StyleInspector: React.FC<Props> = ({ el, onApply }) => {
   const s = el.styles || {};
   const showPadding = !el.isImage;
   const showType = !!el.text;
+  const isFlex = (s.display || '').indexOf('flex') >= 0;
+  const layoutMode = isFlex ? (s.flexDirection === 'column' ? 'col' : 'row') : 'block';
   return (
     <div className="space-y-3 pt-1">
       <Section title="Tamaño">
@@ -179,6 +219,34 @@ export const StyleInspector: React.FC<Props> = ({ el, onApply }) => {
           <NumField label="Alto" prop="height" styles={s} onApply={onApply} />
         </div>
       </Section>
+
+      {el.isContainer && (
+        <Section title="Disposición (auto-layout)">
+          <label className="flex flex-col gap-0.5">
+            <Cap>Modo</Cap>
+            <select
+              value={layoutMode}
+              onChange={(e) => {
+                const v = e.target.value;
+                if (v === 'block') onApply({ display: 'block', flexDirection: '' });
+                else onApply({ display: 'flex', flexDirection: v === 'col' ? 'column' : 'row' });
+              }}
+              className="w-full bg-slate-50 rounded-md px-1.5 py-1 text-xs text-slate-700 border border-slate-200 focus:border-violet-400 outline-none"
+            >
+              <option value="block">Bloque (normal)</option>
+              <option value="row">Flex — fila →</option>
+              <option value="col">Flex — columna ↓</option>
+            </select>
+          </label>
+          {isFlex && (
+            <>
+              <NumField label="Separación (gap)" prop="gap" styles={s} onApply={onApply} />
+              <SegRow label="Alinear" value={s.alignItems} options={SEG_ALIGN} onPick={(v) => onApply({ alignItems: v })} />
+              <SegRow label="Justificar" value={s.justifyContent} options={SEG_JUSTIFY} onPick={(v) => onApply({ justifyContent: v })} />
+            </>
+          )}
+        </Section>
+      )}
 
       {showPadding && (
         <Section title="Padding">
