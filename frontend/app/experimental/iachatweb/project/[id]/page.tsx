@@ -10,7 +10,7 @@ import {
   Paperclip, Image as ImageIcon, Trash2, ChevronDown, Sidebar,
   Zap, FileText, Clock, Plus, Layout, Settings, LogOut, Search,
   MoreVertical, Eye, Code, Download, Copy, User, Bot, Save, Trash, ExternalLink,
-  MousePointer2, Workflow
+  MousePointer2, Workflow, Layers
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -28,6 +28,7 @@ import { NodeCanvasDialog } from '@/components/experimental/NodeCanvasDialog';
 import { CanvasViewport, CanvasViewportHandle } from '@/components/experimental/CanvasViewport';
 import { CanvasItemsLayer, CanvasItem } from '@/components/experimental/CanvasItemsLayer';
 import { StyleInspector } from '@/components/experimental/StyleInspector';
+import { LayersPanel } from '@/components/experimental/LayersPanel';
 import type { CreativeAsset } from '@/components/experimental/CreativeStudioDialog';
 import { toast } from 'sonner';
 import ThinkingSection from '@/components/chat/ThinkingSection';
@@ -164,6 +165,9 @@ export default function projectPage() {
   const [canvasItems, setCanvasItems] = useState<CanvasItem[]>([]);
   // Multi-selección (marquee / Shift+click) de items flotantes del lienzo.
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
+  // Panel de capas (árbol del DOM) + su contenido (lo reporta el bridge).
+  const [showLayers, setShowLayers] = useState(false);
+  const [layerTree, setLayerTree] = useState<{ path: string; label: string; depth: number; kids: number }[]>([]);
   // Overrides de estilo (estilo Framer), anidados por breakpoint:
   // { desktop|tablet|mobile: { [rutaDOM]: { paddingTop, ... } } }.
   // Se guardan por proyecto y se re-aplican al recargar el preview.
@@ -619,6 +623,11 @@ export default function projectPage() {
         setSelectedEl(e.data);
         return;
       }
+      // 3.1. Árbol del DOM para el panel de capas.
+      if (e.data?.type === 'PLIA_TREE' && Array.isArray(e.data.tree)) {
+        setLayerTree(e.data.tree);
+        return;
+      }
       // 3.5. Altura del documento del sitio (para desplegar la web completa).
       if (e.data?.type === 'PLIA_DOC_HEIGHT' && typeof e.data.height === 'number') {
         setSiteDocHeight(Math.min(e.data.height, 30000)); // tope sanidad
@@ -926,6 +935,19 @@ export default function projectPage() {
     },
     [selectedEl, viewport, styleBefore, applyStyleToPath, recordStyleEdit],
   );
+
+  // Selección por ruta DOM (breadcrumb "subir al padre" / panel de capas):
+  // se la pedimos al bridge, que selecciona y nos reporta el elemento.
+  const selectElementByPath = useCallback((path: string) => {
+    iframeRef.current?.contentWindow?.postMessage({ type: 'PLIA_SELECT_PATH', path }, '*');
+  }, []);
+  const requestLayerTree = useCallback(() => {
+    iframeRef.current?.contentWindow?.postMessage({ type: 'PLIA_REQUEST_TREE' }, '*');
+  }, []);
+  // Al abrir el panel de capas (o reseleccionar), pedir el árbol fresco.
+  useEffect(() => {
+    if (showLayers) requestLayerTree();
+  }, [showLayers, previewNonce, selectedEl?.path, requestLayerTree]);
 
   // Atajos de teclado del editor (fuera de inputs/textarea).
   useEffect(() => {
@@ -2325,7 +2347,33 @@ export default function projectPage() {
                   <Layout className="h-3.5 w-3.5 text-indigo-500" />
                   {canvasMode ? 'Lienzo ON' : 'Lienzo'}
                 </button>
+                <button
+                  onClick={() => {
+                    if (!showLayers) setEditMode(true); // para que la selección + inspector funcionen
+                    setShowLayers((v) => !v);
+                  }}
+                  title="Panel de capas (árbol del sitio)"
+                  className={cn(
+                    'px-3 py-2 rounded-xl shadow-md text-xs font-bold flex items-center gap-1.5 transition-all border',
+                    showLayers
+                      ? 'bg-violet-600 text-white border-violet-600'
+                      : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50',
+                  )}
+                >
+                  <Layers className="h-3.5 w-3.5" />
+                  Capas
+                </button>
               </div>
+            )}
+
+            {showLayers && previewUrl && rightPaneMode !== 'code' && (
+              <LayersPanel
+                tree={layerTree}
+                selectedPath={selectedEl?.path}
+                onSelect={selectElementByPath}
+                onClose={() => setShowLayers(false)}
+                onRefresh={requestLayerTree}
+              />
             )}
 
             {/* (El dock de assets fue reemplazado por los items flotantes
@@ -2357,6 +2405,33 @@ export default function projectPage() {
                     <X className="h-4 w-4" />
                   </button>
                 </div>
+
+                {/* Breadcrumb de ancestros (#root → … → elemento). Click en un
+                    padre lo selecciona — "subir al padre" estilo Framer. */}
+                {Array.isArray(selectedEl.ancestors) && selectedEl.ancestors.length > 0 && (
+                  <div className="px-2.5 py-1.5 border-b border-slate-100 bg-slate-50/70 flex items-center overflow-x-auto scrollbar-none">
+                    {selectedEl.ancestors.map((a: any, i: number) => {
+                      const isLast = i === selectedEl.ancestors.length - 1;
+                      return (
+                        <button
+                          key={a.path}
+                          onClick={() => !isLast && selectElementByPath(a.path)}
+                          disabled={isLast}
+                          title={isLast ? 'Elemento actual' : `Seleccionar ${a.label}`}
+                          className={cn(
+                            'flex items-center shrink-0 text-[10px] font-medium whitespace-nowrap rounded px-1 py-0.5',
+                            isLast
+                              ? 'text-violet-700 font-bold'
+                              : 'text-slate-400 hover:text-violet-600 hover:bg-violet-50',
+                          )}
+                        >
+                          {i > 0 && <ChevronRight className="h-3 w-3 text-slate-300" />}
+                          {a.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
                 <div className="p-4 space-y-3 max-h-[72vh] overflow-y-auto">
                   {selectedEl.isImage ? (
                     <>

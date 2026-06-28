@@ -281,6 +281,8 @@
             isContainer: isContainer(el),
             src: el.tagName === 'IMG' ? el.getAttribute('src') : null,
             path: pathOf(el),
+            // Cadena de ancestros (#root → … → el) para el breadcrumb "subir al padre".
+            ancestors: ancestorsOf(el),
             rect: { x: rect.left, y: rect.top, w: rect.width, h: rect.height },
             // Estilos computados actuales → alimentan el inspector lateral.
             styles: {
@@ -354,6 +356,15 @@
             // Inspector / undo-redo: escribe en la hoja media-aware (no inline),
             // así el valor queda atado al breakpoint y no se filtra entre vistas.
             setOv(e.data.bp || bpNow, e.data.path, e.data.style);
+            return;
+          }
+          if (e.data.type === 'PLIA_SELECT_PATH' && e.data.path) {
+            // Selección desde el breadcrumb / panel de capas.
+            selectByPath(e.data.path);
+            return;
+          }
+          if (e.data.type === 'PLIA_REQUEST_TREE') {
+            send('PLIA_TREE', { tree: buildTree() });
             return;
           }
           if (e.data.type === 'PLIA_SET_TOOL') {
@@ -477,6 +488,58 @@
             cur = cur.children[idx];
           }
           return cur;
+        }
+        // ─── Jerarquía: etiquetas legibles, cadena de ancestros y árbol ───────
+        function labelOf(el) {
+          var tag = el.tagName.toLowerCase();
+          if (el.id) return tag + '#' + el.id;
+          if (el.tagName === 'IMG') return 'img';
+          var txt = (el.textContent || '').trim().replace(/\s+/g, ' ');
+          if (txt && el.children.length === 0) return tag + ' "' + txt.slice(0, 20) + (txt.length > 20 ? '…' : '') + '"';
+          var cls = (typeof el.className === 'string' ? el.className : '')
+            .split(/\s+/)
+            .filter(function (c) { return c && c.indexOf(':') < 0 && c.indexOf('[') < 0 && c.length < 18; })[0];
+          if (cls) return tag + '.' + cls;
+          if (txt) return tag + ' "' + txt.slice(0, 16) + '…"';
+          return tag;
+        }
+        function ancestorsOf(el) {
+          var chain = [], cur = el;
+          var root = document.getElementById('root') || document.body;
+          while (cur && cur !== root && cur !== document.body && cur.nodeType === 1) {
+            if (!(cur.closest && cur.closest('[data-plia-ui]'))) {
+              chain.unshift({ path: pathOf(cur), label: labelOf(cur) });
+            }
+            cur = cur.parentElement;
+          }
+          return chain;
+        }
+        function buildTree() {
+          var root = document.getElementById('root') || document.body;
+          var out = [], count = { n: 0 };
+          function walk(el, depth) {
+            for (var i = 0; i < el.children.length; i++) {
+              if (count.n > 500) return;
+              var c = el.children[i];
+              if (c.closest && c.closest('[data-plia-ui]')) continue;
+              count.n++;
+              out.push({ path: pathOf(c), label: labelOf(c), depth: depth, kids: c.children.length });
+              if (depth < 14) walk(c, depth + 1);
+            }
+          }
+          walk(root, 0);
+          return out;
+        }
+        // Selecciona un elemento POR RUTA (desde el breadcrumb / panel de capas).
+        function selectByPath(path) {
+          var el = elByPath(path);
+          if (!el || !isSelectable(el)) return;
+          if (selected) selected.classList.remove('plia-selected');
+          if (hovered) hovered.classList.remove('plia-hover');
+          selected = el;
+          el.classList.add('plia-selected');
+          send('PLIA_ELEMENT_SELECTED', describe(el));
+          showPadHandles();
         }
         function mkEl(css) {
           var d = document.createElement('div');
