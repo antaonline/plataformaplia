@@ -238,6 +238,17 @@ export class AiChatController {
     return this.aiChatService.applyStyleOverride(id, req.user.id, body);
   }
 
+  /** Inserta una sección nueva (snippet) en la página, sin pasar por la IA. */
+  @Post(':id/insert-section')
+  @HttpCode(HttpStatus.OK)
+  insertSection(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req: any,
+    @Body() body: { html: string },
+  ) {
+    return this.aiChatService.insertSection(id, req.user.id, body);
+  }
+
   @Patch(':id/rename')
   renameChat(
     @Param('id', ParseIntPipe) id: number,

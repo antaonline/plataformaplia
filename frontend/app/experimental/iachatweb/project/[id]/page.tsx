@@ -29,6 +29,7 @@ import { CanvasViewport, CanvasViewportHandle } from '@/components/experimental/
 import { CanvasItemsLayer, CanvasItem } from '@/components/experimental/CanvasItemsLayer';
 import { StyleInspector } from '@/components/experimental/StyleInspector';
 import { LayersPanel } from '@/components/experimental/LayersPanel';
+import { SectionPalette } from '@/components/experimental/SectionPalette';
 import type { CreativeAsset } from '@/components/experimental/CreativeStudioDialog';
 import { toast } from 'sonner';
 import ThinkingSection from '@/components/chat/ThinkingSection';
@@ -168,6 +169,9 @@ export default function projectPage() {
   // Panel de capas (árbol del DOM) + su contenido (lo reporta el bridge).
   const [showLayers, setShowLayers] = useState(false);
   const [layerTree, setLayerTree] = useState<{ path: string; label: string; depth: number; kids: number }[]>([]);
+  // Paleta para insertar secciones nuevas.
+  const [showSections, setShowSections] = useState(false);
+  const [insertingSection, setInsertingSection] = useState(false);
   // Overrides de estilo (estilo Framer), anidados por breakpoint:
   // { desktop|tablet|mobile: { [rutaDOM]: { paddingTop, ... } } }.
   // Se guardan por proyecto y se re-aplican al recargar el preview.
@@ -944,6 +948,34 @@ export default function projectPage() {
   const requestLayerTree = useCallback(() => {
     iframeRef.current?.contentWindow?.postMessage({ type: 'PLIA_REQUEST_TREE' }, '*');
   }, []);
+  // Inserta una sección nueva (snippet) en el código vía backend → sync.
+  const insertSection = useCallback(
+    async (html: string) => {
+      const token = localStorage.getItem('access_token');
+      if (!token) return;
+      setInsertingSection(true);
+      try {
+        const res = await fetch(`${apiBase}/experimental/iachat/${id}/insert-section`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ html }),
+        });
+        const data = await res.json();
+        if (data.ok && data.files) {
+          setPages(data.files);
+          toast.success('Sección agregada');
+          setShowSections(false);
+        } else {
+          toast.error('No se pudo agregar la sección');
+        }
+      } catch {
+        toast.error('No se pudo agregar la sección');
+      } finally {
+        setInsertingSection(false);
+      }
+    },
+    [apiBase, id],
+  );
   // Al abrir el panel de capas (o al recargar el preview), pedir el árbol.
   // NO al cambiar de selección: el árbol no cambia al clickear y reconstruirlo
   // (hasta 500 nodos) en cada click es trabajo desperdiciado — para refrescar
@@ -2368,6 +2400,19 @@ export default function projectPage() {
                   <Layers className="h-3.5 w-3.5" />
                   Capas
                 </button>
+                <button
+                  onClick={() => { setShowLayers(false); setShowSections((v) => !v); }}
+                  title="Agregar una sección nueva a la página"
+                  className={cn(
+                    'px-3 py-2 rounded-xl shadow-md text-xs font-bold flex items-center gap-1.5 transition-all border',
+                    showSections
+                      ? 'bg-violet-600 text-white border-violet-600'
+                      : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50',
+                  )}
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Sección
+                </button>
               </div>
             )}
 
@@ -2378,6 +2423,14 @@ export default function projectPage() {
                 onSelect={selectElementByPath}
                 onClose={() => setShowLayers(false)}
                 onRefresh={requestLayerTree}
+              />
+            )}
+
+            {showSections && previewUrl && rightPaneMode !== 'code' && (
+              <SectionPalette
+                onInsert={insertSection}
+                onClose={() => setShowSections(false)}
+                busy={insertingSection}
               />
             )}
 

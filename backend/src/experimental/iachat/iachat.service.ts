@@ -173,6 +173,71 @@ export class AiChatService {
   }
 
   /**
+   * Inserta una sección nueva (snippet JSX) en la página principal del
+   * proyecto, antes del <Footer/> (o antes de </main>). Determinístico, sin
+   * pasar por la IA. Devuelve los archivos para que el front sincronice.
+   */
+  async insertSection(
+    chatId: number,
+    userId: number,
+    body: { html: string },
+  ): Promise<{ ok: boolean; files?: Record<string, string>; reason?: string }> {
+    const chat = await this.prisma.aiChat.findUnique({ where: { id: chatId } });
+    if (!chat || chat.userId !== userId) {
+      throw new NotFoundException('Chat no encontrado');
+    }
+    const snippet = (body?.html || '').trim();
+    if (!snippet) return { ok: false, reason: 'empty' };
+
+    const messages = await this.prisma.aiMessage.findMany({
+      where: { chatId },
+      orderBy: { createdAt: 'asc' },
+    });
+    const lastWithFiles = [...messages]
+      .reverse()
+      .find((m) => m.role === 'assistant' && /\[FILES\]/.test(m.content || ''));
+    if (!lastWithFiles) return { ok: false, reason: 'no-files' };
+    const fm = lastWithFiles.content.match(/\[FILES\]([\s\S]*?)\[\/FILES\]/);
+    let files: Record<string, string> = {};
+    try {
+      files = JSON.parse(fm![1]);
+    } catch {
+      return { ok: false, reason: 'parse' };
+    }
+
+    // Página principal: Index.tsx (o App.tsx como fallback).
+    const key =
+      Object.keys(files).find((k) => /pages\/Index\.tsx$/.test(k)) ||
+      Object.keys(files).find((k) => /(^|\/)App\.tsx$/.test(k));
+    if (!key) return { ok: false, reason: 'no-page' };
+
+    let content = files[key];
+    const footerRe = /([^\S\n]*)(<(?:[A-Za-z]*Footer)\b[^>]*\/>)/;
+    if (footerRe.test(content)) {
+      // Antes del <Footer/>, con su misma indentación.
+      content = content.replace(footerRe, (_m, ind, tag) => `${ind}${snippet}\n${ind}${tag}`);
+    } else if (content.includes('</main>')) {
+      content = content.replace(/([^\S\n]*)<\/main>/, (_m, ind) => `${ind}  ${snippet}\n${ind}</main>`);
+    } else {
+      return { ok: false, reason: 'no-anchor' };
+    }
+    files[key] = content;
+
+    const metaM = lastWithFiles.content.match(/\[META\]([\s\S]*?)\[\/META\]/);
+    const respM = lastWithFiles.content.match(/\[RESPONSE\]([\s\S]*?)\[\/RESPONSE\]/);
+    const newContent =
+      `[META]${metaM ? metaM[1] : '{}'}[/META]` +
+      `[RESPONSE]${respM ? respM[1] : ''}[/RESPONSE]\n\n` +
+      `[FILES]${JSON.stringify(files)}[/FILES]`;
+    await this.prisma.aiMessage.update({
+      where: { id: lastWithFiles.id },
+      data: { content: newContent },
+    });
+    this.logger.log(`[insert-section] chat=${chatId} en ${key}`);
+    return { ok: true, files };
+  }
+
+  /**
    * Persiste un override de estilo (padding/tamaño/tipografía/color) del editor
    * visual en el CÓDIGO del proyecto: escribe/mergea `src/plia-overrides.css`,
    * que el scaffold importa al final y NO sobreescribe ("copiar una sola vez").
