@@ -2245,6 +2245,8 @@ export default function projectPage() {
                       onSelect={setSelectedItemIds}
                       transformRef={canvasTransformRef}
                       zoom={canvasZoom}
+                      artboardWidth={dims.w}
+                      artboardHeight={fullH}
                       iframeRef={iframeRef}
                       apiBase={apiBase}
                       authToken={typeof window !== 'undefined' ? localStorage.getItem('access_token') || '' : ''}

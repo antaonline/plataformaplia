@@ -64,6 +64,9 @@ interface Props {
    * sin esto, al alejar el zoom los botones quedan microscópicos.
    */
   zoom: number;
+  /** Dimensiones del artboard (para snapping a sus bordes/centro). */
+  artboardWidth?: number;
+  artboardHeight?: number;
 }
 
 export const CanvasItemsLayer: React.FC<Props> = ({
@@ -77,10 +80,14 @@ export const CanvasItemsLayer: React.FC<Props> = ({
   authToken,
   onInsertViaChat,
   zoom,
+  artboardWidth = 0,
+  artboardHeight = 0,
 }) => {
   const isSelected = useCallback((id: string) => selectedIds.includes(id), [selectedIds]);
   // El item "primario" (último seleccionado) ancla la toolbar individual.
   const primaryId = selectedIds.length ? selectedIds[selectedIds.length - 1] : null;
+  // Guías de alineación (snapping): línea vertical/horizontal mientras arrastrás.
+  const [guides, setGuides] = useState<{ vx: number | null; hy: number | null }>({ vx: null, hy: null });
   // Factor de contra-escala para UI de tamaño constante (toolbar, handles).
   const inv = 1 / Math.max(zoom, 0.01);
   // Root del layer (coincide con el origen del stage): para convertir
@@ -147,9 +154,37 @@ export const CanvasItemsLayer: React.FC<Props> = ({
       const dx = (e.clientX - d.startX) / z;
       const dy = (e.clientY - d.startY) / z;
       if (d.mode === 'move') {
-        // Mueve todo el grupo por el mismo delta (coords del stage).
-        const moves = new Map(d.group.map((g) => [g.id, { x: g.ox + dx, y: g.oy + dy }]));
+        // ── Snapping: alinear los bordes/centro del item primario con los de
+        // los otros items y del artboard. Produce un offset (sdx,sdy) global
+        // para todo el grupo + las guías a dibujar.
+        let sdx = 0, sdy = 0;
+        let vx: number | null = null, hy: number | null = null;
+        const prim = d.group.find((g) => g.id === d.id);
+        const primIt = items.find((x) => x.id === d.id);
+        if (prim && primIt) {
+          const w = primIt.w, h = primIt.w / primIt.ar;
+          const px = prim.ox + dx, py = prim.oy + dy;
+          const dxs = [px, px + w / 2, px + w];
+          const dys = [py, py + h / 2, py + h];
+          const txs: number[] = [], tys: number[] = [];
+          if (artboardWidth) txs.push(0, artboardWidth / 2, artboardWidth);
+          if (artboardHeight) tys.push(0, artboardHeight / 2, artboardHeight);
+          const groupIds = new Set(d.group.map((g) => g.id));
+          for (const o of items) {
+            if (groupIds.has(o.id)) continue;
+            const oh = o.w / o.ar;
+            txs.push(o.x, o.x + o.w / 2, o.x + o.w);
+            tys.push(o.y, o.y + oh / 2, o.y + oh);
+          }
+          const thr = 7 / z; // ~7px de pantalla
+          let bestX = thr, bestY = thr;
+          for (const a of dxs) for (const t of txs) { const dd = Math.abs(a - t); if (dd < bestX) { bestX = dd; sdx = t - a; vx = t; } }
+          for (const a of dys) for (const t of tys) { const dd = Math.abs(a - t); if (dd < bestY) { bestY = dd; sdy = t - a; hy = t; } }
+        }
+        // Mueve todo el grupo por el mismo delta (coords del stage) + snap.
+        const moves = new Map(d.group.map((g) => [g.id, { x: g.ox + dx + sdx, y: g.oy + dy + sdy }]));
         onChange(items.map((it) => (moves.has(it.id) ? { ...it, ...moves.get(it.id)! } : it)));
+        setGuides({ vx, hy });
         // Reemplazo sobre el sitio solo aplica al arrastrar UN item (no grupo).
         const single = d.group.length <= 1;
         const c = single ? toIframeCoords(e.clientX, e.clientY) : null;
@@ -188,6 +223,7 @@ export const CanvasItemsLayer: React.FC<Props> = ({
         }
       }
       setOverSiteImg(false);
+      setGuides({ vx: null, hy: null }); // limpiar guías al soltar
     };
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
@@ -195,7 +231,7 @@ export const CanvasItemsLayer: React.FC<Props> = ({
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
     };
-  }, [items, onChange, toIframeCoords, transformRef, iframeRef, overSiteImg]);
+  }, [items, onChange, toIframeCoords, transformRef, iframeRef, overSiteImg, artboardWidth, artboardHeight]);
 
   const startDrag = (id: string, mode: 'move' | 'resize', e: React.MouseEvent) => {
     e.preventDefault();
@@ -327,6 +363,19 @@ export const CanvasItemsLayer: React.FC<Props> = ({
     <div ref={rootRef} className="absolute inset-0 pointer-events-none" style={{ overflow: 'visible' }}>
       {/* Conexiones origen→video + cable en vivo del puerto */}
       <svg className="absolute pointer-events-none" style={{ overflow: 'visible', left: 0, top: 0, width: 1, height: 1 }}>
+        {/* Guías de alineación (snapping) mientras se arrastra. */}
+        {guides.vx != null && (
+          <line
+            x1={guides.vx} y1={-1000} x2={guides.vx} y2={artboardHeight + 1000}
+            stroke="#ec4899" strokeWidth={inv} strokeDasharray={`${4 * inv} ${3 * inv}`}
+          />
+        )}
+        {guides.hy != null && (
+          <line
+            x1={-1000} y1={guides.hy} x2={artboardWidth + 4000} y2={guides.hy}
+            stroke="#ec4899" strokeWidth={inv} strokeDasharray={`${4 * inv} ${3 * inv}`}
+          />
+        )}
         {items.map((it) => {
           if (!it.fromId) return null;
           const from = items.find((x) => x.id === it.fromId);
