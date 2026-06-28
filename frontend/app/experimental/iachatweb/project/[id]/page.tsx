@@ -944,10 +944,13 @@ export default function projectPage() {
   const requestLayerTree = useCallback(() => {
     iframeRef.current?.contentWindow?.postMessage({ type: 'PLIA_REQUEST_TREE' }, '*');
   }, []);
-  // Al abrir el panel de capas (o reseleccionar), pedir el árbol fresco.
+  // Al abrir el panel de capas (o al recargar el preview), pedir el árbol.
+  // NO al cambiar de selección: el árbol no cambia al clickear y reconstruirlo
+  // (hasta 500 nodos) en cada click es trabajo desperdiciado — para refrescar
+  // tras editar la estructura está el botón "Actualizar" del panel.
   useEffect(() => {
     if (showLayers) requestLayerTree();
-  }, [showLayers, previewNonce, selectedEl?.path, requestLayerTree]);
+  }, [showLayers, previewNonce, requestLayerTree]);
 
   // Atajos de teclado del editor (fuera de inputs/textarea).
   useEffect(() => {
