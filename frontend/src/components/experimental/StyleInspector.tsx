@@ -101,6 +101,72 @@ const ALIGNS: { v: string; Icon: React.ElementType }[] = [
   { v: 'justify', Icon: AlignJustify },
 ];
 
+/** Grosor de borde: además del ancho, prende/apaga el estilo (solid/none) para
+ *  que el borde se vea sin tener que tocar otro control. */
+const BorderWidthField: React.FC<{ styles: StyleMap; onApply: Props['onApply'] }> = ({ styles, onApply }) => (
+  <label className="min-w-0 flex flex-col gap-0.5">
+    <Cap>Grosor borde</Cap>
+    <input
+      type="number"
+      min={0}
+      value={numOf(styles.borderWidth)}
+      onChange={(e) => {
+        const n = parseInt(e.target.value || '0', 10) || 0;
+        onApply(n > 0 ? { borderWidth: n + 'px', borderStyle: 'solid' } : { borderWidth: '0px', borderStyle: 'none' });
+      }}
+      className="w-full bg-slate-50 rounded-md px-2 py-1 text-xs text-slate-700 border border-slate-200 focus:border-violet-400 outline-none"
+    />
+  </label>
+);
+
+/** Opacidad como 0–100 (CSS la usa 0–1). */
+const OpacityField: React.FC<{ styles: StyleMap; onApply: Props['onApply'] }> = ({ styles, onApply }) => {
+  const raw = parseFloat(styles.opacity ?? '1');
+  const cur = Number.isFinite(raw) ? Math.round(raw * 100) : 100;
+  return (
+    <label className="min-w-0 flex flex-col gap-0.5">
+      <Cap>Opacidad %</Cap>
+      <input
+        type="number"
+        min={0}
+        max={100}
+        value={cur}
+        onChange={(e) => {
+          const n = Math.max(0, Math.min(100, parseInt(e.target.value || '100', 10)));
+          onApply({ opacity: String(n / 100) });
+        }}
+        className="w-full bg-slate-50 rounded-md px-2 py-1 text-xs text-slate-700 border border-slate-200 focus:border-violet-400 outline-none"
+      />
+    </label>
+  );
+};
+
+const SHADOWS: { label: string; v: string }[] = [
+  { label: 'Ninguna', v: 'none' },
+  { label: 'Sutil', v: '0 1px 3px rgba(0,0,0,0.12)' },
+  { label: 'Media', v: '0 4px 12px rgba(0,0,0,0.15)' },
+  { label: 'Fuerte', v: '0 12px 32px rgba(0,0,0,0.22)' },
+];
+/** Sombra por presets (el computado no matchea exacto → aplica al elegir). */
+const ShadowField: React.FC<{ styles: StyleMap; onApply: Props['onApply'] }> = ({ styles, onApply }) => {
+  const matched = SHADOWS.find((sh) => sh.v === (styles.boxShadow || 'none'));
+  return (
+    <label className="min-w-0 flex flex-col gap-0.5">
+      <Cap>Sombra</Cap>
+      <select
+        value={matched ? matched.v : '__c'}
+        onChange={(e) => e.target.value !== '__c' && onApply({ boxShadow: e.target.value })}
+        className="w-full bg-slate-50 rounded-md px-1.5 py-1 text-xs text-slate-700 border border-slate-200 focus:border-violet-400 outline-none"
+      >
+        {!matched && <option value="__c">—</option>}
+        {SHADOWS.map((sh) => (
+          <option key={sh.label} value={sh.v}>{sh.label}</option>
+        ))}
+      </select>
+    </label>
+  );
+};
+
 export const StyleInspector: React.FC<Props> = ({ el, onApply }) => {
   const s = el.styles || {};
   const showPadding = !el.isImage;
@@ -172,13 +238,28 @@ export const StyleInspector: React.FC<Props> = ({ el, onApply }) => {
             </div>
             <ColorField label="Color" prop="color" styles={s} onApply={onApply} />
           </div>
+          <div className="grid grid-cols-2 gap-1.5">
+            <NumField label="Interlineado" prop="lineHeight" styles={s} onApply={onApply} />
+            <NumField label="Espaciado" prop="letterSpacing" styles={s} onApply={onApply} />
+          </div>
         </Section>
       )}
+
+      <Section title="Borde">
+        <div className="grid grid-cols-2 gap-1.5">
+          <BorderWidthField styles={s} onApply={onApply} />
+          <ColorField label="Color borde" prop="borderColor" styles={s} onApply={onApply} />
+        </div>
+      </Section>
 
       <Section title="Apariencia">
         <div className="grid grid-cols-2 gap-1.5">
           <ColorField label="Fondo" prop="backgroundColor" styles={s} onApply={onApply} />
           <NumField label="Redondez" prop="borderRadius" styles={s} onApply={onApply} />
+        </div>
+        <div className="grid grid-cols-2 gap-1.5 items-end">
+          <OpacityField styles={s} onApply={onApply} />
+          <ShadowField styles={s} onApply={onApply} />
         </div>
       </Section>
     </div>
