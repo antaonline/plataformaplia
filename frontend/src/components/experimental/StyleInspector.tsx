@@ -1,6 +1,6 @@
 "use client";
 
-import React from 'react';
+import React, { useState } from 'react';
 import { AlignLeft, AlignCenter, AlignRight, AlignJustify } from 'lucide-react';
 
 /**
@@ -205,6 +205,69 @@ const SegRow: React.FC<{
   </div>
 );
 
+const GRAD_ANGLES = [
+  { v: 180, label: '↓' },
+  { v: 135, label: '↘' },
+  { v: 90, label: '→' },
+  { v: 45, label: '↗' },
+];
+/** Degradado de fondo (linear-gradient de 2 stops + ángulo). Aplica sobre
+ *  background-image; "off" lo quita (vuelve al color sólido). */
+const GradientField: React.FC<{ styles: StyleMap; onApply: Props['onApply'] }> = ({ styles, onApply }) => {
+  const hasGrad = (styles.backgroundImage || '').indexOf('gradient') >= 0;
+  const [c1, setC1] = useState('#7c3aed');
+  const [c2, setC2] = useState('#ec4899');
+  const [ang, setAng] = useState(135);
+  const applyGrad = (a = c1, b = c2, an = ang) =>
+    onApply({ backgroundImage: `linear-gradient(${an}deg, ${a}, ${b})` });
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center justify-between">
+        <Cap>Degradado de fondo</Cap>
+        <button
+          onClick={() => (hasGrad ? onApply({ backgroundImage: 'none' }) : applyGrad())}
+          className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+            hasGrad ? 'bg-violet-600 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+          }`}
+        >
+          {hasGrad ? 'On' : 'Off'}
+        </button>
+      </div>
+      {hasGrad && (
+        <div className="flex items-center gap-1.5">
+          <input
+            type="color"
+            value={c1}
+            onChange={(e) => { setC1(e.target.value); applyGrad(e.target.value, c2, ang); }}
+            className="h-7 w-7 shrink-0 rounded-md border border-slate-200 p-0.5 cursor-pointer bg-transparent"
+          />
+          <input
+            type="color"
+            value={c2}
+            onChange={(e) => { setC2(e.target.value); applyGrad(c1, e.target.value, ang); }}
+            className="h-7 w-7 shrink-0 rounded-md border border-slate-200 p-0.5 cursor-pointer bg-transparent"
+          />
+          <div className="flex gap-0.5 flex-1">
+            {GRAD_ANGLES.map((o) => (
+              <button
+                key={o.v}
+                onClick={() => { setAng(o.v); applyGrad(c1, c2, o.v); }}
+                className={`flex-1 h-7 rounded-md border text-xs ${
+                  ang === o.v
+                    ? 'bg-violet-600 border-violet-600 text-white'
+                    : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100'
+                }`}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 export const StyleInspector: React.FC<Props> = ({ el, onApply }) => {
   const s = el.styles || {};
   const showPadding = !el.isImage;
@@ -329,6 +392,7 @@ export const StyleInspector: React.FC<Props> = ({ el, onApply }) => {
           <OpacityField styles={s} onApply={onApply} />
           <ShadowField styles={s} onApply={onApply} />
         </div>
+        <GradientField styles={s} onApply={onApply} />
       </Section>
     </div>
   );
