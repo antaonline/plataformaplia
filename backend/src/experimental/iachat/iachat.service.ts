@@ -27,6 +27,7 @@ import {
   patchRootTokens,
   readThemeHex,
 } from './theme-colors.util';
+import { FONT_PAIRINGS, applyFontPairing, readCurrentFontId } from './theme-fonts.util';
 
 export type ChatMode = 'build' | 'ask' | 'plan';
 
@@ -462,16 +463,20 @@ export class AiChatService {
     return keys.sort((a, b) => (/(globals)\.css$/.test(b) ? 1 : 0) - (/(globals)\.css$/.test(a) ? 1 : 0));
   }
 
-  /** Devuelve los colores actuales del tema (como hex) para los color pickers. */
+  /** Devuelve los colores (hex) y el par tipográfico actual para el panel de tema. */
   async getTheme(
     chatId: number,
     userId: number,
-  ): Promise<{ ok: boolean; tokens?: Record<string, string>; reason?: string }> {
+  ): Promise<{ ok: boolean; tokens?: Record<string, string>; fontId?: string | null; reason?: string }> {
     const loaded = await this.loadProjectFiles(chatId, userId);
     if ('error' in loaded) return { ok: false, reason: loaded.error };
     const keys = this.findThemeCssKeys(loaded.files);
     if (keys.length === 0) return { ok: false, reason: 'no-theme-css' };
-    return { ok: true, tokens: readThemeHex(loaded.files[keys[0]]) };
+    return {
+      ok: true,
+      tokens: readThemeHex(loaded.files[keys[0]]),
+      fontId: readCurrentFontId(loaded.files[keys[0]]),
+    };
   }
 
   /**
@@ -502,6 +507,28 @@ export class AiChatService {
     for (const k of keys) files[k] = patchRootTokens(files[k], patch);
     await this.saveProjectFiles(msg, files);
     this.logger.log(`[set-theme] chat=${chatId} tokens=${Object.keys(clean).join(',')}`);
+    return { ok: true, files };
+  }
+
+  /**
+   * Aplica un par tipográfico (encabezado + cuerpo) al sitio completo,
+   * inyectando el @import de Google Fonts y las reglas base en globals.css.
+   */
+  async setThemeFont(
+    chatId: number,
+    userId: number,
+    body: { pairingId: string },
+  ): Promise<{ ok: boolean; files?: Record<string, string>; reason?: string }> {
+    const loaded = await this.loadProjectFiles(chatId, userId);
+    if ('error' in loaded) return { ok: false, reason: loaded.error };
+    const { msg, files } = loaded;
+    const pairing = FONT_PAIRINGS.find((p) => p.id === (body?.pairingId || ''));
+    if (!pairing) return { ok: false, reason: 'unknown-pairing' };
+    const keys = this.findThemeCssKeys(files);
+    if (keys.length === 0) return { ok: false, reason: 'no-theme-css' };
+    for (const k of keys) files[k] = applyFontPairing(files[k], pairing);
+    await this.saveProjectFiles(msg, files);
+    this.logger.log(`[set-theme-font] chat=${chatId} pairing=${pairing.id}`);
     return { ok: true, files };
   }
 

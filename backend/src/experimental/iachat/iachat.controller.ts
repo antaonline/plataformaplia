@@ -306,6 +306,17 @@ export class AiChatController {
     return this.aiChatService.setTheme(id, req.user.id, body);
   }
 
+  /** Aplica un par tipográfico (encabezado + cuerpo) al sitio completo. */
+  @Post(':id/theme-font')
+  @HttpCode(HttpStatus.OK)
+  setThemeFont(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req: any,
+    @Body() body: { pairingId: string },
+  ) {
+    return this.aiChatService.setThemeFont(id, req.user.id, body);
+  }
+
   @Patch(':id/rename')
   renameChat(
     @Param('id', ParseIntPipe) id: number,

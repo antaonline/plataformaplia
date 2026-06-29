@@ -173,9 +173,10 @@ export default function projectPage() {
   // Paleta para insertar secciones nuevas.
   const [showSections, setShowSections] = useState(false);
   const [insertingSection, setInsertingSection] = useState(false);
-  // Tema global (colores del sitio completo).
+  // Tema global (colores + tipografía del sitio completo).
   const [showTheme, setShowTheme] = useState(false);
   const [themeTokens, setThemeTokens] = useState<Record<string, string>>({});
+  const [themeFontId, setThemeFontId] = useState<string | null>(null);
   const [themeLoading, setThemeLoading] = useState(false);
   const [themeBusy, setThemeBusy] = useState(false);
   // Overrides de estilo (estilo Framer), anidados por breakpoint:
@@ -1120,12 +1121,37 @@ export default function projectPage() {
       });
       const data = await res.json();
       if (data.ok && data.tokens) setThemeTokens(data.tokens);
+      if (data.ok) setThemeFontId(data.fontId ?? null);
     } catch {
       /* noop */
     } finally {
       setThemeLoading(false);
     }
   }, [apiBase, id]);
+  // Aplica un par tipográfico (encabezado + cuerpo) a todo el sitio.
+  const applyThemeFont = useCallback(
+    async (pairingId: string) => {
+      setThemeFontId(pairingId);
+      const token = localStorage.getItem('access_token');
+      if (!token) return;
+      setThemeBusy(true);
+      try {
+        const res = await fetch(`${apiBase}/experimental/iachat/${id}/theme-font`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ pairingId }),
+        });
+        const data = await res.json();
+        if (data.ok && data.files) setPages(data.files);
+        else toast.error('No se pudo aplicar la tipografía');
+      } catch {
+        toast.error('No se pudo aplicar la tipografía');
+      } finally {
+        setThemeBusy(false);
+      }
+    },
+    [apiBase, id],
+  );
   // Cambia un color: actualiza el swatch al instante y agenda el POST (debounce
   // para no spamear mientras se arrastra el selector de color).
   const setThemeToken = useCallback(
@@ -2630,10 +2656,12 @@ export default function projectPage() {
             {showTheme && previewUrl && rightPaneMode !== 'code' && (
               <ThemePanel
                 tokens={themeTokens}
+                fontId={themeFontId}
                 loading={themeLoading}
                 busy={themeBusy}
                 onChange={setThemeToken}
                 onPreset={applyThemePreset}
+                onFont={applyThemeFont}
                 onClose={() => setShowTheme(false)}
               />
             )}

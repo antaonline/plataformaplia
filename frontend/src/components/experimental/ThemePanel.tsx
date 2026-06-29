@@ -33,18 +33,31 @@ export const THEME_PRESETS: ThemePreset[] = [
   { name: 'Rosa', colors: { primary: '#db2777', secondary: '#3b0764', accent: '#f59e0b', background: '#fff7fb', foreground: '#1f1020', card: '#ffffff' } },
 ];
 
+// Espejo de FONT_PAIRINGS del backend (solo lo necesario para la UI).
+const FONT_PAIRINGS: { id: string; name: string; heading: string; body: string; serif?: boolean }[] = [
+  { id: 'elegante', name: 'Elegante', heading: 'Playfair Display', body: 'Inter', serif: true },
+  { id: 'moderno', name: 'Moderno', heading: 'Poppins', body: 'Inter' },
+  { id: 'editorial', name: 'Editorial', heading: 'Fraunces', body: 'Inter', serif: true },
+  { id: 'tech', name: 'Tecnológico', heading: 'Space Grotesk', body: 'Inter' },
+  { id: 'clasico', name: 'Clásico', heading: 'Merriweather', body: 'Source Sans 3', serif: true },
+  { id: 'amigable', name: 'Amigable', heading: 'Quicksand', body: 'Nunito' },
+  { id: 'sistema', name: 'Sistema', heading: 'Predeterminada', body: '', serif: false },
+];
+
 interface Props {
   tokens: Record<string, string>;
+  fontId?: string | null;
   loading?: boolean;
   busy?: boolean;
   onChange: (key: string, hex: string) => void;
   onPreset: (colors: Record<string, string>) => void;
+  onFont: (id: string) => void;
   onClose: () => void;
 }
 
 const norm = (hex?: string) => (hex && /^#[0-9a-fA-F]{6}$/.test(hex) ? hex : '#000000');
 
-export const ThemePanel: React.FC<Props> = ({ tokens, loading, busy, onChange, onPreset, onClose }) => (
+export const ThemePanel: React.FC<Props> = ({ tokens, fontId, loading, busy, onChange, onPreset, onFont, onClose }) => (
   <div className="absolute left-4 top-16 z-40 w-72 max-h-[78vh] bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden">
     <div className="px-3 py-2.5 bg-gradient-to-r from-violet-50 to-white border-b border-slate-100 flex items-center justify-between">
       <span className="text-[10px] font-black uppercase tracking-widest text-violet-600">
@@ -116,6 +129,36 @@ export const ThemePanel: React.FC<Props> = ({ tokens, loading, busy, onChange, o
             <Check className="h-3 w-3 mt-px shrink-0 text-emerald-500" />
             El texto sobre los colores de marca se ajusta solo para que se siga leyendo.
           </p>
+
+          {/* Tipografía: pares curados (encabezado + cuerpo) */}
+          <div className="mt-4 pt-3 border-t border-slate-100">
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Tipografía</p>
+            <div className="grid grid-cols-2 gap-1.5">
+              {FONT_PAIRINGS.map((f) => {
+                const active = fontId === f.id;
+                return (
+                  <button
+                    key={f.id}
+                    disabled={busy}
+                    onClick={() => onFont(f.id)}
+                    title={f.body ? `${f.heading} + ${f.body}` : 'Fuentes del sistema'}
+                    className={`flex flex-col items-start gap-0.5 px-2.5 py-2 rounded-lg border text-left disabled:opacity-50 ${
+                      active
+                        ? 'border-violet-400 bg-violet-50 ring-1 ring-violet-200'
+                        : 'border-slate-200 hover:border-violet-300 hover:bg-violet-50'
+                    }`}
+                  >
+                    <span className={`text-sm font-bold leading-tight text-slate-800 ${f.serif ? 'font-serif' : ''}`}>
+                      {f.name}
+                    </span>
+                    <span className="block w-full truncate text-[10px] text-slate-400 leading-tight">
+                      {f.body ? `${f.heading} · ${f.body}` : 'Predeterminada'}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </>
       )}
     </div>
