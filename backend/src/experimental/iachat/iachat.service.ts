@@ -20,6 +20,7 @@ import {
   mergeOverride,
   serializeOverrides,
 } from './style-overrides.util';
+import { moveBlock, duplicateBlock } from './section-blocks.util';
 
 export type ChatMode = 'build' | 'ask' | 'plan';
 
@@ -357,6 +358,88 @@ export class AiChatService {
     });
     this.logger.log(`[normalize-sections] chat=${chatId} etiquetadas=${n}`);
     return { ok: true, files, tagged: n };
+  }
+
+  // ---- Helpers compartidos para operaciones estructurales sobre la página ----
+
+  /** Carga el último mensaje con [FILES], los parsea y ubica el archivo de
+   *  página (Index.tsx o App.tsx). Lanza si el chat no es del usuario. */
+  private async loadProjectFiles(
+    chatId: number,
+    userId: number,
+  ): Promise<{ msg: any; files: Record<string, string>; key: string } | { error: string }> {
+    const chat = await this.prisma.aiChat.findUnique({ where: { id: chatId } });
+    if (!chat || chat.userId !== userId) throw new NotFoundException('Chat no encontrado');
+    const messages = await this.prisma.aiMessage.findMany({
+      where: { chatId },
+      orderBy: { createdAt: 'asc' },
+    });
+    const msg = [...messages]
+      .reverse()
+      .find((m) => m.role === 'assistant' && /\[FILES\]/.test(m.content || ''));
+    if (!msg) return { error: 'no-files' };
+    const fm = msg.content.match(/\[FILES\]([\s\S]*?)\[\/FILES\]/);
+    let files: Record<string, string> = {};
+    try {
+      files = JSON.parse(fm![1]);
+    } catch {
+      return { error: 'parse' };
+    }
+    const key =
+      Object.keys(files).find((k) => /pages\/Index\.tsx$/.test(k)) ||
+      Object.keys(files).find((k) => /(^|\/)App\.tsx$/.test(k));
+    if (!key) return { error: 'no-page' };
+    return { msg, files, key };
+  }
+
+  /** Reescribe el mensaje con los archivos nuevos, conservando META/RESPONSE. */
+  private async saveProjectFiles(msg: any, files: Record<string, string>): Promise<void> {
+    const metaM = msg.content.match(/\[META\]([\s\S]*?)\[\/META\]/);
+    const respM = msg.content.match(/\[RESPONSE\]([\s\S]*?)\[\/RESPONSE\]/);
+    const newContent =
+      `[META]${metaM ? metaM[1] : '{}'}[/META]` +
+      `[RESPONSE]${respM ? respM[1] : ''}[/RESPONSE]\n\n` +
+      `[FILES]${JSON.stringify(files)}[/FILES]`;
+    await this.prisma.aiMessage.update({ where: { id: msg.id }, data: { content: newContent } });
+  }
+
+  /** Reordena un bloque de la página (hijo directo de <main>) una posición
+   *  hacia arriba o abajo. `index` lo reporta el bridge. Lógica pura (y
+   *  testeada) en section-blocks.util. */
+  async moveSection(
+    chatId: number,
+    userId: number,
+    body: { index: number; dir: 'up' | 'down' },
+  ): Promise<{ ok: boolean; files?: Record<string, string>; reason?: string }> {
+    const loaded = await this.loadProjectFiles(chatId, userId);
+    if ('error' in loaded) return { ok: false, reason: loaded.error };
+    const { msg, files, key } = loaded;
+    const r = moveBlock(files[key], Number(body?.index), body?.dir === 'up' ? 'up' : 'down');
+    if (!r.ok) return { ok: false, reason: r.reason };
+    files[key] = r.src;
+    await this.saveProjectFiles(msg, files);
+    this.logger.log(`[move-section] chat=${chatId} index=${body?.index} dir=${body?.dir}`);
+    return { ok: true, files };
+  }
+
+  /** Duplica un bloque de la página (hijo directo de <main>), debajo del
+   *  original. Si es una <section> con data-plia-section, la copia recibe un id
+   *  nuevo para poder eliminarla por separado. */
+  async duplicateSection(
+    chatId: number,
+    userId: number,
+    body: { index: number },
+  ): Promise<{ ok: boolean; files?: Record<string, string>; reason?: string }> {
+    const loaded = await this.loadProjectFiles(chatId, userId);
+    if ('error' in loaded) return { ok: false, reason: loaded.error };
+    const { msg, files, key } = loaded;
+    const freshId = 's-' + Date.now().toString(36) + '-d' + Math.random().toString(36).slice(2, 5);
+    const r = duplicateBlock(files[key], Number(body?.index), freshId);
+    if (!r.ok) return { ok: false, reason: r.reason };
+    files[key] = r.src;
+    await this.saveProjectFiles(msg, files);
+    this.logger.log(`[duplicate-section] chat=${chatId} index=${body?.index}`);
+    return { ok: true, files };
   }
 
   /**

@@ -267,6 +267,28 @@ export class AiChatController {
     return this.aiChatService.normalizeSections(id, req.user.id);
   }
 
+  /** Reordena un bloque de la página (hijo de <main>) arriba/abajo. */
+  @Post(':id/move-section')
+  @HttpCode(HttpStatus.OK)
+  moveSection(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req: any,
+    @Body() body: { index: number; dir: 'up' | 'down' },
+  ) {
+    return this.aiChatService.moveSection(id, req.user.id, body);
+  }
+
+  /** Duplica un bloque de la página (hijo de <main>), debajo del original. */
+  @Post(':id/duplicate-section')
+  @HttpCode(HttpStatus.OK)
+  duplicateSection(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req: any,
+    @Body() body: { index: number },
+  ) {
+    return this.aiChatService.duplicateSection(id, req.user.id, body);
+  }
+
   @Patch(':id/rename')
   renameChat(
     @Param('id', ParseIntPipe) id: number,

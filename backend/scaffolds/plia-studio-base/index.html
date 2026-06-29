@@ -287,6 +287,21 @@
               var s = el.closest && el.closest('[data-plia-section]');
               return s ? s.getAttribute('data-plia-section') : null;
             })(),
+            // Posición del bloque de nivel superior (hijo directo de <main>) que
+            // contiene a este elemento → para subir/bajar/duplicar la sección.
+            // index = -1 si el elemento no cuelga de <main>.
+            block: (function () {
+              var main = document.querySelector('main');
+              if (!main) return { index: -1, count: 0 };
+              var kids = [];
+              for (var c = main.firstElementChild; c; c = c.nextElementSibling) {
+                if (c.closest && c.closest('[data-plia-ui]')) continue;
+                kids.push(c);
+              }
+              var node = el;
+              while (node && node.parentElement !== main) node = node.parentElement;
+              return { index: node ? kids.indexOf(node) : -1, count: kids.length };
+            })(),
             // Cadena de ancestros (#root → … → el) para el breadcrumb "subir al padre".
             ancestors: ancestorsOf(el),
             rect: { x: rect.left, y: rect.top, w: rect.width, h: rect.height },

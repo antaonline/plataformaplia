@@ -10,7 +10,7 @@ import {
   Paperclip, Image as ImageIcon, Trash2, ChevronDown, Sidebar,
   Zap, FileText, Clock, Plus, Layout, Settings, LogOut, Search,
   MoreVertical, Eye, Code, Download, Copy, User, Bot, Save, Trash, ExternalLink,
-  MousePointer2, Workflow, Layers
+  MousePointer2, Workflow, Layers, ArrowUp, ArrowDown
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -1025,6 +1025,56 @@ export default function projectPage() {
       normalizeSections();
     }
   }, [editMode, previewUrl, normalizeSections]);
+  // Reordena (sube/baja) el bloque de nivel superior seleccionado dentro de <main>.
+  const moveSection = useCallback(
+    async (index: number, dir: 'up' | 'down') => {
+      const token = localStorage.getItem('access_token');
+      if (!token) return;
+      try {
+        const res = await fetch(`${apiBase}/experimental/iachat/${id}/move-section`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ index, dir }),
+        });
+        const data = await res.json();
+        if (data.ok && data.files) {
+          setPages(data.files);
+          setSelectedEl(null); // los índices cambian tras reordenar
+          toast.success(dir === 'up' ? 'Sección subida' : 'Sección bajada');
+        } else {
+          toast.error('No se pudo mover la sección');
+        }
+      } catch {
+        toast.error('No se pudo mover la sección');
+      }
+    },
+    [apiBase, id],
+  );
+  // Duplica el bloque seleccionado, insertando la copia justo debajo.
+  const duplicateSection = useCallback(
+    async (index: number) => {
+      const token = localStorage.getItem('access_token');
+      if (!token) return;
+      try {
+        const res = await fetch(`${apiBase}/experimental/iachat/${id}/duplicate-section`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ index }),
+        });
+        const data = await res.json();
+        if (data.ok && data.files) {
+          setPages(data.files);
+          setSelectedEl(null);
+          toast.success('Sección duplicada');
+        } else {
+          toast.error('No se pudo duplicar la sección');
+        }
+      } catch {
+        toast.error('No se pudo duplicar la sección');
+      }
+    },
+    [apiBase, id],
+  );
   // Al abrir el panel de capas (o al recargar el preview), pedir el árbol.
   // NO al cambiar de selección: el árbol no cambia al clickear y reconstruirlo
   // (hasta 500 nodos) en cada click es trabajo desperdiciado — para refrescar
@@ -2579,6 +2629,45 @@ export default function projectPage() {
                   <div className="border-t border-slate-100 pt-3">
                     <StyleInspector el={selectedEl} onApply={applyElementStyle} />
                   </div>
+
+                  {/* Posición del bloque en la página: subir/bajar/duplicar.
+                      Aplica a cualquier bloque de nivel superior (hijo de
+                      <main>), no solo a las secciones insertadas. */}
+                  {selectedEl.block && selectedEl.block.index >= 0 && (
+                    <div className="mt-1 pt-3 border-t border-slate-100">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
+                        Posición en la página
+                      </p>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          disabled={selectedEl.block.index <= 0}
+                          onClick={() => moveSection(selectedEl.block.index, 'up')}
+                          title="Subir un lugar"
+                          className="flex-1 px-2 py-2 rounded-xl bg-slate-50 text-slate-700 text-[11px] font-bold flex items-center justify-center gap-1 hover:bg-slate-100 border border-slate-200 disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          <ArrowUp className="h-3.5 w-3.5" /> Subir
+                        </button>
+                        <button
+                          disabled={selectedEl.block.index >= selectedEl.block.count - 1}
+                          onClick={() => moveSection(selectedEl.block.index, 'down')}
+                          title="Bajar un lugar"
+                          className="flex-1 px-2 py-2 rounded-xl bg-slate-50 text-slate-700 text-[11px] font-bold flex items-center justify-center gap-1 hover:bg-slate-100 border border-slate-200 disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          <ArrowDown className="h-3.5 w-3.5" /> Bajar
+                        </button>
+                        <button
+                          onClick={() => duplicateSection(selectedEl.block.index)}
+                          title="Duplicar este bloque debajo"
+                          className="flex-1 px-2 py-2 rounded-xl bg-slate-50 text-slate-700 text-[11px] font-bold flex items-center justify-center gap-1 hover:bg-slate-100 border border-slate-200"
+                        >
+                          <Copy className="h-3.5 w-3.5" /> Duplicar
+                        </button>
+                      </div>
+                      <p className="text-[10px] text-slate-400 mt-1.5">
+                        Bloque {selectedEl.block.index + 1} de {selectedEl.block.count}
+                      </p>
+                    </div>
+                  )}
 
                   {/* Eliminar sección: solo para las que insertó la paleta
                       (las que llevan data-plia-section). */}
