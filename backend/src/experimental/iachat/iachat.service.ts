@@ -302,6 +302,64 @@ export class AiChatService {
   }
 
   /**
+   * Etiqueta con `data-plia-section` las secciones inline de la página que aún
+   * no la tengan (las que se insertaron antes de existir esta función). Así se
+   * vuelven eliminables desde el inspector. Idempotente: si ya están todas
+   * etiquetadas, no cambia nada.
+   */
+  async normalizeSections(
+    chatId: number,
+    userId: number,
+  ): Promise<{ ok: boolean; files?: Record<string, string>; tagged?: number; reason?: string }> {
+    const chat = await this.prisma.aiChat.findUnique({ where: { id: chatId } });
+    if (!chat || chat.userId !== userId) {
+      throw new NotFoundException('Chat no encontrado');
+    }
+    const messages = await this.prisma.aiMessage.findMany({
+      where: { chatId },
+      orderBy: { createdAt: 'asc' },
+    });
+    const lastWithFiles = [...messages]
+      .reverse()
+      .find((m) => m.role === 'assistant' && /\[FILES\]/.test(m.content || ''));
+    if (!lastWithFiles) return { ok: false, reason: 'no-files' };
+    const fm = lastWithFiles.content.match(/\[FILES\]([\s\S]*?)\[\/FILES\]/);
+    let files: Record<string, string> = {};
+    try {
+      files = JSON.parse(fm![1]);
+    } catch {
+      return { ok: false, reason: 'parse' };
+    }
+    const key =
+      Object.keys(files).find((k) => /pages\/Index\.tsx$/.test(k)) ||
+      Object.keys(files).find((k) => /(^|\/)App\.tsx$/.test(k));
+    if (!key) return { ok: false, reason: 'no-page' };
+
+    let n = 0;
+    // Las <section> inline de la página son las que insertó la paleta (las
+    // secciones originales son componentes <Hero/>, no <section> literales aquí).
+    const next = files[key].replace(/<section(?![^>]*\bdata-plia-section=)/g, () => {
+      n++;
+      return `<section data-plia-section="s-${Date.now().toString(36)}-${n}"`;
+    });
+    if (n === 0) return { ok: true, files, tagged: 0 };
+    files[key] = next;
+
+    const metaM = lastWithFiles.content.match(/\[META\]([\s\S]*?)\[\/META\]/);
+    const respM = lastWithFiles.content.match(/\[RESPONSE\]([\s\S]*?)\[\/RESPONSE\]/);
+    const newContent =
+      `[META]${metaM ? metaM[1] : '{}'}[/META]` +
+      `[RESPONSE]${respM ? respM[1] : ''}[/RESPONSE]\n\n` +
+      `[FILES]${JSON.stringify(files)}[/FILES]`;
+    await this.prisma.aiMessage.update({
+      where: { id: lastWithFiles.id },
+      data: { content: newContent },
+    });
+    this.logger.log(`[normalize-sections] chat=${chatId} etiquetadas=${n}`);
+    return { ok: true, files, tagged: n };
+  }
+
+  /**
    * Persiste un override de estilo (padding/tamaño/tipografía/color) del editor
    * visual en el CÓDIGO del proyecto: escribe/mergea `src/plia-overrides.css`,
    * que el scaffold importa al final y NO sobreescribe ("copiar una sola vez").

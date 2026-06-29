@@ -260,6 +260,13 @@ export class AiChatController {
     return this.aiChatService.deleteSection(id, req.user.id, body);
   }
 
+  /** Etiqueta secciones inline antiguas para volverlas eliminables. Idempotente. */
+  @Post(':id/normalize-sections')
+  @HttpCode(HttpStatus.OK)
+  normalizeSections(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
+    return this.aiChatService.normalizeSections(id, req.user.id);
+  }
+
   @Patch(':id/rename')
   renameChat(
     @Param('id', ParseIntPipe) id: number,

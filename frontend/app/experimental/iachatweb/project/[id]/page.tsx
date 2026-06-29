@@ -1001,6 +1001,30 @@ export default function projectPage() {
     },
     [apiBase, id],
   );
+  // Etiqueta (una vez por carga) las secciones inline antiguas que se
+  // insertaron antes de existir el etiquetado, para que el botón "Eliminar
+  // esta sección" también aparezca en ellas. Idempotente en el backend.
+  const normalizedRef = useRef(false);
+  const normalizeSections = useCallback(async () => {
+    const token = localStorage.getItem('access_token');
+    if (!token) return;
+    try {
+      const res = await fetch(`${apiBase}/experimental/iachat/${id}/normalize-sections`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (data.ok && data.files && data.tagged > 0) setPages(data.files);
+    } catch {
+      /* silencioso: no es crítico */
+    }
+  }, [apiBase, id]);
+  useEffect(() => {
+    if (editMode && previewUrl && !normalizedRef.current) {
+      normalizedRef.current = true;
+      normalizeSections();
+    }
+  }, [editMode, previewUrl, normalizeSections]);
   // Al abrir el panel de capas (o al recargar el preview), pedir el árbol.
   // NO al cambiar de selección: el árbol no cambia al clickear y reconstruirlo
   // (hasta 500 nodos) en cada click es trabajo desperdiciado — para refrescar
