@@ -10,7 +10,7 @@ import {
   Paperclip, Image as ImageIcon, Trash2, ChevronDown, Sidebar,
   Zap, FileText, Clock, Plus, Layout, Settings, LogOut, Search,
   MoreVertical, Eye, Code, Download, Copy, User, Bot, Save, Trash, ExternalLink,
-  MousePointer2, Workflow, Layers, ArrowUp, ArrowDown
+  MousePointer2, Workflow, Layers, ArrowUp, ArrowDown, Palette
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -30,6 +30,7 @@ import { CanvasItemsLayer, CanvasItem } from '@/components/experimental/CanvasIt
 import { StyleInspector } from '@/components/experimental/StyleInspector';
 import { LayersPanel } from '@/components/experimental/LayersPanel';
 import { SectionPalette } from '@/components/experimental/SectionPalette';
+import { ThemePanel } from '@/components/experimental/ThemePanel';
 import type { CreativeAsset } from '@/components/experimental/CreativeStudioDialog';
 import { toast } from 'sonner';
 import ThinkingSection from '@/components/chat/ThinkingSection';
@@ -172,6 +173,11 @@ export default function projectPage() {
   // Paleta para insertar secciones nuevas.
   const [showSections, setShowSections] = useState(false);
   const [insertingSection, setInsertingSection] = useState(false);
+  // Tema global (colores del sitio completo).
+  const [showTheme, setShowTheme] = useState(false);
+  const [themeTokens, setThemeTokens] = useState<Record<string, string>>({});
+  const [themeLoading, setThemeLoading] = useState(false);
+  const [themeBusy, setThemeBusy] = useState(false);
   // Overrides de estilo (estilo Framer), anidados por breakpoint:
   // { desktop|tablet|mobile: { [rutaDOM]: { paddingTop, ... } } }.
   // Se guardan por proyecto y se re-aplican al recargar el preview.
@@ -1074,6 +1080,73 @@ export default function projectPage() {
       }
     },
     [apiBase, id],
+  );
+  // --- Tema global (colores del sitio completo) ---
+  const themeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingThemeRef = useRef<Record<string, string>>({});
+  const postTheme = useCallback(
+    async (tokens: Record<string, string>) => {
+      const token = localStorage.getItem('access_token');
+      if (!token) return;
+      setThemeBusy(true);
+      try {
+        const res = await fetch(`${apiBase}/experimental/iachat/${id}/theme`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ tokens }),
+        });
+        const data = await res.json();
+        if (data.ok && data.files) setPages(data.files);
+        else toast.error('No se pudo aplicar el color');
+      } catch {
+        toast.error('No se pudo aplicar el color');
+      } finally {
+        setThemeBusy(false);
+      }
+    },
+    [apiBase, id],
+  );
+  const openTheme = useCallback(async () => {
+    setShowTheme(true);
+    setThemeLoading(true);
+    const token = localStorage.getItem('access_token');
+    if (!token) {
+      setThemeLoading(false);
+      return;
+    }
+    try {
+      const res = await fetch(`${apiBase}/experimental/iachat/${id}/theme`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (data.ok && data.tokens) setThemeTokens(data.tokens);
+    } catch {
+      /* noop */
+    } finally {
+      setThemeLoading(false);
+    }
+  }, [apiBase, id]);
+  // Cambia un color: actualiza el swatch al instante y agenda el POST (debounce
+  // para no spamear mientras se arrastra el selector de color).
+  const setThemeToken = useCallback(
+    (key: string, hex: string) => {
+      setThemeTokens((prev) => ({ ...prev, [key]: hex }));
+      pendingThemeRef.current[key] = hex;
+      if (themeTimerRef.current) clearTimeout(themeTimerRef.current);
+      themeTimerRef.current = setTimeout(() => {
+        const batch = pendingThemeRef.current;
+        pendingThemeRef.current = {};
+        if (Object.keys(batch).length) postTheme(batch);
+      }, 280);
+    },
+    [postTheme],
+  );
+  const applyThemePreset = useCallback(
+    (colors: Record<string, string>) => {
+      setThemeTokens((prev) => ({ ...prev, ...colors }));
+      postTheme(colors);
+    },
+    [postTheme],
   );
   // Al abrir el panel de capas (o al recargar el preview), pedir el árbol.
   // NO al cambiar de selección: el árbol no cambia al clickear y reconstruirlo
@@ -2512,6 +2585,27 @@ export default function projectPage() {
                   <Plus className="h-3.5 w-3.5" />
                   Sección
                 </button>
+                <button
+                  onClick={() => {
+                    if (showTheme) {
+                      setShowTheme(false);
+                    } else {
+                      setShowLayers(false);
+                      setShowSections(false);
+                      openTheme();
+                    }
+                  }}
+                  title="Tema global: colores de todo el sitio"
+                  className={cn(
+                    'px-3 py-2 rounded-xl shadow-md text-xs font-bold flex items-center gap-1.5 transition-all border',
+                    showTheme
+                      ? 'bg-violet-600 text-white border-violet-600'
+                      : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50',
+                  )}
+                >
+                  <Palette className="h-3.5 w-3.5" />
+                  Tema
+                </button>
               </div>
             )}
 
@@ -2530,6 +2624,17 @@ export default function projectPage() {
                 onInsert={insertSection}
                 onClose={() => setShowSections(false)}
                 busy={insertingSection}
+              />
+            )}
+
+            {showTheme && previewUrl && rightPaneMode !== 'code' && (
+              <ThemePanel
+                tokens={themeTokens}
+                loading={themeLoading}
+                busy={themeBusy}
+                onChange={setThemeToken}
+                onPreset={applyThemePreset}
+                onClose={() => setShowTheme(false)}
               />
             )}
 

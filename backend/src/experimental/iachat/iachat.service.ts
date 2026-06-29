@@ -21,6 +21,12 @@ import {
   serializeOverrides,
 } from './style-overrides.util';
 import { moveBlock, duplicateBlock } from './section-blocks.util';
+import {
+  THEME_TOKENS,
+  buildColorPatch,
+  patchRootTokens,
+  readThemeHex,
+} from './theme-colors.util';
 
 export type ChatMode = 'build' | 'ask' | 'plan';
 
@@ -439,6 +445,63 @@ export class AiChatService {
     files[key] = r.src;
     await this.saveProjectFiles(msg, files);
     this.logger.log(`[duplicate-section] chat=${chatId} index=${body?.index}`);
+    return { ok: true, files };
+  }
+
+  /** Ubica el CSS de tema (el del bloque :root con --primary). Prefiere
+   *  globals.css (el que importa main.tsx). */
+  private findThemeCssKeys(files: Record<string, string>): string[] {
+    const keys = Object.keys(files).filter(
+      (k) =>
+        /\.css$/.test(k) &&
+        typeof files[k] === 'string' &&
+        /:root/.test(files[k]) &&
+        /--primary\s*:/.test(files[k]),
+    );
+    // globals.css primero (es el importado), para getTheme.
+    return keys.sort((a, b) => (/(globals)\.css$/.test(b) ? 1 : 0) - (/(globals)\.css$/.test(a) ? 1 : 0));
+  }
+
+  /** Devuelve los colores actuales del tema (como hex) para los color pickers. */
+  async getTheme(
+    chatId: number,
+    userId: number,
+  ): Promise<{ ok: boolean; tokens?: Record<string, string>; reason?: string }> {
+    const loaded = await this.loadProjectFiles(chatId, userId);
+    if ('error' in loaded) return { ok: false, reason: loaded.error };
+    const keys = this.findThemeCssKeys(loaded.files);
+    if (keys.length === 0) return { ok: false, reason: 'no-theme-css' };
+    return { ok: true, tokens: readThemeHex(loaded.files[keys[0]]) };
+  }
+
+  /**
+   * Recolorea el sitio completo cambiando los tokens del :root en el CSS de
+   * tema (globals.css). Recibe colores en hex; convierte a canales HSL y, para
+   * los tokens de marca, ajusta el `-foreground` para mantener el contraste.
+   */
+  async setTheme(
+    chatId: number,
+    userId: number,
+    body: { tokens: Record<string, string> },
+  ): Promise<{ ok: boolean; files?: Record<string, string>; reason?: string }> {
+    const loaded = await this.loadProjectFiles(chatId, userId);
+    if ('error' in loaded) return { ok: false, reason: loaded.error };
+    const { msg, files } = loaded;
+    const allowed = THEME_TOKENS as readonly string[];
+    const clean: Record<string, string> = {};
+    for (const [k, v] of Object.entries(body?.tokens || {})) {
+      const val = typeof v === 'string' ? v.trim() : '';
+      if (allowed.includes(k) && /^#?[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/.test(val)) {
+        clean[k] = val.startsWith('#') ? val : '#' + val;
+      }
+    }
+    if (Object.keys(clean).length === 0) return { ok: false, reason: 'empty' };
+    const keys = this.findThemeCssKeys(files);
+    if (keys.length === 0) return { ok: false, reason: 'no-theme-css' };
+    const patch = buildColorPatch(clean);
+    for (const k of keys) files[k] = patchRootTokens(files[k], patch);
+    await this.saveProjectFiles(msg, files);
+    this.logger.log(`[set-theme] chat=${chatId} tokens=${Object.keys(clean).join(',')}`);
     return { ok: true, files };
   }
 

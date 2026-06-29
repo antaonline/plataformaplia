@@ -289,6 +289,23 @@ export class AiChatController {
     return this.aiChatService.duplicateSection(id, req.user.id, body);
   }
 
+  /** Lee los colores actuales del tema (hex) para el panel de tema global. */
+  @Get(':id/theme')
+  getTheme(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
+    return this.aiChatService.getTheme(id, req.user.id);
+  }
+
+  /** Recolorea el sitio completo (tokens :root del CSS de tema). */
+  @Post(':id/theme')
+  @HttpCode(HttpStatus.OK)
+  setTheme(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req: any,
+    @Body() body: { tokens: Record<string, string> },
+  ) {
+    return this.aiChatService.setTheme(id, req.user.id, body);
+  }
+
   @Patch(':id/rename')
   renameChat(
     @Param('id', ParseIntPipe) id: number,
