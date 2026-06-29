@@ -17,7 +17,7 @@ const PRESETS: { label: string; emoji: string; html: string }[] = [
     html: `<section className="bg-primary text-white py-20 px-6 text-center">
         <div className="max-w-3xl mx-auto">
           <h2 className="text-3xl md:text-5xl font-black mb-4">¿Listo para empezar?</h2>
-          <p className="text-lg opacity-90 mb-8">Sumate hoy y viví la experiencia completa.</p>
+          <p className="text-lg opacity-90 mb-8">Súmate hoy y vive la experiencia completa.</p>
           <a href="#contacto" className="inline-block bg-white text-slate-900 font-bold px-8 py-4 rounded-full hover:opacity-90 transition">Contactar ahora</a>
         </div>
       </section>`,
@@ -108,7 +108,7 @@ export const SectionPalette: React.FC<Props> = ({ onInsert, onClose, busy }) => 
       ))}
     </div>
     <p className="text-[10px] text-slate-400 px-3 pb-2 leading-snug">
-      Se agrega al final, antes del footer. Después la movés/editás como cualquier sección.
+      Se agrega al final, antes del footer. Después puedes moverla o editarla como cualquier sección.
     </p>
   </div>
 );

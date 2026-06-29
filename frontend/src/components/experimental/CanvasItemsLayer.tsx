@@ -86,7 +86,7 @@ export const CanvasItemsLayer: React.FC<Props> = ({
   const isSelected = useCallback((id: string) => selectedIds.includes(id), [selectedIds]);
   // El item "primario" (último seleccionado) ancla la toolbar individual.
   const primaryId = selectedIds.length ? selectedIds[selectedIds.length - 1] : null;
-  // Guías de alineación (snapping): línea vertical/horizontal mientras arrastrás.
+  // Guías de alineación (snapping): línea vertical/horizontal al arrastrar.
   const [guides, setGuides] = useState<{ vx: number | null; hy: number | null }>({ vx: null, hy: null });
   // Factor de contra-escala para UI de tamaño constante (toolbar, handles).
   const inv = 1 / Math.max(zoom, 0.01);
@@ -562,7 +562,7 @@ export const CanvasItemsLayer: React.FC<Props> = ({
               <p className="mt-1 text-[10px] text-red-500 bg-white/90 rounded px-1.5 py-0.5">{it.error}</p>
             )}
 
-            {/* PUERTO de salida (derecha-centro, estilo Kittl). Arrastrá el
+            {/* PUERTO de salida (derecha-centro, estilo Kittl). Arrastra el
                 cable: soltarlo en el vacío genera un VIDEO conectado en ese
                 punto; soltarlo sobre una imagen del sitio la reemplaza. */}
             {it.kind === 'image' && (

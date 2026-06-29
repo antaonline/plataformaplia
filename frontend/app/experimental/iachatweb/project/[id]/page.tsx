@@ -772,7 +772,7 @@ export default function projectPage() {
           );
           return true;
         } else if (data.replacements === 0) {
-          toast.error('No se encontró el contenido en el código. Probá editarlo desde el chat.');
+          toast.error('No se encontró el contenido en el código. Prueba a editarlo desde el chat.');
         }
       } catch {
         toast.error('No se pudo aplicar el cambio');
@@ -1508,7 +1508,7 @@ export default function projectPage() {
     };
     const assetHint = a.hasOwnAssets
       ? 'El cliente va a subir sus propias fotos en el siguiente turno.'
-      : 'No tiene fotos propias — generá imágenes profesionales con IA que encajen con el rubro.';
+      : 'No tiene fotos propias — genera imágenes profesionales con IA que encajen con el rubro.';
 
     const promptParts = [
       `Quiero ${typeLabels[a.projectType] || 'una web'} para mi negocio.`,
@@ -2527,7 +2527,7 @@ export default function projectPage() {
                       >
                         <Wand2 className="h-4 w-4" /> Reemplazar imagen
                       </button>
-                      <p className="text-[10px] text-slate-400 text-center">Elegí o generá una en el Estudio Creativo.</p>
+                      <p className="text-[10px] text-slate-400 text-center">Elige o genera una en el Estudio Creativo.</p>
                     </>
                   ) : (
                     <>

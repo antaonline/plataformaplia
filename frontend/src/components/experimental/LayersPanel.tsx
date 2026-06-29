@@ -7,7 +7,7 @@ import { X, RefreshCw, Box, Type as TypeIcon } from 'lucide-react';
  * Panel de capas (árbol del DOM del sitio), estilo Figma/Framer. El bridge
  * reporta una lista plana con `depth` (para indentar) y `kids`. Al hacer click
  * en una capa, se selecciona ese elemento exacto en el lienzo — resuelve la
- * fricción de "no puedo agarrar el contenedor que quiero".
+ * fricción de "no puedo seleccionar el contenedor que quiero".
  */
 
 interface Node {
@@ -55,7 +55,7 @@ export const LayersPanel: React.FC<Props> = ({ tree, selectedPath, onSelect, onC
       <div className="flex-1 overflow-y-auto py-1">
         {tree.length === 0 ? (
           <p className="text-[11px] text-slate-400 text-center p-4 leading-relaxed">
-            Sin elementos todavía. Tocá actualizar con el preview cargado.
+            Sin elementos todavía. Usa el botón de actualizar con el preview cargado.
           </p>
         ) : (
           tree.map((n) => {
