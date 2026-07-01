@@ -170,6 +170,11 @@ async function bootstrap() {
     SwaggerModule.setup('docs', app, document)
   }
 
-  await app.listen(port)
+  // BIND_HOST: en el VPS ponlo en 127.0.0.1 para que el backend solo sea
+  // accesible vía LiteSpeed (loopback) y NUNCA desde internet, aunque el
+  // firewall llegara a caerse. LiteSpeed ya proxya a 127.0.0.1:3002, así que
+  // atarlo a localhost no rompe nada. Por defecto 0.0.0.0 para no afectar dev.
+  const bindHost = process.env.BIND_HOST || '0.0.0.0'
+  await app.listen(port, bindHost)
 }
 bootstrap()
