@@ -438,6 +438,30 @@ export class PaymentsService {
       throw new BadRequestException('Pago rechazado');
     }
 
+    // Defensa en profundidad: el monto pagado debe coincidir con el de la
+    // orden. La firma ya garantiza autenticidad; esto detecta además cualquier
+    // descuadre de importe. Solo se rechaza si el monto viene en la respuesta y
+    // NO coincide (fail-open si no se puede leer, para no romper pagos por
+    // diferencias de formato del proveedor). Izipay V4 envía el total en
+    // céntimos.
+    const order = await this.prisma.order.findUnique({ where: { id: orderId } });
+    if (!order) {
+      throw new BadRequestException('Order no encontrada');
+    }
+    const expectedCents = Math.round(Number(order.amount) * 100);
+    const paidCents = Number(
+      response?.orderDetails?.orderTotalAmount ??
+        response?.transactions?.[0]?.amount ??
+        response?.amount ??
+        NaN,
+    );
+    if (Number.isFinite(paidCents) && paidCents !== expectedCents) {
+      console.error(
+        `[izipay] monto no coincide en order ${orderId}: esperado ${expectedCents}c, recibido ${paidCents}c`,
+      );
+      throw new BadRequestException('El monto pagado no coincide con la orden');
+    }
+
     const cardToken = response?.token?.cardToken ?? response?.cardToken ?? null;
 
     await this.prisma.payment.updateMany({

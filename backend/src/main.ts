@@ -3,6 +3,7 @@ import { AppModule } from './app.module'
 import { ValidationPipe } from '@nestjs/common'
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'
 import cookieParser from 'cookie-parser'
+import helmet from 'helmet'
 import * as dotenv from 'dotenv'
 import { json, urlencoded } from 'express'
 import { join } from 'path'
@@ -21,6 +22,23 @@ async function bootstrap() {
   // firewall a conexiones externas directas (solo LiteSpeed/localhost), si no
   // un atacante podría falsificar X-Forwarded-For para evadir el límite.
   app.set('trust proxy', 1);
+
+  // Cabeceras de seguridad HTTP (HSTS, X-Content-Type-Options, X-Frame-Options,
+  // Referrer-Policy, oculta X-Powered-By, etc.). Config conservadora para no
+  // romper nada:
+  // - CSP deshabilitada aquí: esto es una API + Swagger; una CSP estricta
+  //   rompería Swagger y no aporta a respuestas JSON. /uploads recibe su propia
+  //   CSP más abajo y el frontend Next maneja la suya.
+  // - CORP cross-origin: las imágenes de /uploads (logos/media) las cargan el
+  //   frontend y los sitios generados desde OTRO origen; same-origin (default
+  //   de helmet) las bloquearía.
+  app.use(
+    helmet({
+      contentSecurityPolicy: false,
+      crossOriginResourcePolicy: { policy: 'cross-origin' },
+      crossOriginEmbedderPolicy: false,
+    }),
+  );
 
   const frontendUrl =
     process.env.FRONTEND_URL ||
@@ -64,8 +82,12 @@ async function bootstrap() {
     return first || null;
   };
   const isAllowedOrigin = (origin: string): boolean => {
-    if (origin.includes('localhost') || origin.includes('127.0.0.1')) return true;
-    return /^https?:\/\/(.*\.)?plia\.pe(:\d+)?$/.test(origin);
+    // localhost/127.0.0.1 SOLO como host exacto (puerto opcional). Antes era
+    // `origin.includes('localhost')`, que dejaba pasar hosts atacantes como
+    // https://localhost.evil.com. Ahora el patrón está anclado.
+    if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return true;
+    // Solo plia.pe y sus subdominios (etiquetas alfanuméricas).
+    return /^https?:\/\/([a-z0-9-]+\.)*plia\.pe(:\d+)?$/i.test(origin);
   };
 
   app.enableCors({
@@ -110,25 +132,43 @@ async function bootstrap() {
   // el build compila a dist/src, dejando los archivos fuera del path.
   app.useStaticAssets(join(process.cwd(), 'uploads'), {
     prefix: '/uploads',
+    setHeaders: (res: any, filePath: string) => {
+      // Defensa contra XSS almacenado vía SVG: un .svg puede contener <script>
+      // y, si se abre directo en el browser, se ejecuta en el origen del
+      // backend. `nosniff` evita que se reinterprete el tipo, y la CSP
+      // `sandbox` neutraliza cualquier script del SVG (se sigue viendo como
+      // imagen). Las imágenes normales (png/jpg/webp) no se ven afectadas.
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      if (/\.svg$/i.test(filePath)) {
+        res.setHeader(
+          'Content-Security-Policy',
+          "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+        );
+      }
+    },
   });
 
-  // ✅ Swagger
-  const config = new DocumentBuilder()
-    .setTitle('Backend API')
-    .setDescription('Documentación automática')
-    .setVersion('1.0')
-    .addBearerAuth(
-      {
-        type: 'http',
-        scheme: 'bearer',
-        bearerFormat: 'JWT',
-      },
-      'access-token',
-    )
-    .build()
+  // Swagger expone TODA la superficie de la API (information disclosure). Solo
+  // se monta si se pide explícitamente con ENABLE_SWAGGER=true (default-deny),
+  // así en producción queda apagado por defecto.
+  if (process.env.ENABLE_SWAGGER === 'true') {
+    const config = new DocumentBuilder()
+      .setTitle('Backend API')
+      .setDescription('Documentación automática')
+      .setVersion('1.0')
+      .addBearerAuth(
+        {
+          type: 'http',
+          scheme: 'bearer',
+          bearerFormat: 'JWT',
+        },
+        'access-token',
+      )
+      .build()
 
-  const document = SwaggerModule.createDocument(app, config)
-  SwaggerModule.setup('docs', app, document)
+    const document = SwaggerModule.createDocument(app, config)
+    SwaggerModule.setup('docs', app, document)
+  }
 
   await app.listen(port)
 }
