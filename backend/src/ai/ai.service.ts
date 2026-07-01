@@ -1,3 +1,4 @@
+import { readOnboarding, onboardingJson } from '../lib/onboarding.util';
 import { Injectable, Logger } from '@nestjs/common';
 import axios from 'axios';
 import * as fs from 'fs';
@@ -1266,12 +1267,12 @@ Todo en un solo HTML con anchors.`;
     });
     if (!project) return null;
 
-    const existingData = JSON.parse((project.onboardingData as string) || '{}');
+    const existingData = readOnboarding(project.onboardingData);
 
     await this.prisma.project.update({
       where: { id: projectId },
       data: {
-        onboardingData: JSON.stringify({
+        onboardingData: onboardingJson({
           ...existingData,
           aiGeneration: {
             ...(existingData.aiGeneration || {}),
@@ -1287,7 +1288,7 @@ Todo en un solo HTML con anchors.`;
       await this.prisma.project.update({
         where: { id: projectId },
         data: {
-          onboardingData: JSON.stringify({
+          onboardingData: onboardingJson({
             ...existingData,
             aiGeneration: {
               ...(existingData.aiGeneration || {}),
@@ -1328,7 +1329,7 @@ Todo en un solo HTML con anchors.`;
     revisionNote: string,
   ): Promise<AiGenerationResult | null> {
     const projectId = project.id as number;
-    const onboarding = JSON.parse((project.onboardingData as string) || '{}');
+    const onboarding = readOnboarding(project.onboardingData);
     // Para sitios YA publicados, la fuente de verdad es el public_html
     // del hosting del cliente (uploads/previews ya fue limpiado tras la
     // publicacion inicial). Editamos directamente alli.
@@ -1419,7 +1420,7 @@ Todo en un solo HTML con anchors.`;
       where: { id: projectId },
       data: {
         // status DELIVERED preservado (no se toca)
-        onboardingData: JSON.stringify({
+        onboardingData: onboardingJson({
           ...onboarding,
           aiGeneration: {
             ...(onboarding.aiGeneration || {}),
@@ -1483,7 +1484,7 @@ Todo en un solo HTML con anchors.`;
     revisionNote?: string,
   ): Promise<AiGenerationResult | null> {
     const projectId = project.id as number;
-    const onboarding = JSON.parse((project.onboardingData as string) || '{}');
+    const onboarding = readOnboarding(project.onboardingData);
     // Estado original: si era DELIVERED y nos llega revisionNote, esto es
     // una revision sobre un sitio publicado. Tenemos que preservar el
     // status DELIVERED al final y re-publicar archivos al public_html.
@@ -1650,7 +1651,7 @@ Todo en un solo HTML con anchors.`;
         where: { id: projectId },
         data: {
           status: finalStatus,
-          onboardingData: JSON.stringify({
+          onboardingData: onboardingJson({
             ...onboarding,
             aiGeneration: {
               ...(onboarding.aiGeneration || {}),
@@ -1735,7 +1736,7 @@ Todo en un solo HTML con anchors.`;
       await this.prisma.project.update({
         where: { id: projectId },
         data: {
-          onboardingData: JSON.stringify({
+          onboardingData: onboardingJson({
             ...onboarding,
             aiGeneration: {
               ...(onboarding.aiGeneration || {}),

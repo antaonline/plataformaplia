@@ -1,3 +1,4 @@
+import { readOnboarding } from '../lib/onboarding.util';
 import {
   BadRequestException,
   Injectable,
@@ -85,7 +86,7 @@ export class SiteContactService {
       throw new NotFoundException('Proyecto no encontrado.');
     }
 
-    const onboarding = JSON.parse((project.onboardingData as string) || '{}');
+    const onboarding = readOnboarding(project.onboardingData);
     const businessName = onboarding.businessName || project.name;
     // Prioridad: contactEmail del onboarding > email del usuario PLIA.
     const recipientEmail = onboarding.contactEmail || project.user?.email;
