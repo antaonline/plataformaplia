@@ -509,7 +509,7 @@ export class HostingService {
 
     const existingProject = await this.prisma.project.findFirst({
       where: {
-        onboardingData: { contains: `"publicDomain":"${domain}"` },
+        onboardingData: { path: '$.publicDomain', equals: domain },
       },
       select: { id: true },
     });
@@ -686,7 +686,7 @@ export class HostingService {
           // esos viven bajo Project y no en hostedSite.
           const linkedProject = await this.prisma.project.findFirst({
             where: {
-              onboardingData: { contains: `"publicDomain":"${site.domain}"` },
+              onboardingData: { path: '$.publicDomain', equals: site.domain },
             },
             select: { id: true },
           });

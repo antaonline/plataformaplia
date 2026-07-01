@@ -1,3 +1,4 @@
+import { readOnboarding, onboardingJson } from '../lib/onboarding.util';
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { SaveOnboardingDto } from './dto/save-onboarding.dto';
@@ -345,7 +346,7 @@ p{color:#cbd5e1;font-size:1.05rem;line-height:1.7;margin-bottom:28px}
   async suspendTrial(projectId: number): Promise<boolean> {
     const project = await this.prisma.project.findUnique({ where: { id: projectId } });
     if (!project) return false;
-    const data = JSON.parse((project.onboardingData as string) || '{}');
+    const data = readOnboarding(project.onboardingData);
     const targetDir = this.getTargetDirectory(projectId, data);
     if (!targetDir || !fs.existsSync(targetDir)) {
       this.logger.warn(`suspendTrial project=${projectId}: target dir inexistente.`);
@@ -383,7 +384,7 @@ p{color:#cbd5e1;font-size:1.05rem;line-height:1.7;margin-bottom:28px}
       orderBy: { createdAt: 'desc' },
     });
     if (!trial) return null;
-    const data = JSON.parse((trial.onboardingData as string) || '{}');
+    const data = readOnboarding(trial.onboardingData);
 
     if (trial.trialStatus === 'suspended') {
       await this.restoreTrial(trial.id);
@@ -432,7 +433,7 @@ p{color:#cbd5e1;font-size:1.05rem;line-height:1.7;margin-bottom:28px}
   async restoreTrial(projectId: number): Promise<boolean> {
     const project = await this.prisma.project.findUnique({ where: { id: projectId } });
     if (!project) return false;
-    const data = JSON.parse((project.onboardingData as string) || '{}');
+    const data = readOnboarding(project.onboardingData);
     const targetDir = this.getTargetDirectory(projectId, data);
     const backupDir = join(process.cwd(), 'uploads', 'trial-paused', String(projectId));
     if (targetDir && fs.existsSync(backupDir)) {
@@ -490,7 +491,7 @@ p{color:#cbd5e1;font-size:1.05rem;line-height:1.7;margin-bottom:28px}
 
   async getGenerationDiagnostics(projectId: number, userId?: number, isAdmin = false) {
     const project = await this.getProjectOrThrow(projectId, userId, isAdmin);
-    const onboardingData = JSON.parse((project.onboardingData as string) || '{}');
+    const onboardingData = readOnboarding(project.onboardingData);
     const aiGeneration = onboardingData.aiGeneration || {};
     const cyberpanel = onboardingData.cyberpanel || {};
     const previewPath = join(process.cwd(), 'uploads', 'previews', String(projectId), 'index.html');
@@ -536,10 +537,10 @@ p{color:#cbd5e1;font-size:1.05rem;line-height:1.7;margin-bottom:28px}
   async runManualGeneration(projectId: number, userId?: number, isAdmin = false, reprovision = false) {
     let project = await this.getProjectOrThrow(projectId, userId, isAdmin);
 
-    if (reprovision || !JSON.parse((project.onboardingData as string) || '{}')?.publicDomain) {
+    if (reprovision || !readOnboarding(project.onboardingData)?.publicDomain) {
       const provision = await this.cyberpanelService.ensureSite(projectId);
       project = await this.getProjectOrThrow(projectId, userId, isAdmin);
-      const projectData = JSON.parse((project.onboardingData as string) || '{}');
+      const projectData = readOnboarding(project.onboardingData);
       if (!provision.domain && !projectData?.publicDomain) {
         const cyberpanelError =
           projectData?.cyberpanel?.error ||
@@ -547,7 +548,7 @@ p{color:#cbd5e1;font-size:1.05rem;line-height:1.7;margin-bottom:28px}
         await this.prisma.project.update({
           where: { id: projectId },
           data: {
-            onboardingData: JSON.stringify({
+            onboardingData: onboardingJson({
               ...projectData,
               aiGeneration: {
                 ...(projectData.aiGeneration || {}),
@@ -580,7 +581,7 @@ p{color:#cbd5e1;font-size:1.05rem;line-height:1.7;margin-bottom:28px}
       throw new NotFoundException('Project no encontrado.');
     }
 
-    const existingData = JSON.parse((project.onboardingData as string) || '{}');
+    const existingData = readOnboarding(project.onboardingData);
 
     const normalizedSubdomain = this.normalizeSubdomain(
       dto?.data?.subdomain ?? existingData?.subdomain,
@@ -612,7 +613,7 @@ p{color:#cbd5e1;font-size:1.05rem;line-height:1.7;margin-bottom:28px}
     const updated = await this.prisma.project.update({
       where: { id: projectId },
       data: {
-        onboardingData: JSON.stringify(mergedData),
+        onboardingData: mergedData as any,
         onboardingStep: dto.step,
         status: dto.completed
           ? ProjectStatus.IN_PROGRESS
@@ -651,7 +652,7 @@ p{color:#cbd5e1;font-size:1.05rem;line-height:1.7;margin-bottom:28px}
         await this.prisma.project.update({
           where: { id: projectId },
           data: {
-            onboardingData: JSON.stringify({
+            onboardingData: onboardingJson({
               ...current,
               cyberpanel: {
                 ...(current?.cyberpanel || {}),
@@ -677,7 +678,7 @@ p{color:#cbd5e1;font-size:1.05rem;line-height:1.7;margin-bottom:28px}
         where: { id: projectId },
         select: { onboardingData: true },
       });
-      const refreshedData = JSON.parse((refreshedProject?.onboardingData as string) || JSON.stringify(mergedData));
+      const refreshedData = ((refreshedProject?.onboardingData as any) ?? mergedData) as Record<string, any>;
       const resolvedDomain = cyberpanelProvision.domain || refreshedData.publicDomain || null;
       if (!resolvedDomain) {
         const cyberpanelError =
@@ -686,7 +687,7 @@ p{color:#cbd5e1;font-size:1.05rem;line-height:1.7;margin-bottom:28px}
         await this.prisma.project.update({
           where: { id: projectId },
           data: {
-            onboardingData: JSON.stringify({
+            onboardingData: onboardingJson({
               ...refreshedData,
               aiGeneration: {
                 ...(refreshedData.aiGeneration || {}),
@@ -729,7 +730,7 @@ p{color:#cbd5e1;font-size:1.05rem;line-height:1.7;margin-bottom:28px}
         await this.prisma.project.update({
           where: { id: projectId },
           data: {
-            onboardingData: JSON.stringify({
+            onboardingData: onboardingJson({
               ...refreshedData,
               tempLandingUrl,
             }),
@@ -857,16 +858,15 @@ p{color:#cbd5e1;font-size:1.05rem;line-height:1.7;margin-bottom:28px}
   }>> {
     try {
       const rows = await this.prisma.$queryRawUnsafe<
-        Array<{ id: number; onboardingData: string | null; showcaseSector: string | null }>
+        Array<{ id: number; onboardingData: any; showcaseSector: string | null }>
       >(
-        `SELECT id, onboardingData, showcaseSector FROM Project
+        `SELECT id, onboardingData, showcaseSector FROM project
          WHERE isShowcase = true AND status = 'DELIVERED'
          ORDER BY updatedAt DESC LIMIT 100`,
       );
       return rows
         .map((r) => {
-          let o: any = {};
-          try { o = JSON.parse(r.onboardingData || '{}'); } catch { /* ignore */ }
+          const o: any = readOnboarding(r.onboardingData);
           const domain = String(o.publicDomain || '').toLowerCase();
           const brand = o.businessName || o.brandName || 'Proyecto';
           const thumb = Array.isArray(o.images) && typeof o.images[0] === 'string' ? o.images[0] : '';
@@ -952,7 +952,7 @@ p{color:#cbd5e1;font-size:1.05rem;line-height:1.7;margin-bottom:28px}
       return project;
     }
 
-    const currentData = JSON.parse((project.onboardingData as string) || '{}');
+    const currentData = readOnboarding(project.onboardingData);
     if (!this.hasGeneratedOutput(project.id, currentData)) {
       throw new BadRequestException(
         'El sitio aun no fue generado y verificado correctamente. No se puede publicar.',
@@ -1011,7 +1011,7 @@ p{color:#cbd5e1;font-size:1.05rem;line-height:1.7;margin-bottom:28px}
     return this.prisma.project.update({
       where: { id },
       data: {
-        onboardingData: JSON.stringify(mergedData),
+        onboardingData: mergedData as any,
         status: ProjectStatus.DELIVERED,
         completed: true,
         completedAt: publishedAt,
@@ -1090,7 +1090,7 @@ p{color:#cbd5e1;font-size:1.05rem;line-height:1.7;margin-bottom:28px}
     });
     if (!project) throw new NotFoundException('Project no encontrado.');
 
-    const onboarding = JSON.parse((project.onboardingData as string) || '{}');
+    const onboarding = readOnboarding(project.onboardingData);
     const domain = (onboarding?.publicDomain || '').toLowerCase();
     if (!domain) {
       throw new BadRequestException(
@@ -1154,7 +1154,7 @@ p{color:#cbd5e1;font-size:1.05rem;line-height:1.7;margin-bottom:28px}
       throw new NotFoundException('Project no encontrado.');
     }
 
-    const existingData = JSON.parse((project.onboardingData as string) || '{}');
+    const existingData = readOnboarding(project.onboardingData);
     const mergedData = {
       ...existingData,
       dbConfigured: true,
@@ -1166,7 +1166,7 @@ p{color:#cbd5e1;font-size:1.05rem;line-height:1.7;margin-bottom:28px}
     return this.prisma.project.update({
       where: { id },
       data: {
-        onboardingData: JSON.stringify(mergedData),
+        onboardingData: mergedData as any,
       },
     });
   }
@@ -1182,13 +1182,13 @@ p{color:#cbd5e1;font-size:1.05rem;line-height:1.7;margin-bottom:28px}
       throw new BadRequestException('No tienes acceso a este proyecto.');
     }
 
-    const currentData = JSON.parse((project.onboardingData as string) || '{}');
+    const currentData = readOnboarding(project.onboardingData);
     const mergedData = { ...currentData, logoUrl };
 
     return this.prisma.project.update({
       where: { id: projectId },
       data: {
-        onboardingData: JSON.stringify(mergedData),
+        onboardingData: mergedData as any,
       },
     });
   }
@@ -1207,13 +1207,13 @@ p{color:#cbd5e1;font-size:1.05rem;line-height:1.7;margin-bottom:28px}
     if (urls.length > 5) {
       throw new BadRequestException('Solo puedes subir hasta 5 imagenes en total.');
     }
-    const data = JSON.parse((project.onboardingData as string) || '{}');
+    const data = readOnboarding(project.onboardingData);
     const mergedData = { ...data, images: urls };
 
     return this.prisma.project.update({
       where: { id: projectId },
       data: {
-        onboardingData: JSON.stringify(mergedData),
+        onboardingData: mergedData as any,
       },
     });
   }
@@ -1229,7 +1229,7 @@ p{color:#cbd5e1;font-size:1.05rem;line-height:1.7;margin-bottom:28px}
       throw new BadRequestException('No tienes acceso a este proyecto.');
     }
 
-    const currentData = JSON.parse((project.onboardingData as string) || '{}');
+    const currentData = readOnboarding(project.onboardingData);
     const mergedData: any = {
       ...currentData,
       [fieldKey]: documentUrl,
@@ -1263,7 +1263,7 @@ p{color:#cbd5e1;font-size:1.05rem;line-height:1.7;margin-bottom:28px}
     return this.prisma.project.update({
       where: { id: projectId },
       data: {
-        onboardingData: JSON.stringify(mergedData),
+        onboardingData: mergedData as any,
       },
     });
   }
@@ -1280,7 +1280,7 @@ p{color:#cbd5e1;font-size:1.05rem;line-height:1.7;margin-bottom:28px}
       throw new BadRequestException('No tienes acceso a este proyecto.');
     }
 
-    const data = JSON.parse((project.onboardingData as string) || '{}');
+    const data = readOnboarding(project.onboardingData);
     const publishedAtRaw = data.publishedAt;
     if (!publishedAtRaw) {
       throw new BadRequestException('El proyecto aun no esta publicado.');
@@ -1316,7 +1316,7 @@ p{color:#cbd5e1;font-size:1.05rem;line-height:1.7;margin-bottom:28px}
     const updated = await this.prisma.project.update({
       where: { id: projectId },
       data: {
-        onboardingData: JSON.stringify(mergedData),
+        onboardingData: mergedData as any,
       },
     });
 
@@ -1354,7 +1354,7 @@ p{color:#cbd5e1;font-size:1.05rem;line-height:1.7;margin-bottom:28px}
       try {
         const endsAt = project.trialEndsAt ? new Date(project.trialEndsAt).getTime() : 0;
         if (!endsAt) continue;
-        const data = JSON.parse((project.onboardingData as string) || '{}');
+        const data = readOnboarding(project.onboardingData);
         const sent: Record<string, boolean> = data._trialNotices || {};
         const daysLeft = Math.ceil((endsAt - now) / (1000 * 60 * 60 * 24));
         const email = project.user?.email;
@@ -1418,7 +1418,7 @@ p{color:#cbd5e1;font-size:1.05rem;line-height:1.7;margin-bottom:28px}
           data._trialNotices = sent;
           await this.prisma.project.update({
             where: { id: project.id },
-            data: { onboardingData: JSON.stringify(data) },
+            data: { onboardingData: data as any },
           });
         }
       } catch (e: any) {
@@ -1440,7 +1440,7 @@ p{color:#cbd5e1;font-size:1.05rem;line-height:1.7;margin-bottom:28px}
 
     for (const project of readyProjects) {
       try {
-        const data = JSON.parse((project.onboardingData as string) || '{}');
+        const data = readOnboarding(project.onboardingData);
 
         this.logger.log(`Procesando auto-publicacion para proyecto ${project.id} (${project.name})...`);
 
@@ -1462,7 +1462,7 @@ p{color:#cbd5e1;font-size:1.05rem;line-height:1.7;margin-bottom:28px}
             await this.prisma.project.update({
               where: { id: project.id },
               data: {
-                onboardingData: JSON.stringify({
+                onboardingData: onboardingJson({
                   ...data,
                   aiGeneration: {
                     ...(data.aiGeneration || {}),
@@ -1496,7 +1496,7 @@ p{color:#cbd5e1;font-size:1.05rem;line-height:1.7;margin-bottom:28px}
           await this.prisma.project.update({
             where: { id: project.id },
             data: {
-              onboardingData: JSON.stringify({
+              onboardingData: onboardingJson({
                 ...data,
                 aiGeneration: {
                   ...(data.aiGeneration || {}),
@@ -1520,7 +1520,7 @@ p{color:#cbd5e1;font-size:1.05rem;line-height:1.7;margin-bottom:28px}
           const fresh = await this.prisma.project.findUnique({
             where: { id: project.id },
           });
-          const freshData = JSON.parse((fresh?.onboardingData as string) || JSON.stringify(data));
+          const freshData = ((fresh?.onboardingData as any) ?? data) as Record<string, any>;
           if (
             freshData.aiGeneration?.status !== 'READY' ||
             !this.hasGeneratedOutput(project.id, freshData)
@@ -1878,7 +1878,7 @@ p{color:#cbd5e1;font-size:1.05rem;line-height:1.7;margin-bottom:28px}
   private getProjectSubdomain(project: any): string | null {
     let raw: string | null = null;
     try {
-      const data = JSON.parse((project.onboardingData as string) || '{}');
+      const data = readOnboarding(project.onboardingData);
       raw = data?.publicDomain || null;
       if (!raw && data?.subdomain) {
         const baseDomain = process.env.CYBERPANEL_DOMAIN_BASE || 'plia.pe';
@@ -1894,7 +1894,7 @@ p{color:#cbd5e1;font-size:1.05rem;line-height:1.7;margin-bottom:28px}
       // Caso edge: si publicDomain ya es el dominio propio (en algún flow viejo),
       // intentamos derivar el subdominio desde data.subdomain.
       try {
-        const data = JSON.parse((project.onboardingData as string) || '{}');
+        const data = readOnboarding(project.onboardingData);
         if (data?.subdomain) {
           return `${data.subdomain}.${baseDomain}`;
         }

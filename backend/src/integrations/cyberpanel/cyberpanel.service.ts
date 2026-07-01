@@ -1,3 +1,4 @@
+import { readOnboarding, onboardingJson } from '../../lib/onboarding.util';
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import axios from 'axios';
 import { execFile, execFileSync } from 'child_process';
@@ -474,7 +475,7 @@ export class CyberpanelService {
     });
 
     for (const project of projects) {
-      const parsed = JSON.parse((project.onboardingData as string) || '{}');
+      const parsed = readOnboarding(project.onboardingData);
       const account = parsed?.cyberpanel?.account;
       // Ignorar cuentas tipo "shared-admin" (legacy del shortcut
       // CYBERPANEL_OWNER=admin). Solo nos interesan cuentas reales
@@ -651,7 +652,7 @@ export class CyberpanelService {
         accountCreated: false,
       };
     }
-    const data = JSON.parse((project.onboardingData as string) || '{}');
+    const data = readOnboarding(project.onboardingData);
     const currentAccount = data.cyberpanel?.account as StoredCyberpanelAccount | undefined;
     if (data.publicDomain) {
       return {
@@ -676,7 +677,7 @@ export class CyberpanelService {
     }
     let domain = `${preferred}.${baseDomain}`;
     const existing = await this.prisma.project.findFirst({
-      where: { onboardingData: { contains: `"publicDomain":"${domain}"` } },
+      where: { onboardingData: { path: '$.publicDomain', equals: domain } },
     });
     if (existing) {
       throw new BadRequestException('El subdominio elegido ya esta en uso. Elige otro.');
@@ -706,7 +707,7 @@ export class CyberpanelService {
       await this.prisma.project.update({
         where: { id: projectId },
         data: {
-          onboardingData: JSON.stringify({
+          onboardingData: onboardingJson({
             ...data,
             cyberpanel: {
               status: 'FAILED',
@@ -740,7 +741,7 @@ export class CyberpanelService {
       await this.prisma.project.update({
         where: { id: projectId },
         data: {
-          onboardingData: JSON.stringify({
+          onboardingData: onboardingJson({
             ...data,
             publicDomain: domain,
             publicUrl: `https://${domain}`,
@@ -775,7 +776,7 @@ export class CyberpanelService {
       await this.prisma.project.update({
         where: { id: projectId },
         data: {
-          onboardingData: JSON.stringify({
+          onboardingData: onboardingJson({
             ...data,
             cyberpanel: {
               status: 'FAILED',
@@ -808,7 +809,7 @@ export class CyberpanelService {
       this.logger.warn(`CyberPanel delete skipped: project ${projectId} not found`);
       return true;
     }
-    const data = JSON.parse((project.onboardingData as string) || '{}');
+    const data = readOnboarding(project.onboardingData);
     const domain = data.publicDomain;
     if (!domain) {
       this.logger.log(`CyberPanel delete skipped: project ${projectId} has no publicDomain`);
@@ -823,7 +824,7 @@ export class CyberpanelService {
       await this.prisma.project.update({
         where: { id: projectId },
         data: {
-          onboardingData: JSON.stringify({
+          onboardingData: onboardingJson({
             ...data,
             cyberpanel: {
               ...(data.cyberpanel || {}),

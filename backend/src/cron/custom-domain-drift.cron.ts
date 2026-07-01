@@ -1,3 +1,4 @@
+import { readOnboarding } from '../lib/onboarding.util';
 import { Cron } from '@nestjs/schedule';
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
@@ -117,9 +118,9 @@ export class CustomDomainDriftCron {
     );
   }
 
-  private extractSubdomain(onboardingData: string | null): string | null {
+  private extractSubdomain(onboardingData: any): string | null {
     try {
-      const data = JSON.parse(onboardingData || '{}');
+      const data = readOnboarding(onboardingData);
       const raw = data?.publicDomain;
       if (typeof raw === 'string' && raw.toLowerCase().endsWith('.plia.pe')) {
         return raw.toLowerCase();

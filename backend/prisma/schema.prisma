@@ -120,7 +120,7 @@ model Project {
   orderId               Int                  @unique
   type                  ProjectType
   status                ProjectStatus        @default(WAITING_INFO)
-  onboardingData        String?              @db.LongText
+  onboardingData        Json?
   onboardingStep        Int                  @default(1)
   startedAt             DateTime?
   deadline              DateTime?
