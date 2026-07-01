@@ -273,10 +273,6 @@ export default function WebHostingPage() {
                     <ArrowRight className="ml-2 h-6 w-6" />
                   </Link>
                 </Button>
-                <div className="flex items-center justify-center gap-2 text-sm text-white/60">
-                   <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                   Garantía de reembolso de 30 días
-                </div>
               </div>
             </AnimatedSection>
 
@@ -582,9 +578,6 @@ export default function WebHostingPage() {
                 <Link href="/contacto">Hablar con soporte</Link>
               </Button>
             </div>
-            <p className="mt-8 text-sm text-white/50 font-medium">
-              * Garantía de devolución de dinero de 30 días en todos los planes.
-            </p>
           </AnimatedSection>
         </div>
       </section>

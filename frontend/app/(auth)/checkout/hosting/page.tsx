@@ -12,6 +12,13 @@ import { Input } from '@/components/ui/input';
 const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3002';
 const apiBase = apiUrl.endsWith('/api') ? apiUrl : `${apiUrl}/api`;
 
+// Lee el código de afiliado guardado en la cookie plia_ref (atribución).
+function readPliaRef(): string | null {
+  if (typeof document === 'undefined') return null;
+  const m = document.cookie.match(/(?:^|; )plia_ref=([^;]*)/);
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
 type HostingPlan = {
   slug: string;
   name: string;
@@ -191,10 +198,12 @@ function Content() {
 
     try {
       const accessToken = getUsableAccessToken();
+      const affiliateCode = readPliaRef();
       const payload = JSON.stringify({
         planSlug: selectedPlan.slug,
         billingCycleMonths,
         email,
+        ...(affiliateCode ? { affiliateCode } : {}),
       });
 
       let prepareRes: Response;

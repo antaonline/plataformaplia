@@ -15,6 +15,13 @@ import Image from "next/image";
 const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3002';
 const apiBase = apiUrl.endsWith('/api') ? apiUrl : `${apiUrl}/api`;
 
+// Lee el código de afiliado guardado en la cookie plia_ref (atribución).
+function readPliaRef(): string | null {
+  if (typeof document === 'undefined') return null;
+  const m = document.cookie.match(/(?:^|; )plia_ref=([^;]*)/);
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
 type Plan = {
   id: number;
   name: string;
@@ -244,6 +251,7 @@ function Content() {
             planId: selectedPlanId,
             email,
             domain: selectedDomain?.domain,
+            affiliateCode: readPliaRef() ?? undefined,
           }),
         });
 
@@ -798,9 +806,6 @@ function Content() {
                     </Button>
                   )}
 
-                  <p className="text-xs text-muted-foreground text-center">
-                    Garantia de reembolso de 30 dias.
-                  </p>
                 </CardContent>
               </Card>
             </div>

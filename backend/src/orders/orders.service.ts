@@ -23,7 +23,9 @@ export class OrdersService {
         planId: dto.planId,
         amount: plan.price,
         currency: "PEN",
-        status: OrderStatus.PENDING
+        status: OrderStatus.PENDING,
+        affiliateId: dto.affiliateId ?? undefined,
+        affiliateCode: dto.affiliateCode ?? undefined,
       }
     });
   }

@@ -12,4 +12,9 @@ export class PrepareCheckoutDto {
   @IsOptional()
   @IsString()
   domain?: string
+
+  // Código de afiliado (?ref=) leído de la cookie plia_ref en el front.
+  @IsOptional()
+  @IsString()
+  affiliateCode?: string
 }

@@ -58,6 +58,16 @@ interface Props {
   onTransformChange?: (t: { zoom: number; pan: { x: number; y: number } }) => void;
   /** Click directo sobre el fondo del lienzo (no sobre un hijo). */
   onBackgroundMouseDown?: () => void;
+  /**
+   * Selección por área (marquee, estilo escritorio de Windows): se dibuja
+   * arrastrando sobre el fondo del lienzo. El rect llega en coordenadas del
+   * STAGE (sin zoom) para hit-test directo contra los items flotantes.
+   * `additive` = true cuando se mantenía Shift (sumar a la selección).
+   */
+  onMarquee?: (
+    rect: { x: number; y: number; w: number; h: number },
+    additive: boolean,
+  ) => void;
 }
 
 const MIN_ZOOM = 0.1;
@@ -72,6 +82,7 @@ export const CanvasViewport = React.forwardRef<CanvasViewportHandle, Props>(
       background = '#eef1f5',
       onTransformChange,
       onBackgroundMouseDown,
+      onMarquee,
     },
     ref,
   ) => {
@@ -82,6 +93,18 @@ export const CanvasViewport = React.forwardRef<CanvasViewportHandle, Props>(
     const [isPanning, setIsPanning] = useState(false);
     const [spaceHeld, setSpaceHeld] = useState(false);
     const panStart = useRef({ x: 0, y: 0, panX: 0, panY: 0 });
+    // Marquee (selección por área). Mientras se arrastra guardamos las dos
+    // esquinas en coords de PANTALLA; `pending` espera a que el ratón se
+    // mueva un mínimo antes de dibujar (así un click simple NO crea caja).
+    const [marquee, setMarquee] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
+    const marqueeStart = useRef<{ x: number; y: number; additive: boolean } | null>(null);
+    // Espejo de zoom/pan en refs: el zoom-hacia-cursor lee el valor ACTUAL
+    // sin depender de closures ni de setState-dentro-de-setState (que causa
+    // saltos al hacer scroll rápido del zoom).
+    const zoomRef = useRef(1);
+    const panRef = useRef({ x: 0, y: 0 });
+    zoomRef.current = zoom;
+    panRef.current = pan;
 
     // Reportar la transformación al padre en cada cambio.
     useEffect(() => {
@@ -141,31 +164,44 @@ export const CanvasViewport = React.forwardRef<CanvasViewportHandle, Props>(
           const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
           zoomAt(e.screenX, e.screenY, factor);
         } else {
-          setPan((p) => ({
-            x: p.x - (e.shiftKey ? e.deltaY : e.deltaX),
-            y: p.y - (e.shiftKey ? 0 : e.deltaY),
-          }));
+          panBy(-(e.shiftKey ? e.deltaY : e.deltaX), -(e.shiftKey ? 0 : e.deltaY));
         }
       },
     }));
 
     // ─── Zoom hacia el cursor ─────────────────────────────────────────────
+    // Lee zoom/pan ACTUALES desde refs y fija ambos en una sola pasada. NO
+    // anidamos setPan dentro del updater de setZoom: en StrictMode (dev) los
+    // updaters corren DOS veces, así que el anidado aplicaba la corrección de
+    // pan dos veces y el zoom se recentraba en un punto equivocado.
     const zoomAt = (clientX: number, clientY: number, factor: number) => {
       const el = containerRef.current;
       if (!el) return;
       const rect = el.getBoundingClientRect();
       const px = clientX - rect.left;
       const py = clientY - rect.top;
-      setZoom((prevZoom) => {
-        const next = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, prevZoom * factor));
-        const realFactor = next / prevZoom;
-        // Ajustar el pan para que el punto bajo el cursor se mantenga fijo.
-        setPan((prevPan) => ({
-          x: px - (px - prevPan.x) * realFactor,
-          y: py - (py - prevPan.y) * realFactor,
-        }));
-        return next;
-      });
+      const prevZoom = zoomRef.current;
+      const next = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, prevZoom * factor));
+      if (next === prevZoom) return;
+      const realFactor = next / prevZoom;
+      const prevPan = panRef.current;
+      const nextPan = {
+        // El punto (px,py) bajo el cursor queda fijo tras escalar.
+        x: px - (px - prevPan.x) * realFactor,
+        y: py - (py - prevPan.y) * realFactor,
+      };
+      zoomRef.current = next;
+      panRef.current = nextPan;
+      setZoom(next);
+      setPan(nextPan);
+    };
+
+    // Pan incremental que lee/escribe el ref para no acumular sobre un valor
+    // viejo cuando llegan muchos eventos de rueda seguidos (batching de React).
+    const panBy = (dx: number, dy: number) => {
+      const next = { x: panRef.current.x + dx, y: panRef.current.y + dy };
+      panRef.current = next;
+      setPan(next);
     };
 
     const zoomBy = (factor: number) => {
@@ -192,10 +228,7 @@ export const CanvasViewport = React.forwardRef<CanvasViewportHandle, Props>(
         } else {
           // Rueda sola = pan (vertical; Shift = horizontal).
           e.preventDefault();
-          setPan((p) => ({
-            x: p.x - (e.shiftKey ? e.deltaY : e.deltaX),
-            y: p.y - (e.shiftKey ? 0 : e.deltaY),
-          }));
+          panBy(-(e.shiftKey ? e.deltaY : e.deltaX), -(e.shiftKey ? 0 : e.deltaY));
         }
       };
       el.addEventListener('wheel', handler, { passive: false });
@@ -207,16 +240,18 @@ export const CanvasViewport = React.forwardRef<CanvasViewportHandle, Props>(
     const canPan = tool === 'hand' || spaceHeld;
 
     const onMouseDown = (e: React.MouseEvent) => {
-      // Click directo en el fondo (no en el artboard ni en items) →
-      // deseleccionar items del lienzo unificado.
-      if (e.target === e.currentTarget) {
-        onBackgroundMouseDown?.();
-      }
-      // Pan con: herramienta mano, espacio, o botón central.
+      // Pan con: herramienta mano, espacio, o botón central. Tiene prioridad.
       if (canPan || e.button === 1) {
         e.preventDefault();
         setIsPanning(true);
         panStart.current = { x: e.clientX, y: e.clientY, panX: pan.x, panY: pan.y };
+        return;
+      }
+      // Click directo en el fondo (no en el artboard ni en items) con la
+      // herramienta de selección → arranca un posible marquee. El deseleccionar
+      // se decide al soltar: click limpio = deselecciona; arrastre = selecciona.
+      if (e.target === e.currentTarget && e.button === 0) {
+        marqueeStart.current = { x: e.clientX, y: e.clientY, additive: e.shiftKey };
       }
     };
 
@@ -236,6 +271,65 @@ export const CanvasViewport = React.forwardRef<CanvasViewportHandle, Props>(
         window.removeEventListener('mouseup', onUp);
       };
     }, [isPanning]);
+
+    // ─── Marquee: dibujar y resolver la selección por área ────────────────
+    useEffect(() => {
+      const THRESH = 4; // px de pantalla antes de considerar que es arrastre
+      const onMove = (e: MouseEvent) => {
+        const s = marqueeStart.current;
+        if (!s) return;
+        if (!marquee && Math.hypot(e.clientX - s.x, e.clientY - s.y) < THRESH) return;
+        const el = containerRef.current;
+        if (!el) return;
+        // Guardamos coords RELATIVAS al contenedor (para pintar el rect como
+        // hijo absoluto). El hit-test de onUp usa las coords de cliente.
+        const r = el.getBoundingClientRect();
+        setMarquee({
+          x0: s.x - r.left,
+          y0: s.y - r.top,
+          x1: e.clientX - r.left,
+          y1: e.clientY - r.top,
+        });
+      };
+      const onUp = (e: MouseEvent) => {
+        const s = marqueeStart.current;
+        if (!s) return;
+        marqueeStart.current = null;
+        const moved = Math.hypot(e.clientX - s.x, e.clientY - s.y) >= THRESH;
+        const el = containerRef.current;
+        if (moved && el && onMarquee) {
+          // Pantalla → stage para hit-test contra los items (coords sin zoom).
+          const rect = el.getBoundingClientRect();
+          const z = zoomRef.current || 1;
+          const p = panRef.current;
+          const toStage = (cx: number, cy: number) => ({
+            x: (cx - rect.left - p.x) / z,
+            y: (cy - rect.top - p.y) / z,
+          });
+          const a = toStage(s.x, s.y);
+          const b = toStage(e.clientX, e.clientY);
+          onMarquee(
+            {
+              x: Math.min(a.x, b.x),
+              y: Math.min(a.y, b.y),
+              w: Math.abs(a.x - b.x),
+              h: Math.abs(a.y - b.y),
+            },
+            s.additive,
+          );
+        } else if (!moved && !s.additive) {
+          // Click limpio sobre el fondo → deseleccionar.
+          onBackgroundMouseDown?.();
+        }
+        setMarquee(null);
+      };
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', onUp);
+      return () => {
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup', onUp);
+      };
+    }, [marquee, onMarquee, onBackgroundMouseDown]);
 
     // ─── Espacio para pan temporal ────────────────────────────────────────
     useEffect(() => {
@@ -280,6 +374,19 @@ export const CanvasViewport = React.forwardRef<CanvasViewportHandle, Props>(
             backgroundPosition: `${pan.x}px ${pan.y}px`,
           }}
         />
+
+        {/* Rectángulo de selección por área (marquee, estilo Windows) */}
+        {marquee && (
+          <div
+            className="absolute z-40 pointer-events-none border border-indigo-500 bg-indigo-500/10 rounded-sm"
+            style={{
+              left: Math.min(marquee.x0, marquee.x1),
+              top: Math.min(marquee.y0, marquee.y1),
+              width: Math.abs(marquee.x1 - marquee.x0),
+              height: Math.abs(marquee.y1 - marquee.y0),
+            }}
+          />
+        )}
 
         {/* Stage transformable */}
         <div

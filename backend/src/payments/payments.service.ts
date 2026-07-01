@@ -11,6 +11,7 @@ import * as bcrypt from 'bcrypt';
 import { addHours } from 'date-fns';
 import { OrderStatus, PlanServiceType } from '@prisma/client';
 import { HostingService } from '../hosting/hosting.service';
+import { AffiliatesService } from '../affiliates/affiliates.service';
 
 
 @Injectable()
@@ -23,6 +24,7 @@ export class PaymentsService {
     private usersService: UsersService,
     private mailService: MailService,
     private hostingService: HostingService,
+    private affiliates: AffiliatesService,
   ) {}
 
   // ✅ SOLO crea la sesión de pago
@@ -211,6 +213,17 @@ export class PaymentsService {
         planName: order.plan?.name || undefined,
         dashboardUrl: `${appBase}/dashboard`,
       });
+    }
+
+    // Comisión de afiliado: si la orden tenía atribución, se registra ahora.
+    // Envuelto en try/catch para que un fallo aquí NUNCA rompa la aprobación.
+    try {
+      await this.affiliates.createCommissionForOrder(order.id);
+    } catch (err) {
+      console.error(
+        `[affiliates] no se pudo crear comisión (order ${order.id}):`,
+        (err as any)?.message,
+      );
     }
 
     return {

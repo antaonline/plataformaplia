@@ -223,6 +223,100 @@ export class AiChatController {
     return this.aiChatService.applyVisualEdit(id, req.user.id, body);
   }
 
+  /**
+   * Override de estilo del editor visual (padding/tamaño/tipografía/color).
+   * Lo escribe en `src/plia-overrides.css` del proyecto para que persista en
+   * el código y viaje al exportar/publicar.
+   */
+  @Post(':id/style-override')
+  @HttpCode(HttpStatus.OK)
+  styleOverride(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req: any,
+    @Body() body: { path: string; style: Record<string, string>; breakpoint?: string },
+  ) {
+    return this.aiChatService.applyStyleOverride(id, req.user.id, body);
+  }
+
+  /** Inserta una sección nueva (snippet) en la página, sin pasar por la IA. */
+  @Post(':id/insert-section')
+  @HttpCode(HttpStatus.OK)
+  insertSection(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req: any,
+    @Body() body: { html: string },
+  ) {
+    return this.aiChatService.insertSection(id, req.user.id, body);
+  }
+
+  /** Elimina una sección insertada por la paleta (por su data-plia-section). */
+  @Post(':id/delete-section')
+  @HttpCode(HttpStatus.OK)
+  deleteSection(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req: any,
+    @Body() body: { sectionId: string },
+  ) {
+    return this.aiChatService.deleteSection(id, req.user.id, body);
+  }
+
+  /** Etiqueta secciones inline antiguas para volverlas eliminables. Idempotente. */
+  @Post(':id/normalize-sections')
+  @HttpCode(HttpStatus.OK)
+  normalizeSections(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
+    return this.aiChatService.normalizeSections(id, req.user.id);
+  }
+
+  /** Reordena un bloque de la página (hijo de <main>) arriba/abajo. */
+  @Post(':id/move-section')
+  @HttpCode(HttpStatus.OK)
+  moveSection(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req: any,
+    @Body() body: { index: number; dir: 'up' | 'down' },
+  ) {
+    return this.aiChatService.moveSection(id, req.user.id, body);
+  }
+
+  /** Duplica un bloque de la página (hijo de <main>), debajo del original. */
+  @Post(':id/duplicate-section')
+  @HttpCode(HttpStatus.OK)
+  duplicateSection(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req: any,
+    @Body() body: { index: number },
+  ) {
+    return this.aiChatService.duplicateSection(id, req.user.id, body);
+  }
+
+  /** Lee los colores actuales del tema (hex) para el panel de tema global. */
+  @Get(':id/theme')
+  getTheme(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
+    return this.aiChatService.getTheme(id, req.user.id);
+  }
+
+  /** Recolorea el sitio completo (tokens :root del CSS de tema). */
+  @Post(':id/theme')
+  @HttpCode(HttpStatus.OK)
+  setTheme(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req: any,
+    @Body() body: { tokens: Record<string, string> },
+  ) {
+    return this.aiChatService.setTheme(id, req.user.id, body);
+  }
+
+  /** Aplica un par tipográfico (encabezado + cuerpo) al sitio completo. */
+  @Post(':id/theme-font')
+  @HttpCode(HttpStatus.OK)
+  setThemeFont(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req: any,
+    @Body() body: { pairingId: string },
+  ) {
+    return this.aiChatService.setThemeFont(id, req.user.id, body);
+  }
+
   @Patch(':id/rename')
   renameChat(
     @Param('id', ParseIntPipe) id: number,

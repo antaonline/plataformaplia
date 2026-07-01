@@ -17,6 +17,7 @@ import { CyberpanelService, StoredCyberpanelAccount } from '../integrations/cybe
 import { MailService } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { IzipayService } from '../payments/izipay.service';
+import { AffiliatesService } from '../affiliates/affiliates.service';
 import { CreateHostedSiteDto } from './dto/create-hosted-site.dto';
 import { InstallWordPressDto } from './dto/install-wordpress.dto';
 import { PrepareHostingCheckoutDto } from './dto/prepare-hosting-checkout.dto';
@@ -42,6 +43,7 @@ export class HostingService {
     private mailService: MailService,
     @Inject(forwardRef(() => IzipayService))
     private izipay: IzipayService,
+    private affiliates: AffiliatesService,
   ) {}
 
   private get baseDomain() {
@@ -76,6 +78,10 @@ export class HostingService {
       hostingYear: false,
       slug: `hosting-${plan.slug}`,
       serviceType: PlanServiceType.HOSTING_ONLY,
+      // El hosting NO usa monto fijo: la comisión se calcula como un % del total
+      // pagado (AFFILIATE_HOSTING_PERCENT) porque el precio varía por plan y por
+      // plazo. Por eso aquí queda en 0.
+      affiliateCommission: 0,
     };
   }
 
@@ -360,6 +366,8 @@ export class HostingService {
         throw new BadRequestException('No se pudo preparar el plan de hosting.');
       }
 
+      const attribution = await this.affiliates.resolveAttribution(dto.affiliateCode);
+
       const order = await this.prisma.order.create({
         data: {
           userId,
@@ -368,6 +376,8 @@ export class HostingService {
           amount: total,
           currency: 'PEN',
           billingCycleMonths,
+          affiliateId: attribution?.affiliateId,
+          affiliateCode: attribution?.affiliateCode,
           metadata: JSON.stringify({
             service: 'hosting-only',
             planSlug: definition.slug,

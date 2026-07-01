@@ -2,6 +2,7 @@ import Script from "next/script";
 import "app/globals.css";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
+import AffiliateTracker from "@/components/shared/AffiliateTracker";
 
 
 /*const geistMono = Geist_Mono({
@@ -20,6 +21,7 @@ export default function PublicLayout({
   return (
     
       <>
+        <AffiliateTracker />
         <Script
           src="https://sandbox-checkout.izipay.pe/payments/v1/js/index.js"
           strategy="afterInteractive"

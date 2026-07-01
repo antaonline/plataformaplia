@@ -10,7 +10,7 @@ import {
   Paperclip, Image as ImageIcon, Trash2, ChevronDown, Sidebar,
   Zap, FileText, Clock, Plus, Layout, Settings, LogOut, Search,
   MoreVertical, Eye, Code, Download, Copy, User, Bot, Save, Trash, ExternalLink,
-  MousePointer2, Workflow
+  MousePointer2, Workflow, Layers, ArrowUp, ArrowDown, Palette
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -27,6 +27,10 @@ import { CreativeStudioDialog } from '@/components/experimental/CreativeStudioDi
 import { NodeCanvasDialog } from '@/components/experimental/NodeCanvasDialog';
 import { CanvasViewport, CanvasViewportHandle } from '@/components/experimental/CanvasViewport';
 import { CanvasItemsLayer, CanvasItem } from '@/components/experimental/CanvasItemsLayer';
+import { StyleInspector } from '@/components/experimental/StyleInspector';
+import { LayersPanel } from '@/components/experimental/LayersPanel';
+import { SectionPalette } from '@/components/experimental/SectionPalette';
+import { ThemePanel } from '@/components/experimental/ThemePanel';
 import type { CreativeAsset } from '@/components/experimental/CreativeStudioDialog';
 import { toast } from 'sonner';
 import ThinkingSection from '@/components/chat/ThinkingSection';
@@ -161,7 +165,32 @@ export default function projectPage() {
   // en el mismo lienzo que el artboard. Se mueven, redimensionan, convierten
   // a video y se arrastran sobre el sitio para reemplazar imágenes.
   const [canvasItems, setCanvasItems] = useState<CanvasItem[]>([]);
-  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  // Multi-selección (marquee / Shift+click) de items flotantes del lienzo.
+  const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
+  // Panel de capas (árbol del DOM) + su contenido (lo reporta el bridge).
+  const [showLayers, setShowLayers] = useState(false);
+  const [layerTree, setLayerTree] = useState<{ path: string; label: string; depth: number; kids: number }[]>([]);
+  // Paleta para insertar secciones nuevas.
+  const [showSections, setShowSections] = useState(false);
+  const [insertingSection, setInsertingSection] = useState(false);
+  // Tema global (colores + tipografía del sitio completo).
+  const [showTheme, setShowTheme] = useState(false);
+  const [themeTokens, setThemeTokens] = useState<Record<string, string>>({});
+  const [themeFontId, setThemeFontId] = useState<string | null>(null);
+  const [themeLoading, setThemeLoading] = useState(false);
+  const [themeBusy, setThemeBusy] = useState(false);
+  // Overrides de estilo (estilo Framer), anidados por breakpoint:
+  // { desktop|tablet|mobile: { [rutaDOM]: { paddingTop, ... } } }.
+  // Se guardan por proyecto y se re-aplican al recargar el preview.
+  const padOverridesRef = useRef<
+    Record<string, Record<string, Record<string, string>>>
+  >({});
+  // Cola para persistir los overrides EN EL CÓDIGO (src/plia-overrides.css del
+  // proyecto, vía backend). Se agrupa por breakpoint+ruta y debouncea.
+  const pendingStyleRef = useRef<
+    Record<string, { bp: string; path: string; style: Record<string, string> }>
+  >({});
+  const styleFlushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Transformación actual del lienzo (zoom/pan) — la reporta el
   // CanvasViewport; los items la usan para la matemática de arrastre.
   const canvasTransformRef = useRef<{ zoom: number; pan: { x: number; y: number } }>({
@@ -605,6 +634,11 @@ export default function projectPage() {
         setSelectedEl(e.data);
         return;
       }
+      // 3.1. Árbol del DOM para el panel de capas.
+      if (e.data?.type === 'PLIA_TREE' && Array.isArray(e.data.tree)) {
+        setLayerTree(e.data.tree);
+        return;
+      }
       // 3.5. Altura del documento del sitio (para desplegar la web completa).
       if (e.data?.type === 'PLIA_DOC_HEIGHT' && typeof e.data.height === 'number') {
         setSiteDocHeight(Math.min(e.data.height, 30000)); // tope sanidad
@@ -658,6 +692,27 @@ export default function projectPage() {
         });
         return;
       }
+      // 6. Padding ajustado (estilo Framer): se persiste por proyecto+ruta y
+      // se re-aplica al recargar (el bridge ya lo aplicó en vivo).
+      if (e.data?.type === 'PLIA_PADDING_CHANGED' && e.data.path) {
+        const bp: string = e.data.bp || 'desktop';
+        const map = padOverridesRef.current; // { bp: { path: {prop} } }
+        const bpMap = map[bp] || (map[bp] = {});
+        // Valores previos (para Ctrl+Z) ANTES de pisar el override.
+        const before: Record<string, string> = {};
+        for (const k of Object.keys(e.data.padding)) before[k] = bpMap[e.data.path]?.[k] ?? '';
+        bpMap[e.data.path] = { ...(bpMap[e.data.path] || {}), ...e.data.padding };
+        try {
+          localStorage.setItem(`pliaPadOverrides:${id}`, JSON.stringify(map));
+        } catch {
+          /* cuota llena: el cambio sigue vivo en pantalla */
+        }
+        // Persistir también en el código del proyecto (durable + exportable)
+        // y registrar en el historial (el bridge ya lo aplicó en vivo).
+        queueStyleToCode(e.data.path, e.data.padding, bp);
+        recordStyleEdit(e.data.path, bp, before, e.data.padding);
+        return;
+      }
     };
     window.addEventListener('message', onMsg);
     return () => window.removeEventListener('message', onMsg);
@@ -665,15 +720,32 @@ export default function projectPage() {
   }, [apiBase, id]);
 
   // Historial de ediciones visuales para Ctrl+Z / Ctrl+Shift+Z.
+  // Incluye estilos (padding/resize/inspector): `before`/`after` son mapas de
+  // props CSS; "" en una prop = sin override (volver al valor generado).
+  type StyleEdit = {
+    kind: 'style';
+    path: string;
+    bp: string; // breakpoint: desktop | tablet | mobile
+    before: Record<string, string>;
+    after: Record<string, string>;
+  };
   type VisualEdit =
     | { kind: 'text'; oldText: string; newText: string }
-    | { kind: 'image'; oldSrc: string; newUrl: string };
+    | { kind: 'image'; oldSrc: string; newUrl: string }
+    | StyleEdit;
   const undoStack = useRef<VisualEdit[]>([]);
   const redoStack = useRef<VisualEdit[]>([]);
+  // Para coalescer ráfagas de estilo (teclear/arrastrar) en un solo paso undo.
+  const lastStyleEditRef = useRef<{ path: string; t: number } | null>(null);
+  // Puente de orden: performUndo/Redo (definidos aquí) llaman a applyStyleEdit
+  // (definido más abajo) a través de este ref, sin meterlo en sus deps.
+  const applyStyleEditRef = useRef<((edit: StyleEdit) => Promise<boolean>) | null>(null);
   const invertEdit = (e: VisualEdit): VisualEdit =>
     e.kind === 'text'
       ? { kind: 'text', oldText: e.newText, newText: e.oldText }
-      : { kind: 'image', oldSrc: e.newUrl, newUrl: e.oldSrc };
+      : e.kind === 'image'
+        ? { kind: 'image', oldSrc: e.newUrl, newUrl: e.oldSrc }
+        : { kind: 'style', path: e.path, bp: e.bp, before: e.after, after: e.before };
 
   /**
    * Aplica una edición visual (texto/imagen) llamando al backend, que
@@ -707,7 +779,7 @@ export default function projectPage() {
           );
           return true;
         } else if (data.replacements === 0) {
-          toast.error('No se encontró el contenido en el código. Probá editarlo desde el chat.');
+          toast.error('No se encontró el contenido en el código. Prueba a editarlo desde el chat.');
         }
       } catch {
         toast.error('No se pudo aplicar el cambio');
@@ -717,14 +789,18 @@ export default function projectPage() {
     [apiBase, id],
   );
 
-  /** Ctrl+Z: revierte la última edición visual (texto o imagen). */
+  /** Ctrl+Z: revierte la última edición visual (texto, imagen o estilo). */
   const performUndo = useCallback(async () => {
     const last = undoStack.current.pop();
     if (!last) {
       toast.info('Nada que deshacer');
       return;
     }
-    const ok = await applyVisualEdit(invertEdit(last), { skipHistory: true });
+    const inv = invertEdit(last);
+    const ok =
+      inv.kind === 'style'
+        ? !!(await applyStyleEditRef.current?.(inv))
+        : await applyVisualEdit(inv, { skipHistory: true });
     if (ok) redoStack.current.push(last);
     else undoStack.current.push(last); // falló: lo devolvemos a la pila
   }, [applyVisualEdit]);
@@ -733,10 +809,378 @@ export default function projectPage() {
   const performRedo = useCallback(async () => {
     const last = redoStack.current.pop();
     if (!last) return;
-    const ok = await applyVisualEdit(last, { skipHistory: true });
+    const ok =
+      last.kind === 'style'
+        ? !!(await applyStyleEditRef.current?.(last))
+        : await applyVisualEdit(last, { skipHistory: true });
     if (ok) undoStack.current.push(last);
     else redoStack.current.push(last);
   }, [applyVisualEdit]);
+
+  /**
+   * Encola un override de estilo para escribirlo en el CÓDIGO del proyecto
+   * (src/plia-overrides.css vía backend). Agrupa por breakpoint+ruta DOM y
+   * debouncea para no disparar una petición por cada tecla/pixel arrastrado.
+   */
+  const queueStyleToCode = useCallback(
+    (path: string, style: Record<string, string>, bp: string) => {
+      const p = pendingStyleRef.current;
+      const key = bp + '|' + path;
+      const e = p[key] || (p[key] = { bp, path, style: {} });
+      Object.assign(e.style, style);
+      if (styleFlushTimer.current) clearTimeout(styleFlushTimer.current);
+      styleFlushTimer.current = setTimeout(async () => {
+        const batch = pendingStyleRef.current;
+        pendingStyleRef.current = {};
+        const token = localStorage.getItem('access_token');
+        if (!token) return;
+        for (const k of Object.keys(batch)) {
+          const { bp: bpk, path: pth, style: st } = batch[k];
+          try {
+            await fetch(`${apiBase}/experimental/iachat/${id}/style-override`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+              body: JSON.stringify({ path: pth, style: st, breakpoint: bpk }),
+            });
+          } catch {
+            /* sin red: el cambio sigue vivo en pantalla y en localStorage */
+          }
+        }
+      }, 600);
+    },
+    [apiBase, id],
+  );
+
+  /**
+   * Aplica props de estilo a un elemento POR SU RUTA DOM: en vivo en el iframe
+   * (PLIA_SET_STYLE_AT), en localStorage (cache), en el código (debounced) y en
+   * el panel si es el seleccionado. "" en una prop = quitar el override.
+   */
+  const applyStyleToPath = useCallback(
+    (path: string, style: Record<string, string>, bp: string) => {
+      iframeRef.current?.contentWindow?.postMessage(
+        { type: 'PLIA_SET_STYLE_AT', path, style, bp },
+        '*',
+      );
+      const map = padOverridesRef.current; // { bp: { path: {prop} } }
+      const bpMap = map[bp] || (map[bp] = {});
+      const cur = { ...(bpMap[path] || {}) };
+      for (const k of Object.keys(style)) {
+        if (style[k] === '') delete cur[k];
+        else cur[k] = style[k];
+      }
+      if (Object.keys(cur).length) bpMap[path] = cur;
+      else delete bpMap[path];
+      if (!Object.keys(bpMap).length) delete map[bp];
+      try {
+        localStorage.setItem(`pliaPadOverrides:${id}`, JSON.stringify(map));
+      } catch {
+        /* cuota llena: el cambio sigue vivo en pantalla */
+      }
+      queueStyleToCode(path, style, bp);
+      setSelectedEl((prev: any) =>
+        prev && prev.path === path
+          ? { ...prev, styles: { ...(prev.styles || {}), ...style } }
+          : prev,
+      );
+    },
+    [id, queueStyleToCode],
+  );
+
+  /** Valores actuales (override) de esas props en ese breakpoint; "" si no hay. */
+  const styleBefore = useCallback(
+    (path: string, props: Record<string, string>, bp: string): Record<string, string> => {
+      const cur = padOverridesRef.current[bp]?.[path] || {};
+      const before: Record<string, string> = {};
+      for (const k of Object.keys(props)) before[k] = cur[k] ?? '';
+      return before;
+    },
+    [],
+  );
+
+  /** Registra una edición de estilo en el historial, coalesciendo ráfagas
+   *  sobre el mismo elemento+breakpoint (teclear/arrastrar) en un paso. */
+  const recordStyleEdit = useCallback(
+    (path: string, bp: string, before: Record<string, string>, after: Record<string, string>) => {
+      const now = Date.now();
+      const top = undoStack.current[undoStack.current.length - 1];
+      const last = lastStyleEditRef.current;
+      if (
+        top && top.kind === 'style' && top.path === path && top.bp === bp &&
+        last && now - last.t < 1200
+      ) {
+        for (const k of Object.keys(before)) if (!(k in top.before)) top.before[k] = before[k];
+        Object.assign(top.after, after);
+      } else {
+        undoStack.current.push({ kind: 'style', path, bp, before: { ...before }, after: { ...after } });
+        redoStack.current = [];
+      }
+      lastStyleEditRef.current = { path, t: now };
+    },
+    [],
+  );
+
+  // Undo/redo de estilos: aplica SIN registrar. Se expone por ref a
+  // performUndo/Redo (que están definidos más arriba) para evitar TDZ.
+  const applyStyleEdit = useCallback(
+    async (edit: StyleEdit): Promise<boolean> => {
+      applyStyleToPath(edit.path, edit.after, edit.bp);
+      return true;
+    },
+    [applyStyleToPath],
+  );
+  applyStyleEditRef.current = applyStyleEdit;
+
+  /**
+   * Inspector lateral: aplica una prop al elemento seleccionado en el
+   * breakpoint actual (en vivo + persistencia) y la registra (Ctrl+Z).
+   */
+  const applyElementStyle = useCallback(
+    (style: Record<string, string>) => {
+      const path = selectedEl?.path;
+      if (!path) return;
+      const bp = viewport;
+      const before = styleBefore(path, style, bp);
+      applyStyleToPath(path, style, bp);
+      recordStyleEdit(path, bp, before, style);
+    },
+    [selectedEl, viewport, styleBefore, applyStyleToPath, recordStyleEdit],
+  );
+
+  // Selección por ruta DOM (breadcrumb "subir al padre" / panel de capas):
+  // se la pedimos al bridge, que selecciona y nos reporta el elemento.
+  const selectElementByPath = useCallback((path: string) => {
+    iframeRef.current?.contentWindow?.postMessage({ type: 'PLIA_SELECT_PATH', path }, '*');
+  }, []);
+  const requestLayerTree = useCallback(() => {
+    iframeRef.current?.contentWindow?.postMessage({ type: 'PLIA_REQUEST_TREE' }, '*');
+  }, []);
+  // Inserta una sección nueva (snippet) en el código vía backend → sync.
+  const insertSection = useCallback(
+    async (html: string) => {
+      const token = localStorage.getItem('access_token');
+      if (!token) return;
+      setInsertingSection(true);
+      try {
+        const res = await fetch(`${apiBase}/experimental/iachat/${id}/insert-section`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ html }),
+        });
+        const data = await res.json();
+        if (data.ok && data.files) {
+          setPages(data.files);
+          toast.success('Sección agregada');
+          setShowSections(false);
+        } else {
+          toast.error('No se pudo agregar la sección');
+        }
+      } catch {
+        toast.error('No se pudo agregar la sección');
+      } finally {
+        setInsertingSection(false);
+      }
+    },
+    [apiBase, id],
+  );
+  // Elimina una sección insertada por la paleta (por su data-plia-section).
+  const deleteSection = useCallback(
+    async (sectionId: string) => {
+      const token = localStorage.getItem('access_token');
+      if (!token) return;
+      try {
+        const res = await fetch(`${apiBase}/experimental/iachat/${id}/delete-section`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ sectionId }),
+        });
+        const data = await res.json();
+        if (data.ok && data.files) {
+          setPages(data.files);
+          setSelectedEl(null);
+          toast.success('Sección eliminada');
+        } else {
+          toast.error('No se pudo eliminar la sección');
+        }
+      } catch {
+        toast.error('No se pudo eliminar la sección');
+      }
+    },
+    [apiBase, id],
+  );
+  // Etiqueta (una vez por carga) las secciones inline antiguas que se
+  // insertaron antes de existir el etiquetado, para que el botón "Eliminar
+  // esta sección" también aparezca en ellas. Idempotente en el backend.
+  const normalizedRef = useRef(false);
+  const normalizeSections = useCallback(async () => {
+    const token = localStorage.getItem('access_token');
+    if (!token) return;
+    try {
+      const res = await fetch(`${apiBase}/experimental/iachat/${id}/normalize-sections`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (data.ok && data.files && data.tagged > 0) setPages(data.files);
+    } catch {
+      /* silencioso: no es crítico */
+    }
+  }, [apiBase, id]);
+  useEffect(() => {
+    if (editMode && previewUrl && !normalizedRef.current) {
+      normalizedRef.current = true;
+      normalizeSections();
+    }
+  }, [editMode, previewUrl, normalizeSections]);
+  // Reordena (sube/baja) el bloque de nivel superior seleccionado dentro de <main>.
+  const moveSection = useCallback(
+    async (index: number, dir: 'up' | 'down') => {
+      const token = localStorage.getItem('access_token');
+      if (!token) return;
+      try {
+        const res = await fetch(`${apiBase}/experimental/iachat/${id}/move-section`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ index, dir }),
+        });
+        const data = await res.json();
+        if (data.ok && data.files) {
+          setPages(data.files);
+          setSelectedEl(null); // los índices cambian tras reordenar
+          toast.success(dir === 'up' ? 'Sección subida' : 'Sección bajada');
+        } else {
+          toast.error('No se pudo mover la sección');
+        }
+      } catch {
+        toast.error('No se pudo mover la sección');
+      }
+    },
+    [apiBase, id],
+  );
+  // Duplica el bloque seleccionado, insertando la copia justo debajo.
+  const duplicateSection = useCallback(
+    async (index: number) => {
+      const token = localStorage.getItem('access_token');
+      if (!token) return;
+      try {
+        const res = await fetch(`${apiBase}/experimental/iachat/${id}/duplicate-section`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ index }),
+        });
+        const data = await res.json();
+        if (data.ok && data.files) {
+          setPages(data.files);
+          setSelectedEl(null);
+          toast.success('Sección duplicada');
+        } else {
+          toast.error('No se pudo duplicar la sección');
+        }
+      } catch {
+        toast.error('No se pudo duplicar la sección');
+      }
+    },
+    [apiBase, id],
+  );
+  // --- Tema global (colores del sitio completo) ---
+  const themeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingThemeRef = useRef<Record<string, string>>({});
+  const postTheme = useCallback(
+    async (tokens: Record<string, string>) => {
+      const token = localStorage.getItem('access_token');
+      if (!token) return;
+      setThemeBusy(true);
+      try {
+        const res = await fetch(`${apiBase}/experimental/iachat/${id}/theme`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ tokens }),
+        });
+        const data = await res.json();
+        if (data.ok && data.files) setPages(data.files);
+        else toast.error('No se pudo aplicar el color');
+      } catch {
+        toast.error('No se pudo aplicar el color');
+      } finally {
+        setThemeBusy(false);
+      }
+    },
+    [apiBase, id],
+  );
+  const openTheme = useCallback(async () => {
+    setShowTheme(true);
+    setThemeLoading(true);
+    const token = localStorage.getItem('access_token');
+    if (!token) {
+      setThemeLoading(false);
+      return;
+    }
+    try {
+      const res = await fetch(`${apiBase}/experimental/iachat/${id}/theme`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (data.ok && data.tokens) setThemeTokens(data.tokens);
+      if (data.ok) setThemeFontId(data.fontId ?? null);
+    } catch {
+      /* noop */
+    } finally {
+      setThemeLoading(false);
+    }
+  }, [apiBase, id]);
+  // Aplica un par tipográfico (encabezado + cuerpo) a todo el sitio.
+  const applyThemeFont = useCallback(
+    async (pairingId: string) => {
+      setThemeFontId(pairingId);
+      const token = localStorage.getItem('access_token');
+      if (!token) return;
+      setThemeBusy(true);
+      try {
+        const res = await fetch(`${apiBase}/experimental/iachat/${id}/theme-font`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ pairingId }),
+        });
+        const data = await res.json();
+        if (data.ok && data.files) setPages(data.files);
+        else toast.error('No se pudo aplicar la tipografía');
+      } catch {
+        toast.error('No se pudo aplicar la tipografía');
+      } finally {
+        setThemeBusy(false);
+      }
+    },
+    [apiBase, id],
+  );
+  // Cambia un color: actualiza el swatch al instante y agenda el POST (debounce
+  // para no spamear mientras se arrastra el selector de color).
+  const setThemeToken = useCallback(
+    (key: string, hex: string) => {
+      setThemeTokens((prev) => ({ ...prev, [key]: hex }));
+      pendingThemeRef.current[key] = hex;
+      if (themeTimerRef.current) clearTimeout(themeTimerRef.current);
+      themeTimerRef.current = setTimeout(() => {
+        const batch = pendingThemeRef.current;
+        pendingThemeRef.current = {};
+        if (Object.keys(batch).length) postTheme(batch);
+      }, 280);
+    },
+    [postTheme],
+  );
+  const applyThemePreset = useCallback(
+    (colors: Record<string, string>) => {
+      setThemeTokens((prev) => ({ ...prev, ...colors }));
+      postTheme(colors);
+    },
+    [postTheme],
+  );
+  // Al abrir el panel de capas (o al recargar el preview), pedir el árbol.
+  // NO al cambiar de selección: el árbol no cambia al clickear y reconstruirlo
+  // (hasta 500 nodos) en cada click es trabajo desperdiciado — para refrescar
+  // tras editar la estructura está el botón "Actualizar" del panel.
+  useEffect(() => {
+    if (showLayers) requestLayerTree();
+  }, [showLayers, previewNonce, requestLayerTree]);
 
   // Atajos de teclado del editor (fuera de inputs/textarea).
   useEffect(() => {
@@ -771,9 +1215,12 @@ export default function projectPage() {
   // terminado de cargar cuando corre este effect.
   useEffect(() => {
     const on = canvasMode && rightPaneMode !== 'code';
+    // `vh` = altura del dispositivo: el bridge capa min-h-screen/h-screen a este
+    // valor en modo lienzo, así el hero mide UN viewport (no toda la web).
+    const vh = artboardDims().h;
     const send = () =>
       iframeRef.current?.contentWindow?.postMessage(
-        { type: 'PLIA_SET_CANVAS_MODE', on },
+        { type: 'PLIA_SET_CANVAS_MODE', on, vh },
         '*',
       );
     send();
@@ -783,7 +1230,70 @@ export default function projectPage() {
       clearTimeout(t1);
       clearTimeout(t2);
     };
-  }, [canvasMode, rightPaneMode, previewUrl, previewNonce, previewStatus]);
+  }, [canvasMode, rightPaneMode, previewUrl, previewNonce, previewStatus, artboardDims]);
+
+  // Cargar overrides guardados de este proyecto (localStorage). Migra el
+  // formato viejo (plano por ruta) al nuevo anidado por breakpoint.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(`pliaPadOverrides:${id}`);
+      const parsed = raw ? JSON.parse(raw) : {};
+      const hasBp = ['desktop', 'tablet', 'mobile'].some((k) => k in parsed);
+      padOverridesRef.current = hasBp
+        ? parsed
+        : Object.keys(parsed).length
+          ? { desktop: parsed }
+          : {};
+    } catch {
+      padOverridesRef.current = {};
+    }
+  }, [id]);
+
+  // Informar al bridge el breakpoint actual (= dispositivo) para que las
+  // ediciones de estilo se guarden en ese bucket (desktop/tablet/mobile).
+  useEffect(() => {
+    const post = () =>
+      iframeRef.current?.contentWindow?.postMessage(
+        { type: 'PLIA_SET_BREAKPOINT', bp: viewport },
+        '*',
+      );
+    post();
+    const t1 = setTimeout(post, 900);
+    return () => clearTimeout(t1);
+  }, [viewport, previewUrl, previewNonce, previewStatus]);
+
+  // Informar al bridge el zoom del lienzo → contra-escala los marcadores de
+  // padding para que mantengan tamaño visual constante (como Kittl/Framer).
+  useEffect(() => {
+    iframeRef.current?.contentWindow?.postMessage(
+      { type: 'PLIA_SET_ZOOM', zoom: canvasZoom || 1 },
+      '*',
+    );
+  }, [canvasZoom]);
+
+  // Re-aplicar los overrides de padding cada vez que (re)carga el preview.
+  // El bridge reintenta internamente porque React monta el árbol async.
+  useEffect(() => {
+    const post = () => {
+      const w = iframeRef.current?.contentWindow;
+      if (!w) return;
+      w.postMessage(
+        { type: 'PLIA_APPLY_OVERRIDES', overrides: padOverridesRef.current },
+        '*',
+      );
+      w.postMessage(
+        { type: 'PLIA_SET_ZOOM', zoom: canvasTransformRef.current.zoom || 1 },
+        '*',
+      );
+    };
+    post();
+    const t1 = setTimeout(post, 900);
+    const t2 = setTimeout(post, 2600);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, [previewUrl, previewNonce, previewStatus, id]);
 
   // Cuando el servidor pasa a 'running' (recien listo), recargamos el iframe
   // UNA vez. Sin esto, si el iframe cargo la URL antes de que Vite estuviera
@@ -1171,7 +1681,7 @@ export default function projectPage() {
     };
     const assetHint = a.hasOwnAssets
       ? 'El cliente va a subir sus propias fotos en el siguiente turno.'
-      : 'No tiene fotos propias — generá imágenes profesionales con IA que encajen con el rubro.';
+      : 'No tiene fotos propias — genera imágenes profesionales con IA que encajen con el rubro.';
 
     const promptParts = [
       `Quiero ${typeLabels[a.projectType] || 'una web'} para mi negocio.`,
@@ -1925,7 +2435,26 @@ export default function projectPage() {
                       canvasTransformRef.current = t;
                       setCanvasZoom((prev) => (prev !== t.zoom ? t.zoom : prev));
                     }}
-                    onBackgroundMouseDown={() => setSelectedItemId(null)}
+                    onBackgroundMouseDown={() => setSelectedItemIds([])}
+                    onMarquee={(rect, additive) => {
+                      // Hit-test: items flotantes cuyo box intersecta el área.
+                      // Criterio del producto: NO se seleccionan ni el artboard
+                      // del sitio ni sus elementos internos (se editan con click
+                      // → edición inline), ni items en plena generación.
+                      const hit = canvasItems
+                        .filter((it) => !it.converting)
+                        .filter((it) => {
+                          const l = it.x;
+                          const t = it.y;
+                          const r = it.x + it.w;
+                          const b = it.y + it.w / it.ar;
+                          return !(r < rect.x || l > rect.x + rect.w || b < rect.y || t > rect.y + rect.h);
+                        })
+                        .map((it) => it.id);
+                      setSelectedItemIds((prev) =>
+                        additive ? Array.from(new Set([...prev, ...hit])) : hit,
+                      );
+                    }}
                   >
                     <div
                       className="bg-white shadow-2xl rounded-2xl overflow-hidden relative"
@@ -1945,10 +2474,12 @@ export default function projectPage() {
                     <CanvasItemsLayer
                       items={canvasItems}
                       onChange={setCanvasItems}
-                      selectedId={selectedItemId}
-                      onSelect={setSelectedItemId}
+                      selectedIds={selectedItemIds}
+                      onSelect={setSelectedItemIds}
                       transformRef={canvasTransformRef}
                       zoom={canvasZoom}
+                      artboardWidth={dims.w}
+                      artboardHeight={fullH}
                       iframeRef={iframeRef}
                       apiBase={apiBase}
                       authToken={typeof window !== 'undefined' ? localStorage.getItem('access_token') || '' : ''}
@@ -2051,7 +2582,88 @@ export default function projectPage() {
                   <Layout className="h-3.5 w-3.5 text-indigo-500" />
                   {canvasMode ? 'Lienzo ON' : 'Lienzo'}
                 </button>
+                <button
+                  onClick={() => {
+                    if (!showLayers) setEditMode(true); // para que la selección + inspector funcionen
+                    setShowLayers((v) => !v);
+                  }}
+                  title="Panel de capas (árbol del sitio)"
+                  className={cn(
+                    'px-3 py-2 rounded-xl shadow-md text-xs font-bold flex items-center gap-1.5 transition-all border',
+                    showLayers
+                      ? 'bg-violet-600 text-white border-violet-600'
+                      : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50',
+                  )}
+                >
+                  <Layers className="h-3.5 w-3.5" />
+                  Capas
+                </button>
+                <button
+                  onClick={() => { setShowLayers(false); setShowSections((v) => !v); }}
+                  title="Agregar una sección nueva a la página"
+                  className={cn(
+                    'px-3 py-2 rounded-xl shadow-md text-xs font-bold flex items-center gap-1.5 transition-all border',
+                    showSections
+                      ? 'bg-violet-600 text-white border-violet-600'
+                      : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50',
+                  )}
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Sección
+                </button>
+                <button
+                  onClick={() => {
+                    if (showTheme) {
+                      setShowTheme(false);
+                    } else {
+                      setShowLayers(false);
+                      setShowSections(false);
+                      openTheme();
+                    }
+                  }}
+                  title="Tema global: colores de todo el sitio"
+                  className={cn(
+                    'px-3 py-2 rounded-xl shadow-md text-xs font-bold flex items-center gap-1.5 transition-all border',
+                    showTheme
+                      ? 'bg-violet-600 text-white border-violet-600'
+                      : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50',
+                  )}
+                >
+                  <Palette className="h-3.5 w-3.5" />
+                  Tema
+                </button>
               </div>
+            )}
+
+            {showLayers && previewUrl && rightPaneMode !== 'code' && (
+              <LayersPanel
+                tree={layerTree}
+                selectedPath={selectedEl?.path}
+                onSelect={selectElementByPath}
+                onClose={() => setShowLayers(false)}
+                onRefresh={requestLayerTree}
+              />
+            )}
+
+            {showSections && previewUrl && rightPaneMode !== 'code' && (
+              <SectionPalette
+                onInsert={insertSection}
+                onClose={() => setShowSections(false)}
+                busy={insertingSection}
+              />
+            )}
+
+            {showTheme && previewUrl && rightPaneMode !== 'code' && (
+              <ThemePanel
+                tokens={themeTokens}
+                fontId={themeFontId}
+                loading={themeLoading}
+                busy={themeBusy}
+                onChange={setThemeToken}
+                onPreset={applyThemePreset}
+                onFont={applyThemeFont}
+                onClose={() => setShowTheme(false)}
+              />
             )}
 
             {/* (El dock de assets fue reemplazado por los items flotantes
@@ -2083,7 +2695,34 @@ export default function projectPage() {
                     <X className="h-4 w-4" />
                   </button>
                 </div>
-                <div className="p-4 space-y-3">
+
+                {/* Breadcrumb de ancestros (#root → … → elemento). Click en un
+                    padre lo selecciona — "subir al padre" estilo Framer. */}
+                {Array.isArray(selectedEl.ancestors) && selectedEl.ancestors.length > 0 && (
+                  <div className="px-2.5 py-1.5 border-b border-slate-100 bg-slate-50/70 flex items-center overflow-x-auto scrollbar-none">
+                    {selectedEl.ancestors.map((a: any, i: number) => {
+                      const isLast = i === selectedEl.ancestors.length - 1;
+                      return (
+                        <button
+                          key={a.path}
+                          onClick={() => !isLast && selectElementByPath(a.path)}
+                          disabled={isLast}
+                          title={isLast ? 'Elemento actual' : `Seleccionar ${a.label}`}
+                          className={cn(
+                            'flex items-center shrink-0 text-[10px] font-medium whitespace-nowrap rounded px-1 py-0.5',
+                            isLast
+                              ? 'text-violet-700 font-bold'
+                              : 'text-slate-400 hover:text-violet-600 hover:bg-violet-50',
+                          )}
+                        >
+                          {i > 0 && <ChevronRight className="h-3 w-3 text-slate-300" />}
+                          {a.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                <div className="p-4 space-y-3 max-h-[72vh] overflow-y-auto">
                   {selectedEl.isImage ? (
                     <>
                       {selectedEl.src && (
@@ -2095,7 +2734,7 @@ export default function projectPage() {
                       >
                         <Wand2 className="h-4 w-4" /> Reemplazar imagen
                       </button>
-                      <p className="text-[10px] text-slate-400 text-center">Elegí o generá una en el Estudio Creativo.</p>
+                      <p className="text-[10px] text-slate-400 text-center">Elige o genera una en el Estudio Creativo.</p>
                     </>
                   ) : (
                     <>
@@ -2116,6 +2755,62 @@ export default function projectPage() {
                         </button>
                       )}
                     </>
+                  )}
+
+                  {/* Inspector numérico de propiedades (tamaño, padding,
+                      margen, tipografía, apariencia) estilo Framer/Figma. */}
+                  <div className="border-t border-slate-100 pt-3">
+                    <StyleInspector el={selectedEl} onApply={applyElementStyle} />
+                  </div>
+
+                  {/* Posición del bloque en la página: subir/bajar/duplicar.
+                      Aplica a cualquier bloque de nivel superior (hijo de
+                      <main>), no solo a las secciones insertadas. */}
+                  {selectedEl.block && selectedEl.block.index >= 0 && (
+                    <div className="mt-1 pt-3 border-t border-slate-100">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
+                        Posición en la página
+                      </p>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          disabled={selectedEl.block.index <= 0}
+                          onClick={() => moveSection(selectedEl.block.index, 'up')}
+                          title="Subir un lugar"
+                          className="flex-1 px-2 py-2 rounded-xl bg-slate-50 text-slate-700 text-[11px] font-bold flex items-center justify-center gap-1 hover:bg-slate-100 border border-slate-200 disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          <ArrowUp className="h-3.5 w-3.5" /> Subir
+                        </button>
+                        <button
+                          disabled={selectedEl.block.index >= selectedEl.block.count - 1}
+                          onClick={() => moveSection(selectedEl.block.index, 'down')}
+                          title="Bajar un lugar"
+                          className="flex-1 px-2 py-2 rounded-xl bg-slate-50 text-slate-700 text-[11px] font-bold flex items-center justify-center gap-1 hover:bg-slate-100 border border-slate-200 disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          <ArrowDown className="h-3.5 w-3.5" /> Bajar
+                        </button>
+                        <button
+                          onClick={() => duplicateSection(selectedEl.block.index)}
+                          title="Duplicar este bloque debajo"
+                          className="flex-1 px-2 py-2 rounded-xl bg-slate-50 text-slate-700 text-[11px] font-bold flex items-center justify-center gap-1 hover:bg-slate-100 border border-slate-200"
+                        >
+                          <Copy className="h-3.5 w-3.5" /> Duplicar
+                        </button>
+                      </div>
+                      <p className="text-[10px] text-slate-400 mt-1.5">
+                        Bloque {selectedEl.block.index + 1} de {selectedEl.block.count}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Eliminar sección: solo para las que insertó la paleta
+                      (las que llevan data-plia-section). */}
+                  {selectedEl.pliaSection && (
+                    <button
+                      onClick={() => deleteSection(selectedEl.pliaSection)}
+                      className="w-full mt-1 px-3 py-2 rounded-xl bg-red-50 text-red-600 text-xs font-bold flex items-center justify-center gap-2 hover:bg-red-100 border border-red-100"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" /> Eliminar esta sección
+                    </button>
                   )}
                 </div>
               </div>

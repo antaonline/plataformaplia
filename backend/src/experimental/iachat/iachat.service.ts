@@ -15,6 +15,19 @@ import { CreditService } from './generation/credit.service';
 import { ChatMsg } from './generation/codegen.types';
 import { WorkspaceService } from './workspace.service';
 import { detectTemplate3DInjection } from './template-3d-injector';
+import {
+  parseOverridesCss,
+  mergeOverride,
+  serializeOverrides,
+} from './style-overrides.util';
+import { moveBlock, duplicateBlock } from './section-blocks.util';
+import {
+  THEME_TOKENS,
+  buildColorPatch,
+  patchRootTokens,
+  readThemeHex,
+} from './theme-colors.util';
+import { FONT_PAIRINGS, applyFontPairing, readCurrentFontId } from './theme-fonts.util';
 
 export type ChatMode = 'build' | 'ask' | 'plan';
 
@@ -165,6 +178,395 @@ export class AiChatService {
       `[visual-edit] chat=${chatId} kind=${edit.kind} reemplazos=${replacements}`,
     );
     return { ok: true, files, replacements };
+  }
+
+  /**
+   * Inserta una sección nueva (snippet JSX) en la página principal del
+   * proyecto, antes del <Footer/> (o antes de </main>). Determinístico, sin
+   * pasar por la IA. Devuelve los archivos para que el front sincronice.
+   */
+  async insertSection(
+    chatId: number,
+    userId: number,
+    body: { html: string },
+  ): Promise<{ ok: boolean; files?: Record<string, string>; reason?: string }> {
+    const chat = await this.prisma.aiChat.findUnique({ where: { id: chatId } });
+    if (!chat || chat.userId !== userId) {
+      throw new NotFoundException('Chat no encontrado');
+    }
+    const raw = (body?.html || '').trim();
+    if (!raw) return { ok: false, reason: 'empty' };
+    // Etiqueta única para poder ELIMINARLA después desde el editor.
+    const sid = 's-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    const snippet = raw.replace(/^<section\b/, `<section data-plia-section="${sid}"`);
+
+    const messages = await this.prisma.aiMessage.findMany({
+      where: { chatId },
+      orderBy: { createdAt: 'asc' },
+    });
+    const lastWithFiles = [...messages]
+      .reverse()
+      .find((m) => m.role === 'assistant' && /\[FILES\]/.test(m.content || ''));
+    if (!lastWithFiles) return { ok: false, reason: 'no-files' };
+    const fm = lastWithFiles.content.match(/\[FILES\]([\s\S]*?)\[\/FILES\]/);
+    let files: Record<string, string> = {};
+    try {
+      files = JSON.parse(fm![1]);
+    } catch {
+      return { ok: false, reason: 'parse' };
+    }
+
+    // Página principal: Index.tsx (o App.tsx como fallback).
+    const key =
+      Object.keys(files).find((k) => /pages\/Index\.tsx$/.test(k)) ||
+      Object.keys(files).find((k) => /(^|\/)App\.tsx$/.test(k));
+    if (!key) return { ok: false, reason: 'no-page' };
+
+    let content = files[key];
+    const footerRe = /([^\S\n]*)(<(?:[A-Za-z]*Footer)\b[^>]*\/>)/;
+    if (footerRe.test(content)) {
+      // Antes del <Footer/>, con su misma indentación.
+      content = content.replace(footerRe, (_m, ind, tag) => `${ind}${snippet}\n${ind}${tag}`);
+    } else if (content.includes('</main>')) {
+      content = content.replace(/([^\S\n]*)<\/main>/, (_m, ind) => `${ind}  ${snippet}\n${ind}</main>`);
+    } else {
+      return { ok: false, reason: 'no-anchor' };
+    }
+    files[key] = content;
+
+    const metaM = lastWithFiles.content.match(/\[META\]([\s\S]*?)\[\/META\]/);
+    const respM = lastWithFiles.content.match(/\[RESPONSE\]([\s\S]*?)\[\/RESPONSE\]/);
+    const newContent =
+      `[META]${metaM ? metaM[1] : '{}'}[/META]` +
+      `[RESPONSE]${respM ? respM[1] : ''}[/RESPONSE]\n\n` +
+      `[FILES]${JSON.stringify(files)}[/FILES]`;
+    await this.prisma.aiMessage.update({
+      where: { id: lastWithFiles.id },
+      data: { content: newContent },
+    });
+    this.logger.log(`[insert-section] chat=${chatId} en ${key} (${sid})`);
+    return { ok: true, files };
+  }
+
+  /**
+   * Elimina una sección insertada por la paleta, identificada por su
+   * `data-plia-section`. Solo borra secciones que agregó la herramienta (las
+   * que llevan ese atributo), nunca las secciones originales del sitio.
+   */
+  async deleteSection(
+    chatId: number,
+    userId: number,
+    body: { sectionId: string },
+  ): Promise<{ ok: boolean; files?: Record<string, string>; reason?: string }> {
+    const chat = await this.prisma.aiChat.findUnique({ where: { id: chatId } });
+    if (!chat || chat.userId !== userId) {
+      throw new NotFoundException('Chat no encontrado');
+    }
+    const sid = (body?.sectionId || '').trim();
+    if (!sid) return { ok: false, reason: 'empty' };
+
+    const messages = await this.prisma.aiMessage.findMany({
+      where: { chatId },
+      orderBy: { createdAt: 'asc' },
+    });
+    const lastWithFiles = [...messages]
+      .reverse()
+      .find((m) => m.role === 'assistant' && /\[FILES\]/.test(m.content || ''));
+    if (!lastWithFiles) return { ok: false, reason: 'no-files' };
+    const fm = lastWithFiles.content.match(/\[FILES\]([\s\S]*?)\[\/FILES\]/);
+    let files: Record<string, string> = {};
+    try {
+      files = JSON.parse(fm![1]);
+    } catch {
+      return { ok: false, reason: 'parse' };
+    }
+
+    const esc = sid.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    // <section data-plia-section="id" …> … </section>  (sin <section> anidados)
+    const re = new RegExp('[^\\S\\n]*<section data-plia-section="' + esc + '"[\\s\\S]*?<\\/section>\\n?');
+    let removed = false;
+    for (const k of Object.keys(files)) {
+      if (typeof files[k] !== 'string' || files[k].indexOf(sid) < 0) continue;
+      if (re.test(files[k])) {
+        files[k] = files[k].replace(re, '');
+        removed = true;
+        break;
+      }
+    }
+    if (!removed) return { ok: false, reason: 'not-found' };
+
+    const metaM = lastWithFiles.content.match(/\[META\]([\s\S]*?)\[\/META\]/);
+    const respM = lastWithFiles.content.match(/\[RESPONSE\]([\s\S]*?)\[\/RESPONSE\]/);
+    const newContent =
+      `[META]${metaM ? metaM[1] : '{}'}[/META]` +
+      `[RESPONSE]${respM ? respM[1] : ''}[/RESPONSE]\n\n` +
+      `[FILES]${JSON.stringify(files)}[/FILES]`;
+    await this.prisma.aiMessage.update({
+      where: { id: lastWithFiles.id },
+      data: { content: newContent },
+    });
+    this.logger.log(`[delete-section] chat=${chatId} (${sid})`);
+    return { ok: true, files };
+  }
+
+  /**
+   * Etiqueta con `data-plia-section` las secciones inline de la página que aún
+   * no la tengan (las que se insertaron antes de existir esta función). Así se
+   * vuelven eliminables desde el inspector. Idempotente: si ya están todas
+   * etiquetadas, no cambia nada.
+   */
+  async normalizeSections(
+    chatId: number,
+    userId: number,
+  ): Promise<{ ok: boolean; files?: Record<string, string>; tagged?: number; reason?: string }> {
+    const chat = await this.prisma.aiChat.findUnique({ where: { id: chatId } });
+    if (!chat || chat.userId !== userId) {
+      throw new NotFoundException('Chat no encontrado');
+    }
+    const messages = await this.prisma.aiMessage.findMany({
+      where: { chatId },
+      orderBy: { createdAt: 'asc' },
+    });
+    const lastWithFiles = [...messages]
+      .reverse()
+      .find((m) => m.role === 'assistant' && /\[FILES\]/.test(m.content || ''));
+    if (!lastWithFiles) return { ok: false, reason: 'no-files' };
+    const fm = lastWithFiles.content.match(/\[FILES\]([\s\S]*?)\[\/FILES\]/);
+    let files: Record<string, string> = {};
+    try {
+      files = JSON.parse(fm![1]);
+    } catch {
+      return { ok: false, reason: 'parse' };
+    }
+    const key =
+      Object.keys(files).find((k) => /pages\/Index\.tsx$/.test(k)) ||
+      Object.keys(files).find((k) => /(^|\/)App\.tsx$/.test(k));
+    if (!key) return { ok: false, reason: 'no-page' };
+
+    let n = 0;
+    // Las <section> inline de la página son las que insertó la paleta (las
+    // secciones originales son componentes <Hero/>, no <section> literales aquí).
+    const next = files[key].replace(/<section(?![^>]*\bdata-plia-section=)/g, () => {
+      n++;
+      return `<section data-plia-section="s-${Date.now().toString(36)}-${n}"`;
+    });
+    if (n === 0) return { ok: true, files, tagged: 0 };
+    files[key] = next;
+
+    const metaM = lastWithFiles.content.match(/\[META\]([\s\S]*?)\[\/META\]/);
+    const respM = lastWithFiles.content.match(/\[RESPONSE\]([\s\S]*?)\[\/RESPONSE\]/);
+    const newContent =
+      `[META]${metaM ? metaM[1] : '{}'}[/META]` +
+      `[RESPONSE]${respM ? respM[1] : ''}[/RESPONSE]\n\n` +
+      `[FILES]${JSON.stringify(files)}[/FILES]`;
+    await this.prisma.aiMessage.update({
+      where: { id: lastWithFiles.id },
+      data: { content: newContent },
+    });
+    this.logger.log(`[normalize-sections] chat=${chatId} etiquetadas=${n}`);
+    return { ok: true, files, tagged: n };
+  }
+
+  // ---- Helpers compartidos para operaciones estructurales sobre la página ----
+
+  /** Carga el último mensaje con [FILES], los parsea y ubica el archivo de
+   *  página (Index.tsx o App.tsx). Lanza si el chat no es del usuario. */
+  private async loadProjectFiles(
+    chatId: number,
+    userId: number,
+  ): Promise<{ msg: any; files: Record<string, string>; key: string } | { error: string }> {
+    const chat = await this.prisma.aiChat.findUnique({ where: { id: chatId } });
+    if (!chat || chat.userId !== userId) throw new NotFoundException('Chat no encontrado');
+    const messages = await this.prisma.aiMessage.findMany({
+      where: { chatId },
+      orderBy: { createdAt: 'asc' },
+    });
+    const msg = [...messages]
+      .reverse()
+      .find((m) => m.role === 'assistant' && /\[FILES\]/.test(m.content || ''));
+    if (!msg) return { error: 'no-files' };
+    const fm = msg.content.match(/\[FILES\]([\s\S]*?)\[\/FILES\]/);
+    let files: Record<string, string> = {};
+    try {
+      files = JSON.parse(fm![1]);
+    } catch {
+      return { error: 'parse' };
+    }
+    const key =
+      Object.keys(files).find((k) => /pages\/Index\.tsx$/.test(k)) ||
+      Object.keys(files).find((k) => /(^|\/)App\.tsx$/.test(k));
+    if (!key) return { error: 'no-page' };
+    return { msg, files, key };
+  }
+
+  /** Reescribe el mensaje con los archivos nuevos, conservando META/RESPONSE. */
+  private async saveProjectFiles(msg: any, files: Record<string, string>): Promise<void> {
+    const metaM = msg.content.match(/\[META\]([\s\S]*?)\[\/META\]/);
+    const respM = msg.content.match(/\[RESPONSE\]([\s\S]*?)\[\/RESPONSE\]/);
+    const newContent =
+      `[META]${metaM ? metaM[1] : '{}'}[/META]` +
+      `[RESPONSE]${respM ? respM[1] : ''}[/RESPONSE]\n\n` +
+      `[FILES]${JSON.stringify(files)}[/FILES]`;
+    await this.prisma.aiMessage.update({ where: { id: msg.id }, data: { content: newContent } });
+  }
+
+  /** Reordena un bloque de la página (hijo directo de <main>) una posición
+   *  hacia arriba o abajo. `index` lo reporta el bridge. Lógica pura (y
+   *  testeada) en section-blocks.util. */
+  async moveSection(
+    chatId: number,
+    userId: number,
+    body: { index: number; dir: 'up' | 'down' },
+  ): Promise<{ ok: boolean; files?: Record<string, string>; reason?: string }> {
+    const loaded = await this.loadProjectFiles(chatId, userId);
+    if ('error' in loaded) return { ok: false, reason: loaded.error };
+    const { msg, files, key } = loaded;
+    const r = moveBlock(files[key], Number(body?.index), body?.dir === 'up' ? 'up' : 'down');
+    if (!r.ok) return { ok: false, reason: r.reason };
+    files[key] = r.src;
+    await this.saveProjectFiles(msg, files);
+    this.logger.log(`[move-section] chat=${chatId} index=${body?.index} dir=${body?.dir}`);
+    return { ok: true, files };
+  }
+
+  /** Duplica un bloque de la página (hijo directo de <main>), debajo del
+   *  original. Si es una <section> con data-plia-section, la copia recibe un id
+   *  nuevo para poder eliminarla por separado. */
+  async duplicateSection(
+    chatId: number,
+    userId: number,
+    body: { index: number },
+  ): Promise<{ ok: boolean; files?: Record<string, string>; reason?: string }> {
+    const loaded = await this.loadProjectFiles(chatId, userId);
+    if ('error' in loaded) return { ok: false, reason: loaded.error };
+    const { msg, files, key } = loaded;
+    const freshId = 's-' + Date.now().toString(36) + '-d' + Math.random().toString(36).slice(2, 5);
+    const r = duplicateBlock(files[key], Number(body?.index), freshId);
+    if (!r.ok) return { ok: false, reason: r.reason };
+    files[key] = r.src;
+    await this.saveProjectFiles(msg, files);
+    this.logger.log(`[duplicate-section] chat=${chatId} index=${body?.index}`);
+    return { ok: true, files };
+  }
+
+  /** Ubica el CSS de tema (el del bloque :root con --primary). Prefiere
+   *  globals.css (el que importa main.tsx). */
+  private findThemeCssKeys(files: Record<string, string>): string[] {
+    const keys = Object.keys(files).filter(
+      (k) =>
+        /\.css$/.test(k) &&
+        typeof files[k] === 'string' &&
+        /:root/.test(files[k]) &&
+        /--primary\s*:/.test(files[k]),
+    );
+    // globals.css primero (es el importado), para getTheme.
+    return keys.sort((a, b) => (/(globals)\.css$/.test(b) ? 1 : 0) - (/(globals)\.css$/.test(a) ? 1 : 0));
+  }
+
+  /** Devuelve los colores (hex) y el par tipográfico actual para el panel de tema. */
+  async getTheme(
+    chatId: number,
+    userId: number,
+  ): Promise<{ ok: boolean; tokens?: Record<string, string>; fontId?: string | null; reason?: string }> {
+    const loaded = await this.loadProjectFiles(chatId, userId);
+    if ('error' in loaded) return { ok: false, reason: loaded.error };
+    const keys = this.findThemeCssKeys(loaded.files);
+    if (keys.length === 0) return { ok: false, reason: 'no-theme-css' };
+    return {
+      ok: true,
+      tokens: readThemeHex(loaded.files[keys[0]]),
+      fontId: readCurrentFontId(loaded.files[keys[0]]),
+    };
+  }
+
+  /**
+   * Recolorea el sitio completo cambiando los tokens del :root en el CSS de
+   * tema (globals.css). Recibe colores en hex; convierte a canales HSL y, para
+   * los tokens de marca, ajusta el `-foreground` para mantener el contraste.
+   */
+  async setTheme(
+    chatId: number,
+    userId: number,
+    body: { tokens: Record<string, string> },
+  ): Promise<{ ok: boolean; files?: Record<string, string>; reason?: string }> {
+    const loaded = await this.loadProjectFiles(chatId, userId);
+    if ('error' in loaded) return { ok: false, reason: loaded.error };
+    const { msg, files } = loaded;
+    const allowed = THEME_TOKENS as readonly string[];
+    const clean: Record<string, string> = {};
+    for (const [k, v] of Object.entries(body?.tokens || {})) {
+      const val = typeof v === 'string' ? v.trim() : '';
+      if (allowed.includes(k) && /^#?[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/.test(val)) {
+        clean[k] = val.startsWith('#') ? val : '#' + val;
+      }
+    }
+    if (Object.keys(clean).length === 0) return { ok: false, reason: 'empty' };
+    const keys = this.findThemeCssKeys(files);
+    if (keys.length === 0) return { ok: false, reason: 'no-theme-css' };
+    const patch = buildColorPatch(clean);
+    for (const k of keys) files[k] = patchRootTokens(files[k], patch);
+    await this.saveProjectFiles(msg, files);
+    this.logger.log(`[set-theme] chat=${chatId} tokens=${Object.keys(clean).join(',')}`);
+    return { ok: true, files };
+  }
+
+  /**
+   * Aplica un par tipográfico (encabezado + cuerpo) al sitio completo,
+   * inyectando el @import de Google Fonts y las reglas base en globals.css.
+   */
+  async setThemeFont(
+    chatId: number,
+    userId: number,
+    body: { pairingId: string },
+  ): Promise<{ ok: boolean; files?: Record<string, string>; reason?: string }> {
+    const loaded = await this.loadProjectFiles(chatId, userId);
+    if ('error' in loaded) return { ok: false, reason: loaded.error };
+    const { msg, files } = loaded;
+    const pairing = FONT_PAIRINGS.find((p) => p.id === (body?.pairingId || ''));
+    if (!pairing) return { ok: false, reason: 'unknown-pairing' };
+    const keys = this.findThemeCssKeys(files);
+    if (keys.length === 0) return { ok: false, reason: 'no-theme-css' };
+    for (const k of keys) files[k] = applyFontPairing(files[k], pairing);
+    await this.saveProjectFiles(msg, files);
+    this.logger.log(`[set-theme-font] chat=${chatId} pairing=${pairing.id}`);
+    return { ok: true, files };
+  }
+
+  /**
+   * Persiste un override de estilo (padding/tamaño/tipografía/color) del editor
+   * visual en el CÓDIGO del proyecto: escribe/mergea `src/plia-overrides.css`,
+   * que el scaffold importa al final y NO sobreescribe ("copiar una sola vez").
+   * Así los ajustes viajan con la web al exportar/publicar — no solo en el
+   * localStorage del navegador. Indexado por la ruta DOM del elemento.
+   */
+  async applyStyleOverride(
+    chatId: number,
+    userId: number,
+    body: { path: string; style: Record<string, string>; breakpoint?: string },
+  ): Promise<{ ok: boolean }> {
+    const chat = await this.prisma.aiChat.findUnique({ where: { id: chatId } });
+    if (!chat || chat.userId !== userId) {
+      throw new NotFoundException('Chat no encontrado');
+    }
+    if (!body?.path || !body?.style || typeof body.style !== 'object') {
+      return { ok: false };
+    }
+    const dir = join(process.cwd(), 'uploads', 'studio-live', String(chatId), 'src');
+    const file = join(dir, 'plia-overrides.css');
+
+    // Lógica pura (compartida + testeada) en style-overrides.util.
+    let css = '';
+    try {
+      css = await fs.promises.readFile(file, 'utf8');
+    } catch {
+      /* aún no existe */
+    }
+    const map = parseOverridesCss(css);
+    mergeOverride(map, body.breakpoint || 'desktop', body.path, body.style);
+
+    await fs.promises.mkdir(dir, { recursive: true });
+    await fs.promises.writeFile(file, serializeOverrides(map), 'utf8');
+    return { ok: true };
   }
 
   // ============================================================

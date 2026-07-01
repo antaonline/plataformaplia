@@ -23,6 +23,7 @@ import { RenewHostingCron } from './cron/renew-hosting.cron';
 import { PublishProjectsCron } from './cron/publish-projects.cron';
 import { TrialCron } from './cron/trial.cron';
 import { CustomDomainDriftCron } from './cron/custom-domain-drift.cron';
+import { AffiliateReversalCron } from './cron/affiliate-reversal.cron';
 import { MailModule } from './mail/mail.module';
 import { ContactModule } from './contact/contact.module';
 import { HostingModule } from './hosting/hosting.module';
@@ -30,6 +31,7 @@ import { AiChatModule } from './experimental/iachat/iachat.module';
 import { SandboxModule } from './experimental/sandbox/sandbox.module';
 import { PreviewModule } from './experimental/preview/preview.module';
 import { SiteContactModule } from './site-contact/site-contact.module';
+import { AffiliatesModule } from './affiliates/affiliates.module';
 
 import { ThrottlerModule } from '@nestjs/throttler'
 
@@ -64,6 +66,7 @@ import { ThrottlerModule } from '@nestjs/throttler'
     SandboxModule,
     PreviewModule,
     SiteContactModule,
+    AffiliatesModule,
   ],
   controllers: [AppController, OrdersController],
   providers: [
@@ -73,6 +76,7 @@ import { ThrottlerModule } from '@nestjs/throttler'
     PublishProjectsCron,
     CustomDomainDriftCron,
     TrialCron,
+    AffiliateReversalCron,
   ],
 })
 export class AppModule {}

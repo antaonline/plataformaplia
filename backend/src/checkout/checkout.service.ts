@@ -2,6 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { OrdersService } from '../orders/orders.service';
 import { DomainsService } from '../domains/domains.service';
+import { AffiliatesService } from '../affiliates/affiliates.service';
 import { PrepareCheckoutDto } from './dto/prepare-checkout.dto';
 /*import { DomainSelection } from '../prisma/prisma.service';*/
 
@@ -11,6 +12,7 @@ export class CheckoutService {
     private prisma: PrismaService,
     private ordersService: OrdersService,
     private domainsService: DomainsService,
+    private affiliates: AffiliatesService,
   ) {}
 
 
@@ -27,10 +29,14 @@ export class CheckoutService {
       throw new BadRequestException('Plan invalido')
     }
 
+    const attribution = await this.affiliates.resolveAttribution(dto.affiliateCode)
+
     const order = await this.ordersService.createOrder({
       planId: dto.planId,
       email: dto.email,
       userId,
+      affiliateId: attribution?.affiliateId,
+      affiliateCode: attribution?.affiliateCode,
     })
 
     /*let domainSelection: DomainSelection | null = null;*/

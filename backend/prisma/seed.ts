@@ -26,6 +26,7 @@ async function main() {
       hostingYear: true,
       slug: 'landing',
       serviceType: 'WEBSITE_BUILD',
+      affiliateCommission: 20,
     },
     create: {
       name: 'LANDING',
@@ -34,6 +35,7 @@ async function main() {
       hostingYear: true,
       slug: 'landing',
       serviceType: 'WEBSITE_BUILD',
+      affiliateCommission: 20,
     },
   })
 
@@ -46,6 +48,7 @@ async function main() {
       hostingYear: true,
       slug: 'web',
       serviceType: 'WEBSITE_BUILD',
+      affiliateCommission: 40,
     },
     create: {
       name: 'WEB INSTITUCIONAL',
@@ -54,6 +57,7 @@ async function main() {
       hostingYear: true,
       slug: 'web',
       serviceType: 'WEBSITE_BUILD',
+      affiliateCommission: 40,
     },
   })
 

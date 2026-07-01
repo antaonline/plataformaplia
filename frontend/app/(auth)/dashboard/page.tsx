@@ -8,8 +8,11 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { FileDropzone } from '@/components/ui/file-dropzone';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { CustomDomainWizard } from '@/components/dashboard/CustomDomainWizard';
+import { AffiliatesTab } from '@/components/dashboard/AffiliatesTab';
+import { AdminAffiliatesPanel } from '@/components/dashboard/AdminAffiliatesPanel';
 import {
   Dialog,
   DialogContent,
@@ -21,6 +24,9 @@ import {
 } from '@/components/ui/dialog';
 import {
   User as UserIcon,
+  Users,
+  LayoutDashboard,
+  Wrench,
   Settings,
   CreditCard,
   LifeBuoy,
@@ -36,6 +42,8 @@ import {
   CheckCircle2,
   AlertCircle,
   Trash2,
+  Menu,
+  X,
 } from 'lucide-react';
 
 import Image from "next/image";
@@ -657,7 +665,9 @@ export default function DashboardPage() {
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [tab, setTab] = useState<'projects' | 'billing' | 'account'>('projects');
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [tab, setTab] = useState<'projects' | 'billing' | 'account' | 'affiliates'>('projects');
+  const [affiliateUnread, setAffiliateUnread] = useState(0);
   const [renewals, setRenewals] = useState<any[]>([]);
   const [profileBusy, setProfileBusy] = useState(false);
   const [profileSuccess, setProfileSuccess] = useState(false);
@@ -825,6 +835,16 @@ export default function DashboardPage() {
 
   useEffect(() => {
     loadData();
+  }, []);
+
+  // Bolita de notificaciones del menu Afiliados: cuenta de comisiones no leidas.
+  useEffect(() => {
+    const token = localStorage.getItem('access_token');
+    if (!token) return;
+    fetch(`${apiBase}/affiliates/me`, { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (d) setAffiliateUnread(d.unreadCount || 0); })
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -1634,7 +1654,7 @@ export default function DashboardPage() {
   
   return (
     <div className="min-h-screen bg-[#f7f7f5]">
-      <div className="grid lg:grid-cols-[260px_1fr]">
+      <div className="grid grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)]">
         <aside className="hidden lg:flex flex-col border-r border-border bg-white/80 backdrop-blur-sm min-h-screen px-4 py-6">
           <div className="flex items-center gap-2 mb-2">
             <div className="w-9 h-9 flex items-center justify-center">
@@ -1655,37 +1675,55 @@ export default function DashboardPage() {
             <button 
               onClick={() => setTab('projects')}
               className={cn(
-                "w-full text-left px-3 py-2 rounded-lg transition-colors",
+                "w-full text-left px-3 py-2 rounded-lg transition-colors flex items-center gap-2.5",
                 tab === 'projects' ? "bg-muted text-foreground font-medium" : "hover:bg-muted text-muted-foreground"
               )}
             >
+              <LayoutDashboard className="w-4 h-4 shrink-0" />
               Dashboard
             </button>
             <button 
               onClick={() => setTab('billing')}
               className={cn(
-                "w-full text-left px-3 py-2 rounded-lg transition-colors",
+                "w-full text-left px-3 py-2 rounded-lg transition-colors flex items-center gap-2.5",
                 tab === 'billing' ? "bg-muted text-foreground font-medium" : "hover:bg-muted text-muted-foreground"
               )}
             >
+              <CreditCard className="w-4 h-4 shrink-0" />
               Facturacion
             </button>
-            <button 
+            <button
               onClick={() => setTab('account')}
               className={cn(
-                "w-full text-left px-3 py-2 rounded-lg transition-colors",
+                "w-full text-left px-3 py-2 rounded-lg transition-colors flex items-center gap-2.5",
                 tab === 'account' ? "bg-muted text-foreground font-medium" : "hover:bg-muted text-muted-foreground"
               )}
             >
+              <UserIcon className="w-4 h-4 shrink-0" />
               Mi cuenta
+            </button>
+            <button
+              onClick={() => setTab('affiliates')}
+              className={cn(
+                "w-full text-left px-3 py-2 rounded-lg transition-colors flex items-center justify-between gap-2",
+                tab === 'affiliates' ? "bg-muted text-foreground font-medium" : "hover:bg-muted text-muted-foreground"
+              )}
+            >
+              <span className="flex items-center gap-2.5"><Users className="w-4 h-4 shrink-0" />Afiliados</span>
+              {affiliateUnread > 0 && (
+                <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-cta text-cta-foreground text-xs font-bold">
+                  {affiliateUnread}
+                </span>
+              )}
             </button>
             {/* SEGURIDAD: acceso a CyberPanel SOLO para admin. Los clientes
                 gestionan todo desde el dashboard de Plia (modelo SaaS). */}
             {isAdmin && (
               <button
-                className="w-full text-left px-3 py-2 rounded-lg hover:bg-muted text-muted-foreground"
+                className="w-full text-left px-3 py-2 rounded-lg hover:bg-muted text-muted-foreground flex items-center gap-2.5"
                 onClick={() => setAdvancedOpen(true)}
               >
+                <Wrench className="w-4 h-4 shrink-0" />
                 Configuracion avanzada
               </button>
             )}
@@ -1697,8 +1735,8 @@ export default function DashboardPage() {
           </div>
         </aside>
 
-        <main className="min-h-screen">
-          <header className="bg-white/80 border-b border-border px-6 py-4 flex items-center justify-between">
+        <main className="min-h-screen min-w-0 overflow-x-hidden">
+          <header className="relative bg-white/80 border-b border-border px-6 py-4 flex items-center justify-between">
   <div>
     <h1 className="text-xl font-semibold text-foreground">Dashboard</h1>
     <p className="text-sm text-muted-foreground">
@@ -1707,7 +1745,7 @@ export default function DashboardPage() {
         : 'Seguimiento en tiempo real de tu web.'}
     </p>
   </div>
-  <div className="hidden md:flex items-center gap-3">
+  <div className="hidden lg:flex items-center gap-3">
     <Button variant="outline" asChild>
       <Link href="/contacto">Soporte</Link>
     </Button>
@@ -1745,6 +1783,61 @@ export default function DashboardPage() {
         </div>
       )}
     </div>
+  </div>
+
+  {/* Menu movil/tablet: pestañas + cuenta (el sidebar esta oculto debajo de lg) */}
+  <div className="lg:hidden">
+    <button
+      type="button"
+      aria-label="Abrir menu"
+      className="p-2 rounded-lg border border-border bg-white"
+      onClick={() => setMobileNavOpen((o) => !o)}
+    >
+      {mobileNavOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+    </button>
+    {mobileNavOpen && (
+      <div className="absolute right-4 top-full mt-1 w-60 rounded-lg border border-border bg-white shadow-lg z-20 text-sm overflow-hidden">
+        <button onClick={() => { setTab('projects'); setMobileNavOpen(false); }} className="flex w-full items-center gap-2.5 px-3 py-2.5 hover:bg-muted">
+          <LayoutDashboard className="w-4 h-4" /> Dashboard
+        </button>
+        <button onClick={() => { setTab('billing'); setMobileNavOpen(false); }} className="flex w-full items-center gap-2.5 px-3 py-2.5 hover:bg-muted">
+          <CreditCard className="w-4 h-4" /> Facturacion
+        </button>
+        <button onClick={() => { setTab('account'); setMobileNavOpen(false); }} className="flex w-full items-center gap-2.5 px-3 py-2.5 hover:bg-muted">
+          <UserIcon className="w-4 h-4" /> Mi cuenta
+        </button>
+        <button onClick={() => { setTab('affiliates'); setMobileNavOpen(false); }} className="flex w-full items-center justify-between gap-2.5 px-3 py-2.5 hover:bg-muted">
+          <span className="flex items-center gap-2.5"><Users className="w-4 h-4" /> Afiliados</span>
+          {affiliateUnread > 0 && (
+            <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-cta text-cta-foreground text-xs font-bold">{affiliateUnread}</span>
+          )}
+        </button>
+        {isAdmin && (
+          <button onClick={() => { setAdvancedOpen(true); setMobileNavOpen(false); }} className="flex w-full items-center gap-2.5 px-3 py-2.5 hover:bg-muted">
+            <Wrench className="w-4 h-4" /> Configuracion avanzada
+          </button>
+        )}
+        <div className="border-t border-border" />
+        <Link href="/dashboard/profile" className="flex items-center gap-2.5 px-3 py-2.5 hover:bg-muted" onClick={() => setMobileNavOpen(false)}>
+          <UserIcon className="w-4 h-4" /> Perfil
+        </Link>
+        <Link href="/dashboard/plan" className="flex items-center gap-2.5 px-3 py-2.5 hover:bg-muted" onClick={() => setMobileNavOpen(false)}>
+          <CreditCard className="w-4 h-4" /> Mi plan
+        </Link>
+        <Link href="/dashboard/settings" className="flex items-center gap-2.5 px-3 py-2.5 hover:bg-muted" onClick={() => setMobileNavOpen(false)}>
+          <Settings className="w-4 h-4" /> Configuracion
+        </Link>
+        <Link href="/planes" className="flex items-center gap-2.5 px-3 py-2.5 hover:bg-muted" onClick={() => setMobileNavOpen(false)}>
+          <CreditCard className="w-4 h-4" /> Ver planes
+        </Link>
+        <Link href="/contacto" className="flex items-center gap-2.5 px-3 py-2.5 hover:bg-muted" onClick={() => setMobileNavOpen(false)}>
+          <LifeBuoy className="w-4 h-4" /> Soporte
+        </Link>
+        <button onClick={handleLogout} className="flex w-full items-center gap-2.5 px-3 py-2.5 hover:bg-muted text-left">
+          <LogOut className="w-4 h-4" /> Cerrar sesion
+        </button>
+      </div>
+    )}
   </div>
 </header>
 
@@ -1801,6 +1894,11 @@ export default function DashboardPage() {
                 </div>
               );
             })()}
+            {tab === 'affiliates' && (
+              isAdmin
+                ? <AdminAffiliatesPanel />
+                : <AffiliatesTab onRead={() => setAffiliateUnread(0)} />
+            )}
             {tab === 'account' && (
               <div className="grid gap-6 md:grid-cols-[1fr_0.7fr]">
                 <Card className="rounded-2xl border-border/60 shadow-sm">
@@ -2147,8 +2245,8 @@ export default function DashboardPage() {
                 </a>
               </div>
             )}
-            {isWaitingInfo && (
-              <div className="grid lg:grid-cols-[2fr_1fr] gap-6">
+            {tab !== 'affiliates' && isWaitingInfo && (
+              <div className="grid grid-cols-1 lg:grid-cols-[2fr_minmax(0,1fr)] gap-6">
                 <Card className="rounded-lg border-border/60">
                   <CardHeader>
                     {isAdmin && (
@@ -2845,37 +2943,23 @@ export default function DashboardPage() {
                         {formData.hasLogo === 'si' && (
                           <div>
                             <label className="text-sm font-medium">Sube tu logo</label>
-                            <p className="mt-1 text-xs text-muted-foreground">
+                            <p className="mt-1 mb-2 text-xs text-muted-foreground">
                               Formato recomendado: <span className="font-semibold">.png sin fondo</span> (transparente). Así podemos aplicarlo limpio sobre cualquier color de fondo.
                             </p>
-                            <Input
-                              type="file"
+                            <FileDropzone
+                              kind="image"
                               accept="image/*"
-                              className="mt-2"
-                              onChange={(e) => {
-                                const file = e.target.files?.[0] ?? null;
+                              title="Arrastra tu logo o haz clic para subirlo"
+                              hint="PNG, JPG o SVG. Idealmente PNG sin fondo."
+                              previewUrl={logoPreview || null}
+                              fileName={!logoPreview && logoFile ? logoFile.name : null}
+                              onFile={(file) => {
                                 setLogoFile(file);
                                 if (!file) {
                                   setFormData({ ...formData, logoUrl: '' });
                                 }
                               }}
                             />
-                            {logoPreview && (
-                              <div className="mt-3 flex items-center gap-3">
-                                <img
-                                  src={logoPreview}
-                                  alt="Preview logo"
-                                  className="h-12 w-12 rounded-md border border-border object-contain bg-white"
-                                />
-                                <button
-                                  type="button"
-                                  className="text-xs text-muted-foreground underline"
-                                  onClick={() => setLogoFile(null)}
-                                >
-                                  Quitar logo
-                                </button>
-                              </div>
-                            )}
                           </div>
                         )}
                       </div>
@@ -2896,30 +2980,25 @@ export default function DashboardPage() {
                                 <div key={field.key} className="space-y-2">
                                   <label className="text-sm font-medium">{field.label}</label>
                                   {field.key === 'catalogPdfUrl' ? (
-                                    <div className="space-y-3 rounded-2xl border border-dashed border-border bg-muted/20 p-4">
-                                      <Input
-                                        type="file"
-                                        accept="application/pdf"
-                                        onChange={(e) => {
-                                          const file = e.target.files?.[0] ?? null;
-                                          if (file && file.size > 5 * 1024 * 1024) {
-                                            setFormError('El PDF del catalogo no puede pesar mas de 5MB.');
-                                            setCatalogPdfFile(null);
-                                            return;
-                                          }
-                                          setFormError(null);
-                                          setCatalogPdfFile(file);
-                                        }}
-                                      />
-                                      <p className="text-xs text-muted-foreground">
-                                        Sube un PDF de hasta 5MB con tu menu, catalogo o lista de productos.
-                                      </p>
-                                      {(catalogPdfFile || formData.smartSectionContent.catalogPdfUrl) && (
-                                        <div className="rounded-xl border border-border bg-white px-3 py-2 text-sm text-muted-foreground">
-                                          {catalogPdfFile?.name || 'Ya existe un PDF cargado para este catalogo.'}
-                                        </div>
-                                      )}
-                                    </div>
+                                    <FileDropzone
+                                      kind="pdf"
+                                      accept="application/pdf"
+                                      title="Arrastra tu PDF aquí o haz clic para subirlo"
+                                      hint="Menú, catálogo o lista de productos. PDF de hasta 5MB. Tomaremos sus productos y precios reales."
+                                      fileName={
+                                        catalogPdfFile?.name ||
+                                        (formData.smartSectionContent.catalogPdfUrl ? 'PDF del catálogo ya cargado' : null)
+                                      }
+                                      onFile={(file) => {
+                                        if (file && file.size > 5 * 1024 * 1024) {
+                                          setFormError('El PDF del catalogo no puede pesar mas de 5MB.');
+                                          setCatalogPdfFile(null);
+                                          return;
+                                        }
+                                        setFormError(null);
+                                        setCatalogPdfFile(file);
+                                      }}
+                                    />
                                   ) : field.multiline ? (
                                     <Textarea
                                       value={formData.smartSectionContent[field.key] ?? ''}
@@ -3274,8 +3353,8 @@ export default function DashboardPage() {
               </div>
             )}
 
-            {!isAdmin && !isWaitingInfo && project && (
-              <div className="grid lg:grid-cols-[2fr_1fr] gap-6">
+            {tab !== 'affiliates' && !isAdmin && !isWaitingInfo && project && (
+              <div className="grid grid-cols-1 lg:grid-cols-[2fr_minmax(0,1fr)] gap-6">
                 <div className="space-y-6">
                   {projects.length > 1 && (
                     <Card className="rounded-lg">

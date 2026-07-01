@@ -129,6 +129,12 @@ export default function Header() {
   // El blog usa tema CLARO → header claro sólido con texto/logo oscuro (sino el
   // texto blanco se pierde sobre el fondo claro). Ver clase .bg-blogheader.
   const isBlog = pathname === "/blog" || pathname.startsWith("/blog/");
+  // Páginas con hero CLARO que necesitan el header claro (logo/texto oscuros)
+  // para que el menú sea legible. El blog y la landing de afiliados lo usan.
+  const isLightHeader =
+    isBlog ||
+    pathname === "/gana-dinero-desde-casa" ||
+    pathname.startsWith("/gana-dinero-desde-casa/");
 
   useEffect(() => {
     const handleScroll = () => {
@@ -160,7 +166,7 @@ export default function Header() {
   return (
     <header
       className={`section-container fixed left-0 right-0 top-0 z-50 mt-2 mx-4 rounded-sm transition-all duration-300 md:mx-auto lg:mx-auto ${
-        isBlog
+        isLightHeader
           ? "bg-blogheader py-3 shadow-sm backdrop-blur-xl"
           : isScrolled
             ? "bg-customheader !mt-4 py-3 shadow-sm backdrop-blur-xl"
@@ -174,7 +180,7 @@ export default function Header() {
           <div className="flex items-center justify-start">
             <Link href="/" className="flex items-center gap-2 pr-10">
               <Image
-                src={isBlog ? "/plia-logo-black.svg" : "/plia-logo-white.svg"}
+                src={isLightHeader ? "/plia-logo-black.svg" : "/plia-logo-white.svg"}
                 alt="PLIA"
                 width={120}
                 height={32}
@@ -241,7 +247,7 @@ export default function Header() {
 
           <button
             onClick={() => setIsMobileMenuOpen((prev) => !prev)}
-            className={`p-2 lg:hidden ${isBlog ? "text-foreground" : "text-background"}`}
+            className={`p-2 lg:hidden ${isLightHeader ? "text-foreground" : "text-background"}`}
             aria-label="Abrir menú"
           >
             {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}

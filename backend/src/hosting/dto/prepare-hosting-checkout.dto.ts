@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsEmail, IsIn, IsString } from 'class-validator';
+import { IsEmail, IsIn, IsOptional, IsString } from 'class-validator';
 
 import { HOSTING_TERM_OPTIONS } from '../hosting.catalog';
 
@@ -13,5 +13,10 @@ export class PrepareHostingCheckoutDto {
 
   @IsEmail()
   email: string;
+
+  // Código de afiliado (?ref=) leído de la cookie plia_ref en el front.
+  @IsOptional()
+  @IsString()
+  affiliateCode?: string;
 }
 

@@ -18,6 +18,11 @@ model Order {
   transactionId      String?
   billingCycleMonths Int?
   metadata           String?              @db.LongText
+  // Afiliado al que se atribuye esta orden (capturado en el checkout desde
+  // la cookie plia_ref). affiliateCode guarda el código tal cual por si la
+  // cuenta cambia. Null = venta sin afiliado.
+  affiliateId        Int?
+  affiliateCode      String?
   createdAt          DateTime             @default(now())
   updatedAt          DateTime             @updatedAt
   domainSelection    DomainSelection?
@@ -26,9 +31,12 @@ model Order {
   user               user?                @relation(fields: [userId], references: [id], map: "Order_userId_fkey")
   payment            Payment?
   projects           Project?
+  affiliate          AffiliateAccount?    @relation(fields: [affiliateId], references: [id])
+  commission         AffiliateCommission?
 
   @@index([planId], map: "Order_planId_fkey")
   @@index([userId], map: "Order_userId_fkey")
+  @@index([affiliateId])
   @@map("order")
 }
 
@@ -53,6 +61,9 @@ model plan {
   slug            String?               @unique
   serviceType     PlanServiceType       @default(WEBSITE_BUILD)
   createdAt       DateTime              @default(now())
+  // Comisión fija en soles que se paga al afiliado por cada venta de este
+  // plan. Editable desde el admin. 0 = el plan no genera comisión.
+  affiliateCommission Float             @default(0)
   subscription    HostingSubscription[]
   order           Order[]
   studioLimits    StudioPlanLimits?
@@ -195,6 +206,7 @@ model user {
   passwordSetupTokens PasswordSetupToken[]
   projects            Project[]
   refreshTokens       RefreshToken[]
+  affiliateAccount    AffiliateAccount?
 }
 
 model RefreshToken {
@@ -382,6 +394,109 @@ model AiMessage {
 
   @@index([chatId], map: "aimessage_chatId_fkey")
   @@map("aimessage")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+//  PROGRAMA DE AFILIADOS
+// ─────────────────────────────────────────────────────────────────────────
+
+// Cuenta de afiliado de un usuario. Cualquier usuario logueado (freemium o de
+// pago) puede tenerla. `code` es el identificador del link (plia.pe/?ref=code).
+// El usuario puede guardar datos de Yape Y de banco, pero `payoutMethod` define
+// cuál queda HABILITADO para cobrar (excluyente).
+model AffiliateAccount {
+  id            Int      @id @default(autoincrement())
+  userId        Int      @unique
+  code          String   @unique
+  status        String   @default("ACTIVE") // ACTIVE | SUSPENDED
+
+  // Medio de cobro habilitado: "YAPE" | "BANK" | null (aún no elige)
+  payoutMethod  String?
+  yapeNumber    String?
+  yapeName      String?
+  bankName      String?
+  bankAccount   String?
+  bankCci       String?
+  bankHolder    String?
+  bankDocType   String?  // DNI | RUC | CE
+  bankDocNumber String?
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user           user                  @relation(fields: [userId], references: [id])
+  referrals      AffiliateReferral[]
+  commissions    AffiliateCommission[]
+  payouts        AffiliatePayout[]
+  referredOrders Order[]
+
+  @@map("affiliateaccount")
+}
+
+// Registro de un click/visita atribuida (para estadísticas y dedupe por cookie).
+model AffiliateReferral {
+  id          Int      @id @default(autoincrement())
+  affiliateId Int
+  visitorId   String
+  landingPath String?  @db.Text
+  ipHash      String?
+  userAgent   String?  @db.Text
+  createdAt   DateTime @default(now())
+
+  affiliate   AffiliateAccount @relation(fields: [affiliateId], references: [id])
+
+  @@index([affiliateId])
+  @@index([visitorId])
+  @@map("affiliatereferral")
+}
+
+// Comisión generada por una venta. 1 por orden (orderId @unique → idempotente).
+// status: AVAILABLE (disponible al instante) | PAID (incluida en un retiro
+// pagado) | REVERSED (la orden se reembolsó/canceló). readAt = null → cuenta
+// para la bolita de notificaciones del menú.
+model AffiliateCommission {
+  id          Int       @id @default(autoincrement())
+  affiliateId Int
+  orderId     Int       @unique
+  payoutId    Int?
+  amount      Decimal
+  currency    String    @default("PEN")
+  status      String    @default("AVAILABLE")
+  readAt      DateTime?
+  reversedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  affiliate   AffiliateAccount @relation(fields: [affiliateId], references: [id])
+  order       Order            @relation(fields: [orderId], references: [id])
+  payout      AffiliatePayout? @relation(fields: [payoutId], references: [id])
+
+  @@index([affiliateId])
+  @@index([payoutId])
+  @@map("affiliatecommission")
+}
+
+// Solicitud de retiro del afiliado. El admin paga por Yape/banco y marca PAID.
+// dueBy = requestedAt + 3 días hábiles (SLA mostrado al afiliado).
+model AffiliatePayout {
+  id          Int       @id @default(autoincrement())
+  affiliateId Int
+  amount      Decimal
+  currency    String    @default("PEN")
+  method      String    // YAPE | BANK (snapshot al momento del retiro)
+  destination String?   @db.Text // snapshot de los datos de cobro
+  reference   String?   // nro de operación / constancia del pago
+  status      String    @default("REQUESTED") // REQUESTED | PAID | REJECTED
+  notes       String?   @db.Text
+  requestedAt DateTime  @default(now())
+  dueBy       DateTime?
+  paidAt      DateTime?
+
+  affiliate   AffiliateAccount      @relation(fields: [affiliateId], references: [id])
+  commissions AffiliateCommission[]
+
+  @@index([affiliateId])
+  @@map("affiliatepayout")
 }
 
 enum PlanServiceType {

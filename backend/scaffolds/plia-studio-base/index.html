@@ -79,11 +79,20 @@
         if (window.parent === window) return;
         var last = 0;
         var send = function () {
-          var h = Math.max(
-            document.documentElement.scrollHeight,
-            document.body ? document.body.scrollHeight : 0
-          );
-          if (Math.abs(h - last) > 4) {
+          // Altura del CONTENIDO (body), NO documentElement.scrollHeight: este
+          // último está "pisado" por el alto del iframe (viewport). En modo
+          // lienzo el iframe se estira, así que documentElement.scrollHeight
+          // nunca baja aunque cap-emos el hero → el artboard quedaba gigante.
+          // El body (con su min-height cap-eado a la altura del dispositivo) sí
+          // refleja el contenido real. Tomamos también el borde inferior del
+          // último hijo por si el body trae overflow raro.
+          var b = document.body;
+          var h = b ? b.scrollHeight : document.documentElement.scrollHeight;
+          if (b && b.lastElementChild) {
+            var rect = b.lastElementChild.getBoundingClientRect();
+            h = Math.max(h, Math.ceil(rect.bottom + (window.scrollY || 0)));
+          }
+          if (h && Math.abs(h - last) > 4) {
             last = h;
             try {
               window.parent.postMessage({ type: 'PLIA_DOC_HEIGHT', height: h }, '*');
@@ -127,6 +136,87 @@
         function send(type, payload) {
           try { window.parent.postMessage(Object.assign({ type: type }, payload || {}), '*'); } catch (_) {}
         }
+        // Capa las utilidades de alto-viewport a la altura del dispositivo
+        // mientras el lienzo está activo (el iframe se estira a toda la web, lo
+        // que inflaría `100vh`). Cubre las utilidades nombradas de Tailwind.
+        function applyVhCap(on, vh) {
+          var id = 'plia-vh-cap';
+          var el = document.getElementById(id);
+          if (!on) { if (el) el.parentNode.removeChild(el); return; }
+          if (!el) {
+            el = document.createElement('style');
+            el.id = id;
+            el.setAttribute('data-plia-ui', '1');
+            (document.head || document.documentElement).appendChild(el);
+          }
+          var H = Math.round(vh || 900);
+          // `~=` exige el token EXACTO (separado por espacios), así
+          // `h-[100vh]` no pisa a `min-h-[100vh]` por subcadena.
+          el.textContent =
+            // CLAVE: html/body/#root suelen traer `min-height:100vh` por CSS
+            // (no por clase). Sin esto, el body se infla a la altura del iframe
+            // estirado y el artboard crece sin fin (espacio en blanco enorme).
+            'html,body,#root{min-height:' + H + 'px !important}' +
+            '.min-h-screen,.min-h-dvh,.min-h-svh,.min-h-lvh,' +
+            '[class~="min-h-[100vh]"],[class~="min-h-[100dvh]"],[class~="min-h-[100svh]"],[class~="min-h-[100lvh]"]' +
+            '{min-height:' + H + 'px !important}' +
+            // `height:auto` para que estas alturas FIJAS (h-screen) pasen a ser
+            // un PISO (min-height) y puedan CRECER con el contenido/padding en
+            // el lienzo, en vez de quedar clavadas y "comerse" el contenido.
+            '.h-screen,.h-dvh,.h-svh,.h-lvh,' +
+            '[class~="h-[100vh]"],[class~="h-[100dvh]"],[class~="h-[100svh]"],[class~="h-[100lvh]"]' +
+            '{height:auto !important;min-height:' + H + 'px !important}';
+        }
+
+        // ─── Overrides EN VIVO del editor (media-aware) ───────────────────
+        // Espejo de src/plia-overrides.css: el editor escribe acá los ajustes
+        // (padding/tamaño/tipografía/color) por breakpoint. Al cambiar de
+        // dispositivo el ancho del iframe cambia y las @media muestran el valor
+        // correcto solas — sin estilos inline que se filtren entre vistas.
+        var bpNow = 'desktop';
+        var BP_MAX = { tablet: 1024, mobile: 640 };
+        var liveOv = {}; // { desktop|tablet|mobile: { rutaDOM: {prop:val} } }
+        function camelKebab(p) { return p.replace(/[A-Z]/g, function (m) { return '-' + m.toLowerCase(); }); }
+        function selOf(path) {
+          var parts = path.split('>').map(function (seg) {
+            var a = seg.split(':'); var n = parseInt(a[1], 10);
+            return (!a[0] || isNaN(n)) ? '' : a[0].toLowerCase() + ':nth-child(' + (n + 1) + ')';
+          }).filter(Boolean);
+          return ['#root'].concat(parts).join(' > ');
+        }
+        function ovBlock(bpMap) {
+          var out = '';
+          for (var path in bpMap) {
+            if (!bpMap.hasOwnProperty(path)) continue;
+            var s = bpMap[path], d = '', any = false;
+            for (var p in s) { if (s.hasOwnProperty(p) && s[p] !== '' && s[p] != null) { d += camelKebab(p) + ':' + s[p] + ';'; any = true; } }
+            if (any) out += selOf(path) + '{' + d + '}';
+          }
+          return out;
+        }
+        function renderLiveOverrides() {
+          var el = document.getElementById('plia-ov-live');
+          if (!el) {
+            el = document.createElement('style');
+            el.id = 'plia-ov-live';
+            el.setAttribute('data-plia-ui', '1');
+            (document.head || document.documentElement).appendChild(el);
+          }
+          var css = liveOv.desktop ? ovBlock(liveOv.desktop) : '';
+          if (liveOv.tablet) css += '@media(max-width:' + BP_MAX.tablet + 'px){' + ovBlock(liveOv.tablet) + '}';
+          if (liveOv.mobile) css += '@media(max-width:' + BP_MAX.mobile + 'px){' + ovBlock(liveOv.mobile) + '}';
+          el.textContent = css;
+          if (selected) layoutPadHandles();
+        }
+        function setOv(bp, path, style) {
+          if (bp !== 'tablet' && bp !== 'mobile') bp = 'desktop';
+          var m = liveOv[bp] || (liveOv[bp] = {});
+          var cur = m[path] || (m[path] = {});
+          for (var k in style) { if (style.hasOwnProperty(k)) { if (style[k] === '' || style[k] == null) delete cur[k]; else cur[k] = style[k]; } }
+          if (!Object.keys(cur).length) delete m[path];
+          if (!Object.keys(m).length) delete liveOv[bp];
+          renderLiveOverrides();
+        }
         // Reemplaza el src de una imagen RESPETANDO el layout del código:
         // congela la altura renderizada actual y fuerza object-fit cover,
         // así una imagen con otra proporción ENCAJA en la caja existente
@@ -159,7 +249,19 @@
         function isSelectable(el) {
           if (!el || el === document.body) return false;
           if (el.id === 'root') return false;
+          // Nuestra propia UI (marcadores de padding, resize, etiquetas) NO es
+          // seleccionable: si no, hacer click en una barrita la "selecciona" y
+          // se generan barritas sobre barritas.
+          if (el.closest && el.closest('[data-plia-ui]')) return false;
           return true;
+        }
+        // ¿Es un contenedor de layout? El padding/resize solo se ofrece sobre
+        // estos (section, div con hijos, header…), no sobre texto u hojas.
+        var CONTAINER_TAGS = { SECTION: 1, DIV: 1, HEADER: 1, FOOTER: 1, NAV: 1, MAIN: 1, ARTICLE: 1, ASIDE: 1, FORM: 1, UL: 1, OL: 1 };
+        function isContainer(el) {
+          if (!el || el.tagName === 'IMG' || el.tagName === 'svg') return false;
+          if (el.children && el.children.length > 0) return true;
+          return !!CONTAINER_TAGS[el.tagName];
         }
         function describe(el) {
           var text = '';
@@ -169,14 +271,53 @@
           }
           text = (text || el.textContent || '').trim();
           var rect = el.getBoundingClientRect();
+          var cs = window.getComputedStyle(el);
           return {
             tag: el.tagName.toLowerCase(),
             text: text.slice(0, 500),
             fullText: (el.textContent || '').trim().slice(0, 500),
             classes: el.className && typeof el.className === 'string' ? el.className : '',
             isImage: el.tagName === 'IMG',
+            isContainer: isContainer(el),
             src: el.tagName === 'IMG' ? el.getAttribute('src') : null,
+            path: pathOf(el),
+            // Si el elemento (o un ancestro) es una sección insertada por la
+            // paleta, su id → para ofrecer "Eliminar sección" en el inspector.
+            pliaSection: (function () {
+              var s = el.closest && el.closest('[data-plia-section]');
+              return s ? s.getAttribute('data-plia-section') : null;
+            })(),
+            // Posición del bloque de nivel superior (hijo directo de <main>) que
+            // contiene a este elemento → para subir/bajar/duplicar la sección.
+            // index = -1 si el elemento no cuelga de <main>.
+            block: (function () {
+              var main = document.querySelector('main');
+              if (!main) return { index: -1, count: 0 };
+              var kids = [];
+              for (var c = main.firstElementChild; c; c = c.nextElementSibling) {
+                if (c.closest && c.closest('[data-plia-ui]')) continue;
+                kids.push(c);
+              }
+              var node = el;
+              while (node && node.parentElement !== main) node = node.parentElement;
+              return { index: node ? kids.indexOf(node) : -1, count: kids.length };
+            })(),
+            // Cadena de ancestros (#root → … → el) para el breadcrumb "subir al padre".
+            ancestors: ancestorsOf(el),
             rect: { x: rect.left, y: rect.top, w: rect.width, h: rect.height },
+            // Estilos computados actuales → alimentan el inspector lateral.
+            styles: {
+              paddingTop: cs.paddingTop, paddingRight: cs.paddingRight, paddingBottom: cs.paddingBottom, paddingLeft: cs.paddingLeft,
+              marginTop: cs.marginTop, marginRight: cs.marginRight, marginBottom: cs.marginBottom, marginLeft: cs.marginLeft,
+              width: cs.width, height: cs.height,
+              fontSize: cs.fontSize, fontWeight: cs.fontWeight, lineHeight: cs.lineHeight, textAlign: cs.textAlign,
+              letterSpacing: cs.letterSpacing,
+              color: cs.color, backgroundColor: cs.backgroundColor, backgroundImage: cs.backgroundImage, borderRadius: cs.borderTopLeftRadius,
+              opacity: cs.opacity, boxShadow: cs.boxShadow,
+              borderWidth: cs.borderTopWidth, borderColor: cs.borderTopColor, borderStyle: cs.borderTopStyle,
+              display: cs.display, flexDirection: cs.flexDirection, gap: cs.gap,
+              alignItems: cs.alignItems, justifyContent: cs.justifyContent,
+            },
           };
         }
 
@@ -208,14 +349,58 @@
           if (!e.data) return;
           if (e.data.type === 'PLIA_SET_CANVAS_MODE') {
             canvasMode = !!e.data.on;
+            // En modo lienzo el artboard se estira a la altura COMPLETA de la
+            // web, así que `100vh` (min-h-screen/h-screen) se inflaría a toda
+            // la página. Capamos esas utilidades a la altura del dispositivo
+            // para que el hero mida un viewport, igual que en el preview normal.
+            applyVhCap(canvasMode, e.data.vh);
+            return;
+          }
+          if (e.data.type === 'PLIA_SET_ZOOM') {
+            padZoom = e.data.zoom || 1;
+            layoutPadHandles();
+            return;
+          }
+          if (e.data.type === 'PLIA_SET_BREAKPOINT') {
+            bpNow = e.data.bp || 'desktop';
+            return;
+          }
+          if (e.data.type === 'PLIA_APPLY_OVERRIDES') {
+            // overrides anidado por breakpoint; tolera el formato viejo (plano).
+            var ov = e.data.overrides || {};
+            var hasBp = ('desktop' in ov) || ('tablet' in ov) || ('mobile' in ov);
+            liveOv = hasBp ? ov : (Object.keys(ov).length ? { desktop: ov } : {});
+            var tries = 0;
+            var iv = setInterval(function () {
+              tries++;
+              renderLiveOverrides();
+              if (tries >= 8) clearInterval(iv);
+            }, 350);
+            return;
+          }
+          if (e.data.type === 'PLIA_SET_STYLE_AT' && e.data.path && e.data.style) {
+            // Inspector / undo-redo: escribe en la hoja media-aware (no inline),
+            // así el valor queda atado al breakpoint y no se filtra entre vistas.
+            setOv(e.data.bp || bpNow, e.data.path, e.data.style);
+            return;
+          }
+          if (e.data.type === 'PLIA_SELECT_PATH' && e.data.path) {
+            // Selección desde el breadcrumb / panel de capas.
+            selectByPath(e.data.path);
+            return;
+          }
+          if (e.data.type === 'PLIA_REQUEST_TREE') {
+            send('PLIA_TREE', { tree: buildTree() });
             return;
           }
           if (e.data.type === 'PLIA_SET_TOOL') {
             mode = e.data.tool === 'select' ? 'select' : 'none';
             if (mode === 'none') {
               if (hovered) { hovered.classList.remove('plia-hover'); hovered = null; }
+              hidePadHandles();
             }
           } else if (e.data.type === 'PLIA_EDIT_TEXT' && selected) {
+            hidePadHandles();
             // Hacer editable el elemento seleccionado.
             var before = selected.textContent;
             selected.setAttribute('contenteditable', 'true');
@@ -283,9 +468,340 @@
             selected = el;
             el.classList.add('plia-selected');
             send('PLIA_ELEMENT_SELECTED', describe(el));
+            showPadHandles();
           },
           true
         );
+
+        // ─── PADDING + RESIZE estilo Framer ───────────────────────────────
+        // Solo sobre CONTENEDORES (section/div con hijos…). Cada lado tiene una
+        // "zona" sensible: al pasar el cursor se colorea la franja del padding y
+        // aparece una barrita; arrastrarla cambia el padding de ese lado en vivo
+        // con etiqueta en px. Además, tiradores de resize (E/S/SE) cambian el
+        // ancho/alto del contenedor con badge de dimensiones. Todo se persiste.
+        var padZoom = 1;
+        var ui = null; // { wrap, pad:{top,right,bottom,left:{zone,fill,bar}}, resize:{e,s,se}, tip, badge }
+        var padDrag = null;
+        var resizeDrag = null;
+        var PAD_SIDES = ['top', 'right', 'bottom', 'left'];
+        var ACCENT = '#8b5cf6';
+        var ACCENT_FILL = 'rgba(139,92,246,0.14)';
+
+        function pxOf(el, prop) {
+          var v = parseFloat(window.getComputedStyle(el)[prop]);
+          return isNaN(v) ? 0 : v;
+        }
+        // Ruta estable desde #root (robusta a cambios en otras ramas del DOM).
+        function pathOf(el) {
+          var parts = [];
+          var root = document.getElementById('root') || document.body;
+          while (el && el !== root && el !== document.body) {
+            var p = el.parentNode;
+            if (!p) break;
+            var idx = Array.prototype.indexOf.call(p.children, el);
+            parts.unshift(el.tagName + ':' + idx);
+            el = p;
+          }
+          return parts.join('>');
+        }
+        function elByPath(path) {
+          if (!path) return null;
+          var cur = document.getElementById('root') || document.body;
+          var parts = path.split('>');
+          for (var i = 0; i < parts.length; i++) {
+            var idx = parseInt(parts[i].split(':')[1], 10);
+            if (!cur.children || !cur.children[idx]) return null;
+            cur = cur.children[idx];
+          }
+          return cur;
+        }
+        // ─── Jerarquía: etiquetas legibles, cadena de ancestros y árbol ───────
+        function labelOf(el) {
+          var tag = el.tagName.toLowerCase();
+          if (el.id) return tag + '#' + el.id;
+          if (el.tagName === 'IMG') return 'img';
+          var txt = (el.textContent || '').trim().replace(/\s+/g, ' ');
+          if (txt && el.children.length === 0) return tag + ' "' + txt.slice(0, 20) + (txt.length > 20 ? '…' : '') + '"';
+          var cls = (typeof el.className === 'string' ? el.className : '')
+            .split(/\s+/)
+            .filter(function (c) { return c && c.indexOf(':') < 0 && c.indexOf('[') < 0 && c.length < 18; })[0];
+          if (cls) return tag + '.' + cls;
+          if (txt) return tag + ' "' + txt.slice(0, 16) + '…"';
+          return tag;
+        }
+        function ancestorsOf(el) {
+          var chain = [], cur = el;
+          var root = document.getElementById('root') || document.body;
+          while (cur && cur !== root && cur !== document.body && cur.nodeType === 1) {
+            if (!(cur.closest && cur.closest('[data-plia-ui]'))) {
+              chain.unshift({ path: pathOf(cur), label: labelOf(cur) });
+            }
+            cur = cur.parentElement;
+          }
+          return chain;
+        }
+        function buildTree() {
+          var root = document.getElementById('root') || document.body;
+          var out = [], count = { n: 0 };
+          function walk(el, depth) {
+            for (var i = 0; i < el.children.length; i++) {
+              if (count.n > 500) return;
+              var c = el.children[i];
+              if (c.closest && c.closest('[data-plia-ui]')) continue;
+              count.n++;
+              out.push({ path: pathOf(c), label: labelOf(c), depth: depth, kids: c.children.length });
+              if (depth < 14) walk(c, depth + 1);
+            }
+          }
+          walk(root, 0);
+          return out;
+        }
+        // Selecciona un elemento POR RUTA (desde el breadcrumb / panel de capas).
+        function selectByPath(path) {
+          var el = elByPath(path);
+          if (!el || !isSelectable(el)) return;
+          if (selected) selected.classList.remove('plia-selected');
+          if (hovered) hovered.classList.remove('plia-hover');
+          selected = el;
+          el.classList.add('plia-selected');
+          send('PLIA_ELEMENT_SELECTED', describe(el));
+          showPadHandles();
+        }
+        function mkEl(css) {
+          var d = document.createElement('div');
+          d.setAttribute('data-plia-ui', '1');
+          d.style.cssText = css;
+          return d;
+        }
+        function place(el, l, t, w, h) {
+          el.style.left = l + 'px';
+          el.style.top = t + 'px';
+          el.style.width = Math.max(0, w) + 'px';
+          el.style.height = Math.max(0, h) + 'px';
+        }
+        function placeC(el, x, y, size) {
+          el.style.left = x + 'px';
+          el.style.top = y + 'px';
+          el.style.width = size + 'px';
+          el.style.height = size + 'px';
+          el.style.transform = 'translate(-50%,-50%)';
+        }
+        function ensureUI() {
+          if (ui) return ui;
+          var wrap = mkEl('position:absolute;left:0;top:0;z-index:2147483600;pointer-events:none;');
+          var TIP = 'position:absolute;display:none;background:' + ACCENT + ';color:#fff;' +
+            'font:700 11px/1 ui-sans-serif,system-ui,sans-serif;padding:4px 7px;border-radius:5px;' +
+            'white-space:nowrap;pointer-events:none;box-shadow:0 1px 4px rgba(0,0,0,.3);transform-origin:center;';
+          var pad = {};
+          PAD_SIDES.forEach(function (side) {
+            var vertical = side === 'top' || side === 'bottom';
+            // Franja coloreada del padding (solo visual, aparece al hover/drag).
+            // Lleva una LÍNEA en el borde del CONTENIDO (de qué lado empieza el
+            // padding), para que se lea claro que el espacio se agrega a partir
+            // del objeto y no lo pisa.
+            var edge = side === 'top' ? 'bottom' : side === 'bottom' ? 'top' : side === 'left' ? 'right' : 'left';
+            var fill = mkEl('position:absolute;display:none;background:' + ACCENT_FILL +
+              ';pointer-events:none;border-' + edge + ':2px solid ' + ACCENT + ';box-sizing:border-box;');
+            // Zona sensible (banda fina sobre el borde interno): hover + drag.
+            var zone = mkEl('position:absolute;pointer-events:auto;background:transparent;' +
+              (vertical ? 'cursor:ns-resize;' : 'cursor:ew-resize;'));
+            // Barrita visual (la "—" de Framer), centrada en la zona.
+            var bar = mkEl('position:absolute;left:50%;top:50%;background:' + ACCENT + ';border-radius:99px;' +
+              'box-shadow:0 1px 3px rgba(0,0,0,.35);pointer-events:none;opacity:.5;');
+            zone.appendChild(bar);
+            zone.addEventListener('mouseenter', (function (f, b) {
+              return function () { if (!padDrag && !resizeDrag) { f.style.display = 'block'; b.style.opacity = '1'; } };
+            })(fill, bar));
+            zone.addEventListener('mouseleave', (function (f, b) {
+              return function () { if (!padDrag) { f.style.display = 'none'; b.style.opacity = '.5'; } };
+            })(fill, bar));
+            zone.addEventListener('mousedown', (function (s) {
+              return function (ev) { startPadDrag(ev, s); };
+            })(side));
+            wrap.appendChild(fill);
+            wrap.appendChild(zone);
+            pad[side] = { zone: zone, fill: fill, bar: bar };
+          });
+          var resize = {};
+          ['e', 's', 'se'].forEach(function (hh) {
+            var cur = hh === 'e' ? 'ew-resize' : hh === 's' ? 'ns-resize' : 'nwse-resize';
+            var el = mkEl('position:absolute;pointer-events:auto;background:#fff;border:2px solid ' + ACCENT +
+              ';border-radius:3px;box-shadow:0 1px 3px rgba(0,0,0,.3);cursor:' + cur + ';');
+            el.addEventListener('mousedown', (function (k) {
+              return function (ev) { startResize(ev, k); };
+            })(hh));
+            wrap.appendChild(el);
+            resize[hh] = el;
+          });
+          var tip = mkEl(TIP);
+          var badge = mkEl(TIP);
+          wrap.appendChild(tip);
+          wrap.appendChild(badge);
+          document.body.appendChild(wrap);
+          ui = { wrap: wrap, pad: pad, resize: resize, tip: tip, badge: badge };
+          return ui;
+        }
+        function layoutPadHandles() {
+          if (!ui || !selected) return;
+          var r = selected.getBoundingClientRect();
+          var sx = window.scrollX || 0, sy = window.scrollY || 0;
+          var inv = 1 / (padZoom || 1);
+          var HIT = 14 * inv; // grosor sensible de la zona (px del sitio)
+          var pT = pxOf(selected, 'paddingTop'), pR = pxOf(selected, 'paddingRight'),
+            pB = pxOf(selected, 'paddingBottom'), pL = pxOf(selected, 'paddingLeft');
+          var L = r.left + sx, T = r.top + sy, R = r.right + sx, B = r.bottom + sy;
+          var cx = L + r.width / 2, cy = T + r.height / 2;
+          var eB = B - pB, eR = R - pR; // bordes internos (para las franjas)
+          // La barrita va SIEMPRE en el MEDIO de la franja del padding (no en el
+          // borde): centro = mitad del padding. La zona sensible se centra ahí,
+          // con grosor mínimo (HIT) para poder agarrarla aunque el padding sea 0.
+          var mT = T + pT / 2, mB = B - pB / 2, mL = L + pL / 2, mR = R - pR / 2;
+          var zT = Math.max(pT, HIT), zB = Math.max(pB, HIT), zL = Math.max(pL, HIT), zR = Math.max(pR, HIT);
+          place(ui.pad.top.zone, L, mT - zT / 2, r.width, zT);
+          place(ui.pad.top.fill, L, T, r.width, pT);
+          place(ui.pad.bottom.zone, L, mB - zB / 2, r.width, zB);
+          place(ui.pad.bottom.fill, L, eB, r.width, pB);
+          place(ui.pad.left.zone, mL - zL / 2, T, zL, r.height);
+          place(ui.pad.left.fill, L, T, pL, r.height);
+          place(ui.pad.right.zone, mR - zR / 2, T, zR, r.height);
+          place(ui.pad.right.fill, eR, T, pR, r.height);
+          // Barras contra-escaladas (tamaño visual constante).
+          PAD_SIDES.forEach(function (side) {
+            var vertical = side === 'top' || side === 'bottom';
+            var bar = ui.pad[side].bar;
+            bar.style.width = (vertical ? 30 : 5) * inv + 'px';
+            bar.style.height = (vertical ? 5 : 30) * inv + 'px';
+            bar.style.transform = 'translate(-50%,-50%)';
+          });
+          // Tiradores de resize: E (medio derecho), S (medio inferior), SE (esquina).
+          var hs = 11 * inv;
+          placeC(ui.resize.e, R, cy, hs);
+          placeC(ui.resize.s, cx, B, hs);
+          placeC(ui.resize.se, R, B, hs);
+        }
+        function showPadHandles() {
+          // Padding/resize SOLO sobre contenedores (no texto suelto ni imágenes).
+          if (!selected || !isContainer(selected)) { hidePadHandles(); return; }
+          ensureUI();
+          ui.wrap.style.display = 'block';
+          layoutPadHandles();
+        }
+        function hidePadHandles() {
+          if (ui) ui.wrap.style.display = 'none';
+        }
+        function sendOverride(style) {
+          if (!selected) return;
+          var path = pathOf(selected);
+          // Pasar del inline (en vivo durante el drag) a la hoja media-aware:
+          // limpiar el inline y escribir en liveOv para el breakpoint actual,
+          // así el valor queda atado al dispositivo y no se filtra entre vistas.
+          for (var k in style) { if (style.hasOwnProperty(k)) selected.style[k] = ''; }
+          setOv(bpNow, path, style);
+          // El editor además lo persiste en el código (con el breakpoint).
+          send('PLIA_PADDING_CHANGED', { path: path, padding: style, bp: bpNow });
+        }
+        function placeTip(el, x, y, inv) {
+          el.style.left = x + 'px';
+          el.style.top = y + 'px';
+          el.style.transform = 'translate(-50%,-50%) scale(' + inv + ')';
+        }
+        function startPadDrag(e, side) {
+          e.preventDefault();
+          e.stopPropagation();
+          if (!selected) return;
+          var prop = 'padding' + side.charAt(0).toUpperCase() + side.slice(1);
+          padDrag = { side: side, prop: prop, startX: e.clientX, startY: e.clientY, startVal: pxOf(selected, prop) };
+          ui.pad[side].fill.style.display = 'block';
+          ui.pad[side].bar.style.opacity = '1';
+          ui.tip.style.display = 'block';
+          document.addEventListener('mousemove', onPadMove, true);
+          document.addEventListener('mouseup', onPadUp, true);
+        }
+        function onPadMove(e) {
+          if (!padDrag || !selected) return;
+          e.preventDefault();
+          // El delta de clientX/Y dentro del iframe YA está en px del sitio (el
+          // navegador reporta coords en el espacio CSS del iframe, sin el escalado
+          // del lienzo), así que NO hay que dividir por zoom.
+          var d;
+          if (padDrag.side === 'top') d = e.clientY - padDrag.startY;        // abajo = +
+          else if (padDrag.side === 'bottom') d = padDrag.startY - e.clientY; // arriba = +
+          else if (padDrag.side === 'left') d = e.clientX - padDrag.startX;   // derecha = +
+          else d = padDrag.startX - e.clientX;                                // izquierda = +
+          var val = Math.max(0, Math.round(padDrag.startVal + d));
+          selected.style[padDrag.prop] = val + 'px';
+          layoutPadHandles();
+          // Cuadrito con el valor en px, junto a la barrita (que está en el
+          // medio de la franja), desplazado hacia el borde exterior.
+          var r = selected.getBoundingClientRect();
+          var sx = window.scrollX || 0, sy = window.scrollY || 0, inv = 1 / (padZoom || 1);
+          var cx = r.left + sx + r.width / 2, cy = r.top + sy + r.height / 2, o = 18 * inv;
+          var pos = {
+            top: [cx, r.top + sy + val / 2 - o],
+            bottom: [cx, r.bottom + sy - val / 2 + o],
+            left: [r.left + sx + val / 2 - o, cy],
+            right: [r.right + sx - val / 2 + o, cy],
+          }[padDrag.side];
+          ui.tip.textContent = val + ' px';
+          placeTip(ui.tip, pos[0], pos[1], inv);
+        }
+        function onPadUp() {
+          document.removeEventListener('mousemove', onPadMove, true);
+          document.removeEventListener('mouseup', onPadUp, true);
+          if (padDrag && selected) {
+            sendOverride({
+              paddingTop: Math.round(pxOf(selected, 'paddingTop')) + 'px',
+              paddingRight: Math.round(pxOf(selected, 'paddingRight')) + 'px',
+              paddingBottom: Math.round(pxOf(selected, 'paddingBottom')) + 'px',
+              paddingLeft: Math.round(pxOf(selected, 'paddingLeft')) + 'px',
+            });
+          }
+          if (ui) {
+            ui.tip.style.display = 'none';
+            PAD_SIDES.forEach(function (s) { ui.pad[s].fill.style.display = 'none'; ui.pad[s].bar.style.opacity = '.5'; });
+          }
+          padDrag = null;
+        }
+        // ─── Resize del contenedor (ancho/alto) con badge de dimensiones ───
+        function startResize(e, h) {
+          e.preventDefault();
+          e.stopPropagation();
+          if (!selected) return;
+          var r = selected.getBoundingClientRect();
+          resizeDrag = { h: h, startX: e.clientX, startY: e.clientY, startW: r.width, startH: r.height };
+          ui.badge.style.display = 'block';
+          document.addEventListener('mousemove', onResizeMove, true);
+          document.addEventListener('mouseup', onResizeUp, true);
+        }
+        function onResizeMove(e) {
+          if (!resizeDrag || !selected) return;
+          e.preventDefault();
+          var h = resizeDrag.h;
+          if (h === 'e' || h === 'se')
+            selected.style.width = Math.max(16, Math.round(resizeDrag.startW + (e.clientX - resizeDrag.startX))) + 'px';
+          if (h === 's' || h === 'se')
+            selected.style.height = Math.max(16, Math.round(resizeDrag.startH + (e.clientY - resizeDrag.startY))) + 'px';
+          layoutPadHandles();
+          var r = selected.getBoundingClientRect();
+          var sx = window.scrollX || 0, sy = window.scrollY || 0, inv = 1 / (padZoom || 1);
+          ui.badge.textContent = Math.round(r.width) + ' × ' + Math.round(r.height);
+          placeTip(ui.badge, r.left + sx + r.width / 2, r.bottom + sy + 18 * inv, inv);
+        }
+        function onResizeUp() {
+          document.removeEventListener('mousemove', onResizeMove, true);
+          document.removeEventListener('mouseup', onResizeUp, true);
+          if (resizeDrag && selected) {
+            var st = {}, r = selected.getBoundingClientRect();
+            if (resizeDrag.h === 'e' || resizeDrag.h === 'se') st.width = Math.round(r.width) + 'px';
+            if (resizeDrag.h === 's' || resizeDrag.h === 'se') st.height = Math.round(r.height) + 'px';
+            sendOverride(st);
+          }
+          if (ui) ui.badge.style.display = 'none';
+          resizeDrag = null;
+        }
+        // Los overrides guardados se re-aplican vía la hoja media-aware
+        // (PLIA_APPLY_OVERRIDES → liveOv → renderLiveOverrides).
+        window.addEventListener('resize', layoutPadHandles);
       })();
     </script>
 
