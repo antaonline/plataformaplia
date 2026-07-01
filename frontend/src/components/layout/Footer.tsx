@@ -6,6 +6,7 @@ const footerLinks = {
   producto: [
     { name: "Planes", href: "/planes" },
     { name: "Cómo funciona", href: "/como-funciona" },
+    { name: "Gana dinero desde casa", href: "/gana-dinero-desde-casa" },
     { name: "Sobre PLIA", href: "/sobre-nosotros" },
   ],
   soporte: [

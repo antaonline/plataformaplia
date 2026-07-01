@@ -31,6 +31,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { path: "/tienda-online-peru", priority: 0.95, changeFrequency: "monthly" },
     { path: "/pagina-web-institucional-peru", priority: 0.95, changeFrequency: "monthly" },
     { path: "/pagina-web-economica-peru", priority: 0.9, changeFrequency: "monthly" },
+    { path: "/gana-dinero-desde-casa", priority: 0.9, changeFrequency: "monthly" },
     { path: "/blog", priority: 0.8, changeFrequency: "weekly" },
     { path: "/sobre-nosotros", priority: 0.6, changeFrequency: "monthly" },
     { path: "/contacto", priority: 0.6, changeFrequency: "monthly" },
