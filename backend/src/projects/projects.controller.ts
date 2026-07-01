@@ -31,6 +31,7 @@ export class ProjectsController {
   async onboarding(
     @Param('id', ParseIntPipe) id: number,
     @Body() body: any,
+    @Req() req: any,
   ) {
     return this.projectsService.saveOnboarding(
       id,
@@ -39,6 +40,8 @@ export class ProjectsController {
         data: body.data ?? body,
         completed: body.completed ?? false,
       },
+      req.user.id,
+      req.user?.role === 'ADMIN',
     );
   }
 

@@ -390,7 +390,25 @@ export class PaymentsService {
         : rawAnswer;
     const signature =
       payload?.signature ?? payload?.hash ?? payload?.['kr-hash'] ?? '';
-    if (signature && !this.izipay.validateResponse(rawAnswer, signature)) {
+    // SEGURIDAD: la firma HMAC de Izipay es OBLIGATORIA. Antes la validación
+    // era `if (signature && ...)`, de modo que una petición SIN firma se
+    // aprobaba sin verificar -> cualquiera podía forjar un "pago exitoso"
+    // (POST /payments/izipay/confirm es público). Ahora se exige firma
+    // presente Y válida. Se usan dos mensajes/logs distintos para diagnosticar
+    // al instante si algo legítimo empezara a fallar tras desplegar (típicamente
+    // IZIPAY_HASH_KEY mal configurada en el VPS).
+    if (!signature) {
+      console.error(
+        '[izipay] confirmación RECHAZADA: falta kr-hash (firma ausente). ' +
+          'Si esto ocurre en un pago real, revisa que el frontend envíe kr-hash.',
+      );
+      throw new BadRequestException('Firma ausente');
+    }
+    if (!this.izipay.validateResponse(rawAnswer, signature)) {
+      console.error(
+        '[izipay] confirmación RECHAZADA: kr-hash no coincide (firma inválida). ' +
+          'Si esto ocurre en un pago real, revisa IZIPAY_HASH_KEY en el VPS.',
+      );
       throw new BadRequestException('Firma invalida');
     }
 

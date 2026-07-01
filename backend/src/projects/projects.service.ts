@@ -1,5 +1,5 @@
 import { readOnboarding, onboardingJson } from '../lib/onboarding.util';
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { SaveOnboardingDto } from './dto/save-onboarding.dto';
 import { ProjectStatus } from '@prisma/client';
@@ -568,7 +568,12 @@ p{color:#cbd5e1;font-size:1.05rem;line-height:1.7;margin-bottom:28px}
   }
 
   // ✅ ONBOARDING POR PASOS (CORRECTO)
-  async saveOnboarding(projectId: number, dto: SaveOnboardingDto) {
+  async saveOnboarding(
+    projectId: number,
+    dto: SaveOnboardingDto,
+    userId?: number,
+    isAdmin = false,
+  ) {
     const project = await this.prisma.project.findUnique({
       where: { id: projectId },
       include: {
@@ -579,6 +584,15 @@ p{color:#cbd5e1;font-size:1.05rem;line-height:1.7;margin-bottom:28px}
 
     if (!project) {
       throw new NotFoundException('Project no encontrado.');
+    }
+
+    // SEGURIDAD (IDOR): el onboarding solo lo puede editar el dueño del
+    // proyecto (o un ADMIN). Sin este control, cualquier usuario logueado
+    // podía sobrescribir datos/subdominio de proyectos ajenos cambiando el
+    // :id de la URL. `userId` es opcional para no romper llamadas internas
+    // de confianza, pero el controller SIEMPRE lo envía.
+    if (!isAdmin && userId != null && project.userId !== userId) {
+      throw new ForbiddenException('No puedes editar este proyecto.');
     }
 
     const existingData = readOnboarding(project.onboardingData);

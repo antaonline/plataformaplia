@@ -6,10 +6,15 @@ export async function POST(req: Request) {
   try {
     const body = await req.json()
 
+    // Reenviamos la IP real del cliente para el rate limiting del backend.
+    const xff =
+      req.headers.get('x-forwarded-for') ?? req.headers.get('x-real-ip') ?? ''
+
     const res = await fetch(`${BACKEND_URL}/api/auth/verify-2fa`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        ...(xff ? { 'x-forwarded-for': xff } : {}),
       },
       body: JSON.stringify(body),
     })

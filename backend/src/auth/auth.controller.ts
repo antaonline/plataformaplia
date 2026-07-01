@@ -29,13 +29,13 @@ export class AuthController {
     private readonly email2FAService: Email2FAService,
   ) {}
 
+  // v6: ttl en MILISEGUNDOS. 5 intentos por minuto por IP contra fuerza bruta.
   @Throttle({
     default: {
       limit: 5,
-      ttl: 60,
+      ttl: 60000,
     },
   })
-  
   @Post('login')
   async login(
 
@@ -79,7 +79,8 @@ export class AuthController {
   }
 
   // Registro FREEMIUM sin pago (website_build). Crea cuenta + proyecto en prueba.
-  @Throttle({ default: { limit: 5, ttl: 600 } })
+  // v6: ttl en MILISEGUNDOS. 5 cuentas cada 10 min por IP contra spam masivo.
+  @Throttle({ default: { limit: 5, ttl: 600000 } })
   @Post('register-free')
   async registerFree(
     @Body() body: { email: string; password: string; plan?: 'LANDING' | 'WEB' },

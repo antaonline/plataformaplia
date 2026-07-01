@@ -33,17 +33,23 @@ import { PreviewModule } from './experimental/preview/preview.module';
 import { SiteContactModule } from './site-contact/site-contact.module';
 import { AffiliatesModule } from './affiliates/affiliates.module';
 
-import { ThrottlerModule } from '@nestjs/throttler'
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler'
+import { APP_GUARD } from '@nestjs/core'
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
     }),
+    // NOTA v6: `ttl` está en MILISEGUNDOS (en v4 eran segundos). Antes decía
+    // `ttl: 60` = ventana de 60ms -> inútil. Ahora 60000ms = 1 min.
+    // Límite global generoso (protege de abuso volumétrico sin molestar al
+    // uso normal ni al studio). Los endpoints sensibles (login, registro)
+    // tienen su propio @Throttle más estricto en auth.controller.
     ThrottlerModule.forRoot([
       {
-        ttl: 60,
-        limit: 100, // default suave
+        ttl: 60000,
+        limit: 300,
       },
     ]),
     ScheduleModule.forRoot(),
@@ -77,6 +83,10 @@ import { ThrottlerModule } from '@nestjs/throttler'
     CustomDomainDriftCron,
     TrialCron,
     AffiliateReversalCron,
+    // SEGURIDAD: registra el ThrottlerGuard globalmente. Sin esto, el módulo
+    // Throttler estaba configurado pero NUNCA se aplicaba, y los @Throttle de
+    // login/registro no hacían nada (fuerza bruta / spam sin límite).
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
   ],
 })
 export class AppModule {}

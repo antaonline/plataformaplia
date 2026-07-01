@@ -13,6 +13,15 @@ async function bootstrap() {
   dotenv.config()
 
   const app = await NestFactory.create<NestExpressApplication>(AppModule)
+
+  // Detrás de LiteSpeed/CyberPanel hay 1 proxy inverso. Confiamos 1 hop para
+  // que `req.ip` resuelva la IP REAL del cliente (desde X-Forwarded-For) en
+  // vez de la IP del proxy. Es imprescindible para que el rate limiting por
+  // IP funcione. IMPORTANTE: el puerto del backend debe estar cerrado por
+  // firewall a conexiones externas directas (solo LiteSpeed/localhost), si no
+  // un atacante podría falsificar X-Forwarded-For para evadir el límite.
+  app.set('trust proxy', 1);
+
   const frontendUrl =
     process.env.FRONTEND_URL ||
     process.env.APP_URL ||
