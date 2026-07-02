@@ -15,7 +15,7 @@ export default function Hero() {
           transition={{ duration: 0.6 }}
         >
           <h1 className="text-5xl lg:text-6xl font-black font-heading leading-tight tracking-tight lg:leading-none">
-            Descubre Propiedades de Lujo
+            Descubre Cacadadez de Lujo
           </h1>
           <p className="mt-6 text-lg font-body text-text lg:max-w-md">
             Explora nuestra exclusiva selección de casas y departamentos de lujo en las mejores ubicaciones.
@@ -26,7 +26,7 @@ export default function Hero() {
               'bg-accent text-primary hover:bg-accent/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-accent'
             )}
           >
-            Explorar Propiedades
+            Explorar Cacadadez
             <ArrowRight className="ml-3" />
           </button>
         </motion.div>
@@ -38,7 +38,7 @@ export default function Hero() {
           transition={{ duration: 0.6 }}
         >
           <img
-            src="https://images.pexels.com/photos/36903893/pexels-photo-36903893.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=627&w=1200"
+            src="http://localhost:3002/uploads/media/upload-1781147427396-973718741.png"
             alt="Propiedad de lujo con vista a la ciudad"
             width={800}
             height={600}

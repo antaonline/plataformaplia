@@ -46,7 +46,7 @@ const whatYouNeed = [
 ];
 
 const whatWeHandle = [
-  "Registro del dominio (.com, .pe, etc.)",
+  "Conexión de tu dominio (.com, .pe, etc.) o subdominio gratis",
   "Configuración del servidor y hosting",
   "Diseño visual de la página",
   "Programación y desarrollo",

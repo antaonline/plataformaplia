@@ -11,7 +11,7 @@ const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://plia.pe';
 export const metadata: Metadata = {
   title: 'Tienda Online en Perú — Lista para vender en 48 horas | PLIA',
   description:
-    'Crea tu tienda online en Perú con catálogo, carrito de compras y pagos integrados. Dominio, hosting y soporte incluidos. Lista en 48 horas sin saber de tecnología.',
+    'Crea tu tienda online en Perú con catálogo, carrito de compras y pagos integrados. Hosting, seguridad y soporte incluidos. Lista en 48 horas sin saber de tecnología.',
   keywords: [
     'tienda online Perú',
     'crear tienda online Perú',
@@ -27,13 +27,13 @@ export const metadata: Metadata = {
   openGraph: {
     title: 'Tienda Online en Perú — Lista para vender en 48 horas | PLIA',
     description:
-      'Catálogo, carrito, pagos y dominio incluidos. Tu tienda online en Perú lista en 48 horas.',
+      'Catálogo, carrito, pagos y hosting incluidos. Tu tienda online en Perú lista en 48 horas.',
     url: '/tienda-online-peru',
     type: 'website',
   },
 };
 
-const trust = ['Dominio incluido', 'Hosting veloz', 'Pagos integrados', 'Soporte en español'];
+const trust = ['Hosting incluido', 'Pagos integrados', 'Subdominio gratis', 'Soporte en español'];
 
 const sinTienda = [
   'Pierdes pedidos cuando no estás conectado al WhatsApp',
@@ -57,7 +57,7 @@ const incluye = [
   { icon: Package, t: 'Catálogo de productos', d: 'Sube tus productos con fotos, descripciones y precios. Fácil de gestionar.' },
   { icon: ShoppingCart, t: 'Carrito de compras', d: 'Tus clientes seleccionan y compran en minutos, sin salir de tu tienda.' },
   { icon: CreditCard, t: 'Pagos integrados', d: 'Acepta tarjetas y billeteras digitales directamente en tu tienda.' },
-  { icon: Globe, t: 'Dominio propio', d: 'Tu dirección única (.pe o .com) incluida y configurada desde el primer día.' },
+  { icon: Globe, t: 'Tu dominio, conectado', d: 'Subdominio gratis al instante, y vinculamos tu dominio propio (.pe o .com) sin costo.' },
   { icon: Server, t: 'Hosting veloz', d: 'Alojamiento rápido para que tu tienda cargue en segundos en cualquier dispositivo.' },
   { icon: ShieldCheck, t: 'Seguridad HTTPS', d: 'Certificado SSL que inspira confianza y protege los datos de tus compradores.' },
   { icon: Smartphone, t: 'Diseño responsive', d: 'Perfecta en celular. El 80 % de las compras online se hacen desde el teléfono.' },
@@ -79,7 +79,7 @@ const diferenciadores = [
   {
     icon: ShieldCheck,
     t: 'Sin costos ocultos',
-    d: 'Un solo plan que incluye dominio, hosting, diseño y soporte. Nada más, nada menos.',
+    d: 'Un solo plan que incluye hosting, diseño, seguridad y soporte. Nada más, nada menos.',
   },
 ];
 
@@ -92,7 +92,7 @@ const sectores = [
 const pasos = [
   { n: '01', t: 'Cuéntanos de tu tienda', d: 'Qué vendes, cuántos productos tienes y cómo quieres que se vea tu negocio online.' },
   { n: '02', t: 'Creamos tu tienda online', d: 'Diseñamos tu catálogo, configuramos los pagos y dejamos todo listo para vender.' },
-  { n: '03', t: 'Publicas en 48 horas', d: 'Con dominio, hosting, seguridad y soporte. Tu tienda abierta y lista para recibir pedidos.' },
+  { n: '03', t: 'Publicas en 48 horas', d: 'Con hosting, seguridad y soporte. Tu tienda abierta y lista para recibir pedidos.' },
 ];
 
 const faqs = [
@@ -110,7 +110,7 @@ const faqs = [
   },
   {
     q: '¿El dominio y el hosting están incluidos?',
-    a: 'Sí. A diferencia de plataformas como Shopify que te cobran por separado, en PLIA el dominio, hosting y seguridad ya están en el precio.',
+    a: 'El hosting y la seguridad ya están en el precio, más un subdominio gratis para publicar de inmediato. El dominio propio (.pe o .com) lo registras tú y nosotros lo vinculamos a tu tienda sin costo.',
   },
   {
     q: '¿Puedo combinar mi tienda online con WhatsApp?',
@@ -118,7 +118,7 @@ const faqs = [
   },
   {
     q: '¿En cuánto tiempo estará lista mi tienda?',
-    a: 'En 48 horas ya tienes tu tienda funcionando con productos, pagos y dominio configurados.',
+    a: 'En 48 horas ya tienes tu tienda funcionando con productos, pagos y tu dirección web configurados.',
   },
 ];
 
@@ -132,7 +132,7 @@ export default function TiendaOnlinePeru() {
     areaServed: { '@type': 'Country', name: 'Perú' },
     url: `${siteUrl}/tienda-online-peru`,
     description:
-      'Creación de tiendas online en Perú con catálogo, carrito de compras, pagos integrados, dominio y hosting incluidos. Lista en 48 horas.',
+      'Creación de tiendas online en Perú con catálogo, carrito de compras, pagos integrados, hosting y seguridad incluidos. Lista en 48 horas.',
   };
   const faqJsonLd = {
     '@context': 'https://schema.org',
@@ -172,7 +172,7 @@ export default function TiendaOnlinePeru() {
           </h1>
           <p className="mt-6 text-lg md:text-xl text-background/75 max-w-2xl mx-auto">
             Tu tienda con catálogo, carrito y pagos integrados.
-            Dominio, hosting y soporte <strong className="text-background">todo incluido</strong> — sin saber de tecnología.
+            Hosting, seguridad y soporte <strong className="text-background">todo incluido</strong> — sin saber de tecnología.
           </p>
           <div className="mt-9 flex flex-wrap justify-center gap-3">
             <Link
@@ -252,7 +252,7 @@ export default function TiendaOnlinePeru() {
             <p className="text-xs font-bold uppercase tracking-[0.2em] text-cta-foreground mb-3">Todo incluido</p>
             <h2 className="text-3xl md:text-4xl font-black tracking-tight">Tu tienda online lo tiene todo</h2>
             <p className="mt-3 text-muted-foreground text-lg">
-              Sin contratar hosting aparte, sin pagar dominio extra, sin sorpresas al final del mes.
+              Sin contratar hosting aparte ni pagar mantenimientos sorpresa. Y si tienes tu dominio, lo conectamos gratis.
             </p>
           </div>
           <div className="grid md:grid-cols-3 gap-5">

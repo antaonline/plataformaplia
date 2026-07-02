@@ -218,7 +218,7 @@ export default function Home() {
 
               {/* Título */}
               <h1 className="text-4xl md:text-5xl lg:text-7xl font-bold text-white mb-8 leading-tight">
-                <SplitText text="Tu web lista," delay={0.4} staggerDelay={0.04} />
+                <SplitText text="Tu página web lista en 24h," delay={0.4} staggerDelay={0.04} />
                 <br />
                 <span className="text-cta">
                   <SplitText text="sin complicaciones" delay={0.8} staggerDelay={0.04} />
@@ -232,8 +232,8 @@ export default function Home() {
                 transition={{ duration: 0.8, delay: 1.2 }}
                 className="text-lg md:text-xl text-white/80 leading-relaxed max-w-xl"
               >
-                Nosotros nos encargamos de todo: dominio, diseño y publicación.
-                Tú solo preocúpate de atender a tus clientes.
+                Diseño de páginas web y hosting en Perú: nos encargamos del diseño,
+                la publicación y de conectar tu dominio. Tú solo preocúpate de atender a tus clientes.
               </motion.p>
             </div>
           </div>

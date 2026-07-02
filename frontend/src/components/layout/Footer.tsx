@@ -3,6 +3,16 @@ import Link from "next/link";
 import Image from "next/image";
 
 const footerLinks = {
+  // Enlaces internos hacia las landings SEO: sin esto son páginas huérfanas
+  // (solo en el sitemap) y Google les asigna importancia mínima.
+  servicios: [
+    { name: "Diseño de páginas web en Perú", href: "/diseno-de-paginas-web-peru" },
+    { name: "Hosting web en Perú", href: "/web-hosting" },
+    { name: "Tienda online en Perú", href: "/tienda-online-peru" },
+    { name: "Página web institucional", href: "/pagina-web-institucional-peru" },
+    { name: "Página web económica", href: "/pagina-web-economica-peru" },
+    { name: "Dominios .pe y .com", href: "/consigue-tu-dominio" },
+  ],
   producto: [
     { name: "Planes", href: "/planes" },
     { name: "Cómo funciona", href: "/como-funciona" },
@@ -12,6 +22,7 @@ const footerLinks = {
   soporte: [
     { name: "Contacto", href: "/contacto" },
     { name: "Preguntas frecuentes", href: "/como-funciona#faq" },
+    { name: "Blog", href: "/blog" },
   ],
   legal: [
     { name: "Términos y Condiciones", href: "/terminos" },
@@ -23,7 +34,7 @@ export default function Footer() {
   return (
     <footer className="bg-foreground text-primary-foreground">
       <div className="section-container py-16">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-10">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-10">
           {/* Brand */}
           <div className="lg:col-span-1">
             <Image
@@ -40,6 +51,23 @@ export default function Footer() {
             <p className="text-primary-foreground/50 text-sm">
               Lima, Perú 🇵🇪
             </p>
+          </div>
+
+          {/* Servicios (landings SEO) */}
+          <div>
+            <h4 className="font-semibold text-base mb-4">Servicios</h4>
+            <ul className="space-y-3">
+              {footerLinks.servicios.map((link) => (
+                <li key={link.href}>
+                  <Link
+                    href={link.href}
+                    className="text-primary-foreground/70 hover:text-primary-foreground text-sm transition-colors"
+                  >
+                    {link.name}
+                  </Link>
+                </li>
+              ))}
+            </ul>
           </div>
 
           {/* Producto */}

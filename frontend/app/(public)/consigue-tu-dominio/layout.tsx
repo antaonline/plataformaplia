@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Consigue tu Dominio .pe o .com — Registro en Perú",
+  // VERACIDAD: PLIA no vende dominios (la página es un "Próximamente").
+  // No prometer registro ni activación inmediata hasta que el servicio exista.
+  title: "Consigue tu Dominio .pe o .com para tu web — Te ayudamos a conectarlo",
   description:
-    "Registra tu dominio .pe, .com o .com.pe con PLIA. Activación inmediata, gestión 100% en español y configuración automática para tu página web.",
+    "¿Ya tienes tu dominio .pe, .com o .com.pe? En PLIA lo conectamos gratis a tu página web. Y muy pronto podrás buscar y resolver tu dominio sin salir de la plataforma.",
   keywords: [
     "comprar dominio .pe",
     "registrar dominio Peru",
@@ -18,14 +20,14 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Consigue tu Dominio — PLIA",
     description:
-      "Registra tu dominio .pe, .com o .com.pe con activación inmediata y gestión en español.",
+      "Conectamos gratis tu dominio .pe, .com o .com.pe a tu página web. Pronto podrás gestionarlo todo desde PLIA.",
     url: "/consigue-tu-dominio",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
     title: "Tu Dominio con PLIA",
-    description: "Dominio .pe, .com o .com.pe con activación inmediata.",
+    description: "Conectamos gratis tu dominio .pe, .com o .com.pe a tu web.",
   },
 };
 

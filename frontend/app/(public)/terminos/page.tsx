@@ -86,23 +86,26 @@ const Terminos = () => {
                   </section>
 
                   <section>
-                    <h2 className="text-xl font-bold text-foreground mb-4">5. Dominios</h2>
-                    <h3 className="text-lg font-semibold text-foreground mb-2">5.1 Registro</h3>
+                    <h2 className="text-xl font-bold text-foreground mb-4">5. Dominios y subdominios</h2>
+                    <h3 className="text-lg font-semibold text-foreground mb-2">5.1 Subdominio gratuito</h3>
                     <p className="mb-4">
-                      El dominio incluido en los planes corresponde a extensiones .com, .pe u otras 
-                      disponibles. La disponibilidad del nombre de dominio está sujeta a verificación.
+                      Todos los planes incluyen un subdominio gratuito (por ejemplo, tunegocio.plia.pe)
+                      para publicar la página web de inmediato y sin costo adicional.
                     </p>
 
-                    <h3 className="text-lg font-semibold text-foreground mb-2">5.2 Propiedad</h3>
+                    <h3 className="text-lg font-semibold text-foreground mb-2">5.2 Dominio propio</h3>
                     <p className="mb-4">
-                      El dominio es propiedad del Cliente. PLIA se encarga del registro y la 
-                      administración técnica, pero el Cliente es el titular legal del mismo.
+                      PLIA no comercializa dominios. El Cliente registra su dominio propio (.com, .pe u
+                      otras extensiones) directamente con el registrador de su preferencia y es su único
+                      titular legal. PLIA brinda soporte gratuito para vincular dicho dominio a la página
+                      web del Cliente (configuración técnica y DNS).
                     </p>
 
                     <h3 className="text-lg font-semibold text-foreground mb-2">5.3 Renovación</h3>
                     <p>
-                      El primer año de dominio está incluido en el plan. Las renovaciones anuales 
-                      posteriores tienen un costo adicional que será comunicado con anticipación.
+                      La renovación del dominio propio se gestiona y paga directamente con el registrador
+                      elegido por el Cliente. PLIA no cobra por la vinculación del dominio ni interviene
+                      en su renovación.
                     </p>
                   </section>
 

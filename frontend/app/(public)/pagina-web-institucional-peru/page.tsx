@@ -11,7 +11,7 @@ const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://plia.pe';
 export const metadata: Metadata = {
   title: 'Página Web Institucional en Perú — Profesional y lista en 48h | PLIA',
   description:
-    'Diseño de página web institucional para empresas en Perú. Hasta 5 páginas personalizadas, dominio, hosting y soporte incluidos. Lista en 48 horas.',
+    'Diseño de página web institucional para empresas en Perú. Hasta 5 páginas personalizadas, hosting, seguridad y soporte incluidos. Lista en 48 horas.',
   keywords: [
     'página web institucional Perú',
     'web institucional Perú',
@@ -26,13 +26,13 @@ export const metadata: Metadata = {
   openGraph: {
     title: 'Página Web Institucional en Perú — Hasta 5 páginas, lista en 48h | PLIA',
     description:
-      'Web profesional para tu empresa en Perú. Dominio, hosting y soporte incluidos. Lista en 48 horas.',
+      'Web profesional para tu empresa en Perú. Hosting, seguridad y soporte incluidos. Lista en 48 horas.',
     url: '/pagina-web-institucional-peru',
     type: 'website',
   },
 };
 
-const trust = ['Hasta 5 páginas', 'Dominio incluido', 'Hosting incluido', 'Lista en 48 horas'];
+const trust = ['Hasta 5 páginas', 'Hosting incluido', 'Subdominio gratis', 'Lista en 48 horas'];
 
 const porQueNecesitas = [
   {
@@ -43,7 +43,7 @@ const porQueNecesitas = [
   {
     stat: '48 h',
     t: 'y estás en internet',
-    d: 'Tu web profesional, con dominio propio y diseño a tu medida, lista antes de que termine la semana.',
+    d: 'Tu web profesional, con diseño a tu medida y tu dominio conectado, lista antes de que termine la semana.',
   },
   {
     stat: '5',
@@ -61,7 +61,7 @@ const paginas = [
 ];
 
 const incluye = [
-  { icon: Globe, t: 'Dominio propio (.pe o .com)', d: 'Tu dirección web, incluida y configurada desde el primer día.' },
+  { icon: Globe, t: 'Tu dominio, conectado', d: 'Subdominio gratis al instante, y vinculamos tu dominio propio (.pe o .com) sin costo.' },
   { icon: Server, t: 'Hosting rápido y seguro', d: 'Alojamiento veloz para que tu web cargue en segundos.' },
   { icon: ShieldCheck, t: 'Certificado HTTPS', d: 'El candado de seguridad que transmite confianza a tus visitantes.' },
   { icon: Smartphone, t: 'Diseño responsive', d: 'Perfecta en celular, tablet y computadora. Donde esté tu cliente, ahí está tu web.' },
@@ -89,7 +89,7 @@ const sectores = [
 const pasos = [
   { n: '01', t: 'Nos cuentas de tu empresa', d: 'Qué ofreces, quiénes son tus clientes y cómo quieres proyectar tu marca en internet.' },
   { n: '02', t: 'Diseñamos tu web institucional', d: 'Adaptamos el diseño a tu sector y tu identidad. Colores, contenido real, estructura profesional.' },
-  { n: '03', t: 'Publicamos en 48 horas', d: 'Con dominio, hosting, seguridad y soporte. Tu empresa en internet antes de que termine la semana.' },
+  { n: '03', t: 'Publicamos en 48 horas', d: 'Con hosting, seguridad y soporte. Tu empresa en internet antes de que termine la semana.' },
 ];
 
 const diferenciadores = [
@@ -106,7 +106,7 @@ const diferenciadores = [
   {
     icon: Star,
     t: 'Todo en una sola plataforma',
-    d: 'Dominio, hosting, seguridad y soporte incluidos. Sin contratar nada por separado.',
+    d: 'Hosting, seguridad y soporte incluidos. Sin contratar nada por separado, y conectamos tu dominio gratis.',
   },
 ];
 
@@ -125,7 +125,7 @@ const faqs = [
   },
   {
     q: '¿El dominio y el hosting están incluidos en el precio?',
-    a: 'Sí. A diferencia de diseñadores independientes que te cobran el hosting y el dominio aparte, en PLIA todo va en un solo plan.',
+    a: 'El hosting, la seguridad y el soporte van en un solo plan, más un subdominio gratis para publicar de inmediato. El dominio propio (.pe o .com) lo registras tú y nosotros lo vinculamos a tu web sin costo.',
   },
   {
     q: '¿En cuánto tiempo estará lista mi web institucional?',
@@ -147,7 +147,7 @@ export default function PaginaWebInstitucionalPeru() {
     areaServed: { '@type': 'Country', name: 'Perú' },
     url: `${siteUrl}/pagina-web-institucional-peru`,
     description:
-      'Diseño de página web institucional para empresas en Perú. Hasta 5 páginas personalizadas, dominio, hosting y soporte incluidos. Lista en 48 horas.',
+      'Diseño de página web institucional para empresas en Perú. Hasta 5 páginas personalizadas, hosting, seguridad y soporte incluidos. Lista en 48 horas.',
   };
   const faqJsonLd = {
     '@context': 'https://schema.org',
@@ -186,7 +186,7 @@ export default function PaginaWebInstitucionalPeru() {
             <span className="text-cta">donde tus clientes ya te buscan</span>
           </h1>
           <p className="mt-6 text-lg md:text-xl text-background/75 max-w-2xl mx-auto">
-            Una web institucional profesional con hasta 5 páginas. Dominio, hosting y soporte{' '}
+            Una web institucional profesional con hasta 5 páginas. Hosting, seguridad y soporte{' '}
             <strong className="text-background">todo incluido</strong>, lista en 48 horas.
           </p>
           <div className="mt-9 flex flex-wrap justify-center gap-3">
@@ -268,7 +268,7 @@ export default function PaginaWebInstitucionalPeru() {
             <p className="text-xs font-bold uppercase tracking-[0.2em] text-cta-foreground mb-3">Todo incluido</p>
             <h2 className="text-3xl md:text-4xl font-black tracking-tight">Una sola plataforma, todo resuelto</h2>
             <p className="mt-3 text-muted-foreground text-lg">
-              Dominio, hosting, diseño y soporte en un solo lugar. Sin contratar nada aparte.
+              Hosting, diseño, seguridad y soporte en un solo lugar. Sin contratar nada aparte, y conectamos tu dominio gratis.
             </p>
           </div>
           <div className="grid md:grid-cols-4 gap-5">
@@ -411,7 +411,7 @@ export default function PaginaWebInstitucionalPeru() {
               Tu empresa merece estar en internet
             </h2>
             <p className="mt-3 text-background/70 max-w-xl mx-auto text-lg">
-              Web institucional lista en 48 horas, con dominio, hosting y soporte incluidos.
+              Web institucional lista en 48 horas, con hosting, seguridad y soporte incluidos.
             </p>
             <div className="mt-8 flex flex-wrap justify-center gap-3">
               <Link

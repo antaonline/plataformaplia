@@ -7,7 +7,7 @@ const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://plia.pe';
 export const metadata: Metadata = {
   title: 'Diseño de Páginas Web en Perú — Tu web lista en 24h, todo incluido',
   description:
-    'Diseño de páginas web en Perú con dominio, hosting y soporte incluidos. Tu página profesional lista en 24 horas a precio accesible. Landing, web institucional y tiendas online.',
+    'Diseño de páginas web en Perú con hosting, seguridad y soporte incluidos. Tu página profesional lista en 24 horas a precio accesible. Landing, web institucional y tiendas online.',
   keywords: [
     'diseño de páginas web Perú',
     'diseño web Perú',
@@ -19,14 +19,14 @@ export const metadata: Metadata = {
   alternates: { canonical: '/diseno-de-paginas-web-peru' },
   openGraph: {
     title: 'Diseño de Páginas Web en Perú — Tu web lista en 24h | PLIA',
-    description: 'Páginas web profesionales con dominio, hosting y soporte incluidos. Listas en 24 horas.',
+    description: 'Páginas web profesionales con hosting, seguridad y soporte incluidos. Listas en 24 horas.',
     url: '/diseno-de-paginas-web-peru',
     type: 'website',
   },
 };
 
 const incluye = [
-  { icon: Globe, t: 'Dominio propio', d: 'Tu dirección .pe o .com, incluida y configurada.' },
+  { icon: Globe, t: 'Tu dominio, conectado', d: 'Subdominio gratis al instante, y vinculamos tu dominio propio (.pe o .com) sin costo.' },
   { icon: Server, t: 'Hosting rápido', d: 'Alojamiento veloz y seguro para que tu web vuele.' },
   { icon: ShieldCheck, t: 'Seguridad HTTPS', d: 'El candadito de confianza, sin costo extra.' },
   { icon: Smartphone, t: 'Diseño responsive', d: 'Se ve perfecta en celular, tablet y computadora.' },
@@ -43,13 +43,13 @@ const tipos = [
 const proceso = [
   { t: 'Nos cuentas de tu negocio', d: 'Preguntas simples: qué ofreces, a quién y qué quieres lograr.' },
   { t: 'Diseñamos tu web', d: 'La adaptamos a tu marca: colores, contenido real y estructura por rubro.' },
-  { t: 'Publicamos en 24 horas', d: 'Con dominio, hosting, seguridad y soporte, lista para recibir clientes.' },
+  { t: 'Publicamos en 24 horas', d: 'Con hosting, seguridad y soporte, lista para recibir clientes en tu subdominio o tu dominio propio.' },
 ];
 
 const faqs = [
-  { q: '¿Cuánto cuesta una página web en Perú?', a: 'Depende del tipo: una landing va desde precios accesibles y una web institucional o tienda online cuestan más. Lo importante es que con PLIA el dominio, hosting y soporte ya van incluidos, sin sorpresas.' },
+  { q: '¿Cuánto cuesta una página web en Perú?', a: 'Depende del tipo: una landing va desde precios accesibles y una web institucional o tienda online cuestan más. Lo importante es que con PLIA el hosting, la seguridad y el soporte ya van incluidos, sin sorpresas.' },
   { q: '¿En cuánto tiempo está lista mi página web?', a: 'Tu página web está lista en 24 horas. Una web institucional de varias páginas toma 48 horas.' },
-  { q: '¿El dominio y el hosting están incluidos?', a: 'Sí. A diferencia de contratar todo por separado, en PLIA el dominio, el hosting, el certificado de seguridad y el soporte vienen incluidos.' },
+  { q: '¿El dominio y el hosting están incluidos?', a: 'El hosting, el certificado de seguridad y el soporte vienen incluidos, más un subdominio gratis para publicar de inmediato. El dominio propio (.pe o .com) lo registras tú con el proveedor que prefieras y nosotros lo vinculamos a tu web sin costo.' },
   { q: '¿Necesito saber de tecnología?', a: 'No. Tú nos cuentas de tu negocio y nosotros resolvemos toda la parte técnica. Recibes tu web lista para usar.' },
   { q: '¿La página se verá bien en el celular?', a: 'Sí. Todas nuestras páginas son responsive: se ven perfectas en celular, tablet y computadora.' },
 ];
@@ -63,7 +63,7 @@ export default function DisenoWebPeru() {
     provider: { '@type': 'Organization', name: 'PLIA', url: siteUrl },
     areaServed: { '@type': 'Country', name: 'Perú' },
     url: `${siteUrl}/diseno-de-paginas-web-peru`,
-    description: 'Diseño de páginas web profesionales en Perú con dominio, hosting y soporte incluidos. Listas en 24 horas.',
+    description: 'Diseño de páginas web profesionales en Perú con hosting, seguridad y soporte incluidos. Listas en 24 horas.',
   };
   const faqJsonLd = {
     '@context': 'https://schema.org',
@@ -95,7 +95,7 @@ export default function DisenoWebPeru() {
             Diseño de páginas web en Perú
           </h1>
           <p className="mt-6 text-lg md:text-xl text-background/75 max-w-2xl mx-auto">
-            Tu página web profesional <strong className="text-background">lista en 24 horas</strong>, con dominio, hosting,
+            Tu página web profesional <strong className="text-background">lista en 24 horas</strong>, con hosting,
             seguridad y soporte <strong className="text-background">incluidos</strong>. Sin complicaciones técnicas y a precio accesible.
           </p>
           <div className="mt-9 flex flex-wrap justify-center gap-3">
@@ -115,7 +115,7 @@ export default function DisenoWebPeru() {
           <div className="max-w-2xl mb-12">
             <p className="text-xs font-bold uppercase tracking-[0.2em] text-cta-foreground mb-3">Todo incluido</p>
             <h2 className="text-3xl md:text-4xl font-black tracking-tight">Una sola plataforma, todo resuelto</h2>
-            <p className="mt-3 text-muted-foreground text-lg">Olvídate de contratar dominio, hosting, diseño y soporte por separado. En PLIA va todo junto.</p>
+            <p className="mt-3 text-muted-foreground text-lg">Olvídate de contratar hosting, diseño y soporte por separado. En PLIA va todo junto, y te ayudamos a conectar tu dominio.</p>
           </div>
           <div className="grid md:grid-cols-3 gap-5">
             {incluye.map((f) => {
@@ -204,7 +204,7 @@ export default function DisenoWebPeru() {
       <section className="px-4 py-20">
         <div className="max-w-4xl mx-auto rounded-[2.5rem] bg-foreground text-background px-8 py-14 text-center">
           <h2 className="text-3xl md:text-4xl font-black tracking-tight">¿Listo para tu página web?</h2>
-          <p className="mt-3 text-background/70 max-w-xl mx-auto">Lista en 24 horas, con dominio, hosting y soporte incluidos. A precio accesible.</p>
+          <p className="mt-3 text-background/70 max-w-xl mx-auto">Lista en 24 horas, con hosting, seguridad y soporte incluidos. A precio accesible.</p>
           <div className="mt-7 flex flex-wrap justify-center gap-3">
             <Link href="/planes" className="bg-cta text-cta-foreground font-semibold px-7 py-3.5 rounded-full hover:opacity-90 transition inline-flex items-center gap-2">
               Ver planes <Check size={18} />

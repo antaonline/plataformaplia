@@ -10,7 +10,7 @@ const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://plia.pe';
 export const metadata: Metadata = {
   title: 'Página Web Económica en Perú — Profesional y sin precios de agencia | PLIA',
   description:
-    'Página web profesional económica en Perú. Dominio, hosting, diseño y soporte incluidos en un solo precio accesible. Sin costos ocultos, lista en 24 horas.',
+    'Página web profesional económica en Perú. Hosting, diseño, seguridad y soporte incluidos en un solo precio accesible. Sin costos ocultos, lista en 24 horas.',
   keywords: [
     'página web económica Perú',
     'página web barata Perú',
@@ -25,7 +25,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: 'Página Web Económica en Perú — Profesional y sin precios de agencia | PLIA',
     description:
-      'Web profesional con dominio, hosting y soporte incluidos. Sin pagar como agencia, sin el riesgo del freelancer. Lista en 24 horas.',
+      'Web profesional con hosting, seguridad y soporte incluidos. Sin pagar como agencia, sin el riesgo del freelancer. Lista en 24 horas.',
     url: '/pagina-web-economica-peru',
     type: 'website',
   },
@@ -77,7 +77,7 @@ const opciones = [
     highlight: true,
     items: [
       { ok: true, t: 'Precio accesible, todo incluido' },
-      { ok: true, t: 'Dominio + hosting + SSL en el mismo plan' },
+      { ok: true, t: 'Hosting + SSL + subdominio gratis en el mismo plan' },
       { ok: true, t: 'Lista en 24 horas (48 h web institucional)' },
       { ok: true, t: 'Soporte en español post-entrega' },
       { ok: true, t: 'Diseño profesional adaptado a tu sector' },
@@ -86,7 +86,7 @@ const opciones = [
 ];
 
 const incluye = [
-  { icon: Globe, t: 'Dominio propio', d: 'Tu dirección .pe o .com, incluida en el precio.' },
+  { icon: Globe, t: 'Tu dominio, conectado', d: 'Subdominio gratis al instante, y vinculamos tu dominio propio (.pe o .com) sin costo.' },
   { icon: Server, t: 'Hosting veloz', d: 'Alojamiento rápido y seguro para que cargue en segundos.' },
   { icon: ShieldCheck, t: 'Certificado HTTPS', d: 'Seguridad SSL sin costo extra.' },
   { icon: Smartphone, t: 'Diseño responsive', d: 'Perfecta en celular, tablet y computadora.' },
@@ -96,7 +96,7 @@ const incluye = [
 
 const sinCostosOcultos = [
   'Sin mensualidad extra por el hosting',
-  'Sin renovación sorpresa del dominio',
+  'Sin cobro por conectar tu dominio propio',
   'Sin cobro por certificado de seguridad (SSL)',
   'Sin tarifa por "activación" o "configuración"',
   'Sin pagar más para que la web cargue rápido',
@@ -113,7 +113,7 @@ const paraQuien = [
 const pasos = [
   { n: '01', t: 'Nos cuentas de tu negocio', d: 'Qué ofreces, cómo te llamas y qué quieres lograr con tu web. Sin formularios largos.' },
   { n: '02', t: 'Diseñamos tu web', d: 'La adaptamos a tu sector y tu marca. Colores, contenido y estructura pensados para ti.' },
-  { n: '03', t: 'La publicas en 24 horas', d: 'Con dominio, hosting y seguridad. Tu web live sin complicaciones técnicas.' },
+  { n: '03', t: 'La publicas en 24 horas', d: 'Con hosting y seguridad incluidos. Tu web live sin complicaciones técnicas.' },
 ];
 
 const diferenciadores = [
@@ -130,7 +130,7 @@ const diferenciadores = [
   {
     icon: Sparkles,
     t: 'Todo en un solo precio',
-    d: 'Dominio, hosting, diseño y soporte incluidos. Sabes exactamente lo que pagas.',
+    d: 'Hosting, diseño, seguridad y soporte incluidos. Sabes exactamente lo que pagas.',
   },
 ];
 
@@ -141,7 +141,7 @@ const faqs = [
   },
   {
     q: '¿Hay costos adicionales después de contratarla?',
-    a: 'No. El dominio, hosting, SSL y soporte ya van incluidos en el plan. No recibirás cobros sorpresa por mantenimiento o renovación.',
+    a: 'No. El hosting, SSL y soporte ya van incluidos en el plan, con subdominio gratis. Si quieres tu dominio propio, lo registras tú y lo conectamos sin costo. No recibirás cobros sorpresa por mantenimiento.',
   },
   {
     q: '¿Qué pasa si quiero hacer cambios después?',
@@ -157,7 +157,7 @@ const faqs = [
   },
   {
     q: '¿Necesito saber de tecnología?',
-    a: 'No. Tú nos das la información de tu negocio y nosotros resolvemos todo: diseño, dominio, hosting y publicación. Sin complicaciones.',
+    a: 'No. Tú nos das la información de tu negocio y nosotros resolvemos todo: diseño, hosting, publicación y la conexión de tu dominio. Sin complicaciones.',
   },
 ];
 
@@ -171,7 +171,7 @@ export default function PaginaWebEconomicaPeru() {
     areaServed: { '@type': 'Country', name: 'Perú' },
     url: `${siteUrl}/pagina-web-economica-peru`,
     description:
-      'Diseño de página web profesional económica en Perú con dominio, hosting y soporte incluidos. Lista en 24 horas sin costos ocultos.',
+      'Diseño de página web profesional económica en Perú con hosting, seguridad y soporte incluidos. Lista en 24 horas sin costos ocultos.',
   };
   const faqJsonLd = {
     '@context': 'https://schema.org',
@@ -210,7 +210,7 @@ export default function PaginaWebEconomicaPeru() {
             <span className="text-cta">sin pagar precio de agencia</span>
           </h1>
           <p className="mt-6 text-lg md:text-xl text-background/75 max-w-2xl mx-auto">
-            Dominio, hosting, diseño y soporte{' '}
+            Hosting, diseño, seguridad y soporte{' '}
             <strong className="text-background">todo incluido en un solo precio accesible</strong>.
             Sin costos ocultos. Lista en 24 horas.
           </p>
@@ -299,7 +299,7 @@ export default function PaginaWebEconomicaPeru() {
             <p className="text-xs font-bold uppercase tracking-[0.2em] text-cta-foreground mb-3">Todo en un solo precio</p>
             <h2 className="text-3xl md:text-4xl font-black tracking-tight">Nada de contratar por separado</h2>
             <p className="mt-3 text-muted-foreground text-lg">
-              Un plan que lo resuelve todo: diseño, dominio, hosting y soporte.
+              Un plan que lo resuelve todo: diseño, hosting, seguridad y soporte. Y conectamos tu dominio gratis.
             </p>
           </div>
           <div className="grid md:grid-cols-3 gap-5">
@@ -477,7 +477,7 @@ export default function PaginaWebEconomicaPeru() {
               Tu web profesional al precio justo
             </h2>
             <p className="mt-3 text-background/70 max-w-xl mx-auto text-lg">
-              Lista en 24 horas, dominio y hosting incluidos, sin costos ocultos.
+              Lista en 24 horas, hosting y seguridad incluidos, sin costos ocultos.
               El paso que tu negocio necesita para crecer online.
             </p>
             <div className="mt-8 flex flex-wrap justify-center gap-3">

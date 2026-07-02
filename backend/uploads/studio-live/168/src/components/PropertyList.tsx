@@ -16,14 +16,14 @@ const properties: Property[] = [
     title: 'Residencia de Lujo en el Centro',
     location: 'Ciudad de México, México',
     price: '$3,500,000 USD',
-    image: 'https://images.pexels.com/photos/4031013/pexels-photo-4031013.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=627&w=1200',
+    image: 'http://localhost:3002/uploads/media/upload-1781147427396-973718741.png',
   },
   {
     id: 2,
     title: 'Villa Exclusiva con Vista al Mar',
     location: 'Cancún, México',
     price: '$5,200,000 USD',
-    image: 'https://images.pexels.com/photos/20210501/pexels-photo-20210501.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=627&w=1200',
+    image: 'http://localhost:3002/uploads/media/upload-1781147424839-126447465.png',
   },
   {
     id: 3,
@@ -45,7 +45,7 @@ export default function PropertyList() {
           viewport={{ once: true, amount: 0.15 }}
           transition={{ duration: 0.6 }}
         >
-          Propiedades Destacadas
+          Cacadadez Destacadas
         </motion.h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-12">
           {properties.map((property) => (

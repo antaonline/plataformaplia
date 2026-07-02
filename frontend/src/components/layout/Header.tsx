@@ -45,16 +45,22 @@ const megaMenuSections: MegaMenuSection[] = [
     title: "Crea tu sitio web",
     items: [
       {
-        name: "Plan Landing",
-        href: "/planes",
-        description: "Landing lista para vender desde el día uno.",
+        name: "Diseño de páginas web",
+        href: "/diseno-de-paginas-web-peru",
+        description: "Tu web profesional lista en 24 horas.",
         icon: LayoutTemplate,
       },
       {
         name: "Plan Web Institucional",
-        href: "/planes",
+        href: "/pagina-web-institucional-peru",
         description: "Hasta 5 páginas para tu negocio y tu marca.",
         icon: MonitorSmartphone,
+      },
+      {
+        name: "Página web económica",
+        href: "/pagina-web-economica-peru",
+        description: "Presencia profesional a precio accesible.",
+        icon: LayoutTemplate,
       },
       {
         name: "Tu web con IA",
@@ -71,6 +77,12 @@ const megaMenuSections: MegaMenuSection[] = [
         name: "Ecommerce",
         href: "/ecommerce",
         description: "Tu tienda online lista para vender rápido.",
+        icon: ShoppingBag,
+      },
+      {
+        name: "Tienda online en Perú",
+        href: "/tienda-online-peru",
+        description: "Empieza a vender por internet con todo incluido.",
         icon: ShoppingBag,
       },
     ],
@@ -99,7 +111,16 @@ const megaMenuSections: MegaMenuSection[] = [
   },
 ];
 
-const productRoutes = ["/tu-web-con-ia", "/ecommerce", "/web-hosting", "/consigue-tu-dominio"];
+const productRoutes = [
+  "/tu-web-con-ia",
+  "/ecommerce",
+  "/web-hosting",
+  "/consigue-tu-dominio",
+  "/diseno-de-paginas-web-peru",
+  "/tienda-online-peru",
+  "/pagina-web-institucional-peru",
+  "/pagina-web-economica-peru",
+];
 const solidBackgroundMatchers = [
   "/planes",
   "/como-funciona",

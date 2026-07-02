@@ -1,15 +1,312 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>PLIA Studio Preview</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700;800;900&family=Lato:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+    <title>PLIA Studio App</title>
   </head>
+
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+
+    <!--
+      PLIA Studio: capturador de ERRORES DE RUNTIME. Si la generación de
+      la IA dejó código que rompe en runtime (import roto, export mismatch,
+      undefined.foo), la pantalla queda en blanco y el cliente no entiende
+      qué pasa. Este script captura el error y lo manda al editor padre
+      via postMessage para que se vea en pantalla como un toast rojo con
+      botón "AUTO-FIX". Inspirado en el overlay de error de Vite.
+
+      Solo se activa si estamos dentro de PLIA Studio (parent !== self).
+      En produccion (sitio publicado) este listener no envía nada porque
+      no hay parent que escuche.
+    -->
+    <script>
+      (function () {
+        if (window.parent === window) return;
+        var notify = function (kind, message, stack) {
+          try {
+            window.parent.postMessage(
+              {
+                type: 'PLIA_RUNTIME_ERROR',
+                kind: kind,
+                message: String(message || '').slice(0, 800),
+                stack: stack ? String(stack).slice(0, 2000) : null,
+                ts: Date.now(),
+              },
+              '*'
+            );
+          } catch (_) {}
+        };
+        window.addEventListener('error', function (e) {
+          notify('error', e.message || e.error || 'Error desconocido', e.error && e.error.stack);
+        });
+        window.addEventListener('unhandledrejection', function (e) {
+          var msg = e.reason && (e.reason.message || String(e.reason));
+          notify('promise', msg || 'Promise rejected', e.reason && e.reason.stack);
+        });
+        // Watchdog: si tras 4 segundos el #root sigue vacío, asumimos que
+        // hubo un error que window.onerror NO disparo (típicamente un
+        // import roto que mata el module bootstrap sin throw global).
+        setTimeout(function () {
+          var root = document.getElementById('root');
+          if (root && root.children.length === 0) {
+            notify(
+              'blank',
+              'La página quedó en blanco — probable error de import o export entre componentes. Revisa la consola del navegador.',
+              null
+            );
+          }
+        }, 4000);
+      })();
+    </script>
+
+    <!--
+      PLIA Studio: capturador de miniaturas. Solo se activa si el iframe
+      esta embebido en PLIA Studio (window.parent !== window) Y recibe el
+      mensaje PLIA_CAPTURE. En produccion (sitio publicado, sin padre PLIA)
+      este listener queda mudo y html2canvas NUNCA se carga -> 0 overhead.
+    -->
+    <!--
+      PLIA Studio: REPORTE DE ALTURA del documento. El editor lo usa para
+      desplegar la web COMPLETA (de arriba a abajo) en el artboard del
+      lienzo, en vez de una ventana con scroll interno. Solo activo dentro
+      de PLIA Studio (parent !== self).
+    -->
+    <script>
+      (function () {
+        if (window.parent === window) return;
+        var last = 0;
+        var send = function () {
+          var h = Math.max(
+            document.documentElement.scrollHeight,
+            document.body ? document.body.scrollHeight : 0
+          );
+          if (Math.abs(h - last) > 4) {
+            last = h;
+            try {
+              window.parent.postMessage({ type: 'PLIA_DOC_HEIGHT', height: h }, '*');
+            } catch (_) {}
+          }
+        };
+        var t;
+        var debounced = function () { clearTimeout(t); t = setTimeout(send, 150); };
+        window.addEventListener('load', debounced);
+        if (window.ResizeObserver) {
+          new ResizeObserver(debounced).observe(document.documentElement);
+        }
+        // Fallback para cambios async (imágenes/fuentes que cargan tarde).
+        setInterval(debounced, 2000);
+      })();
+    </script>
+
+    <!--
+      PLIA Studio: BRIDGE DE SELECCIÓN (editor visual, Fase B). Permite que
+      el editor padre active un "modo selección": al pasar el cursor se
+      resalta el elemento, al hacer click se selecciona y se reporta su
+      info (tag, texto, clases) al padre. También soporta editar el texto
+      inline (contentEditable) y reporta el cambio. Solo activo dentro de
+      PLIA Studio (parent !== self).
+    -->
+    <script>
+      (function () {
+        if (window.parent === window) return;
+        var mode = 'none'; // 'none' | 'select'
+        var hovered = null;
+        var selected = null;
+        var dropTarget = null;
+        var styleEl = document.createElement('style');
+        styleEl.textContent =
+          '.plia-hover{outline:2px solid #6366f1 !important;outline-offset:-2px !important;cursor:pointer !important;}' +
+          '.plia-selected{outline:2px solid #8b5cf6 !important;outline-offset:-2px !important;box-shadow:0 0 0 4px rgba(139,92,246,0.2) !important;}' +
+          '.plia-editing{outline:2px dashed #10b981 !important;}' +
+          '.plia-drop{outline:3px dashed #f59e0b !important;outline-offset:-3px !important;box-shadow:0 0 0 6px rgba(245,158,11,0.25) !important;}';
+        document.head.appendChild(styleEl);
+
+        function send(type, payload) {
+          try { window.parent.postMessage(Object.assign({ type: type }, payload || {}), '*'); } catch (_) {}
+        }
+        // No queremos seleccionar elementos enormes (body, #root). Subimos al
+        // elemento "significativo" más cercano (con texto o que sea media).
+        function isSelectable(el) {
+          if (!el || el === document.body) return false;
+          if (el.id === 'root') return false;
+          return true;
+        }
+        function describe(el) {
+          var text = '';
+          // Texto directo del elemento (no de hijos profundos) para edición.
+          for (var i = 0; i < el.childNodes.length; i++) {
+            if (el.childNodes[i].nodeType === 3) text += el.childNodes[i].nodeValue;
+          }
+          text = (text || el.textContent || '').trim();
+          var rect = el.getBoundingClientRect();
+          return {
+            tag: el.tagName.toLowerCase(),
+            text: text.slice(0, 500),
+            fullText: (el.textContent || '').trim().slice(0, 500),
+            classes: el.className && typeof el.className === 'string' ? el.className : '',
+            isImage: el.tagName === 'IMG',
+            src: el.tagName === 'IMG' ? el.getAttribute('src') : null,
+            rect: { x: rect.left, y: rect.top, w: rect.width, h: rect.height },
+          };
+        }
+
+        // REENVÍO DE RUEDA AL LIENZO: cuando el editor está en modo lienzo,
+        // los eventos de rueda sobre el sitio NO deben hacer zoom/scroll
+        // del navegador — se reenvían al editor padre para que el zoom/pan
+        // del canvas siga funcionando aunque el cursor esté sobre la web.
+        var canvasMode = false;
+        window.addEventListener(
+          'wheel',
+          function (e) {
+            // Ctrl/Cmd+rueda SIEMPRE se intercepta (evita el zoom del
+            // navegador dentro del iframe). Rueda sola solo en modo lienzo.
+            if (!canvasMode && !(e.ctrlKey || e.metaKey)) return;
+            e.preventDefault();
+            send('PLIA_WHEEL', {
+              ctrlKey: e.ctrlKey || e.metaKey,
+              shiftKey: e.shiftKey,
+              deltaX: e.deltaX,
+              deltaY: e.deltaY,
+              clientX: e.clientX,
+              clientY: e.clientY,
+            });
+          },
+          { passive: false }
+        );
+
+        window.addEventListener('message', function (e) {
+          if (!e.data) return;
+          if (e.data.type === 'PLIA_SET_CANVAS_MODE') {
+            canvasMode = !!e.data.on;
+            return;
+          }
+          if (e.data.type === 'PLIA_SET_TOOL') {
+            mode = e.data.tool === 'select' ? 'select' : 'none';
+            if (mode === 'none') {
+              if (hovered) { hovered.classList.remove('plia-hover'); hovered = null; }
+            }
+          } else if (e.data.type === 'PLIA_EDIT_TEXT' && selected) {
+            // Hacer editable el elemento seleccionado.
+            var before = selected.textContent;
+            selected.setAttribute('contenteditable', 'true');
+            selected.classList.add('plia-editing');
+            selected.focus();
+            var onBlur = function () {
+              selected.removeAttribute('contenteditable');
+              selected.classList.remove('plia-editing');
+              selected.removeEventListener('blur', onBlur);
+              var after = selected.textContent;
+              if (after !== before) {
+                send('PLIA_TEXT_CHANGED', { oldText: before.trim(), newText: after.trim() });
+              }
+            };
+            selected.addEventListener('blur', onBlur);
+          } else if (e.data.type === 'PLIA_REPLACE_IMG' && selected && selected.tagName === 'IMG') {
+            var oldSrc = selected.getAttribute('src');
+            selected.setAttribute('src', e.data.url);
+            send('PLIA_IMG_REPLACED', { oldSrc: oldSrc, newUrl: e.data.url });
+          } else if (e.data.type === 'PLIA_DRAG_OVER') {
+            // Drag de un asset desde el editor (coords en el viewport del
+            // iframe). Resaltamos la imagen bajo el cursor como destino.
+            var elAt = document.elementFromPoint(e.data.x, e.data.y);
+            if (dropTarget && dropTarget !== elAt) dropTarget.classList.remove('plia-drop');
+            if (elAt && elAt.tagName === 'IMG') {
+              dropTarget = elAt;
+              elAt.classList.add('plia-drop');
+              send('PLIA_DRAG_FEEDBACK', { over: true });
+            } else {
+              dropTarget = null;
+              send('PLIA_DRAG_FEEDBACK', { over: false });
+            }
+          } else if (e.data.type === 'PLIA_DRAG_DROP') {
+            var dropEl = document.elementFromPoint(e.data.x, e.data.y);
+            if (dropTarget) dropTarget.classList.remove('plia-drop');
+            dropTarget = null;
+            if (dropEl && dropEl.tagName === 'IMG') {
+              var prevSrc = dropEl.getAttribute('src');
+              dropEl.setAttribute('src', e.data.url);
+              send('PLIA_IMG_REPLACED', { oldSrc: prevSrc, newUrl: e.data.url });
+            }
+          } else if (e.data.type === 'PLIA_DRAG_END') {
+            if (dropTarget) { dropTarget.classList.remove('plia-drop'); dropTarget = null; }
+          }
+        });
+
+        document.addEventListener(
+          'mouseover',
+          function (e) {
+            if (mode !== 'select') return;
+            var el = e.target;
+            if (!isSelectable(el)) return;
+            if (hovered && hovered !== el) hovered.classList.remove('plia-hover');
+            hovered = el;
+            el.classList.add('plia-hover');
+          },
+          true
+        );
+        document.addEventListener(
+          'click',
+          function (e) {
+            if (mode !== 'select') return;
+            var el = e.target;
+            if (!isSelectable(el)) return;
+            e.preventDefault();
+            e.stopPropagation();
+            if (selected) selected.classList.remove('plia-selected');
+            if (hovered) hovered.classList.remove('plia-hover');
+            selected = el;
+            el.classList.add('plia-selected');
+            send('PLIA_ELEMENT_SELECTED', describe(el));
+          },
+          true
+        );
+      })();
+    </script>
+
+    <script>
+      (function () {
+        if (window.parent === window) return; // no estamos en iframe
+        var capturing = false;
+        window.addEventListener('message', async function (e) {
+          if (!e.data || e.data.type !== 'PLIA_CAPTURE') return;
+          if (capturing) return;
+          capturing = true;
+          try {
+            if (!window.html2canvas) {
+              await new Promise(function (resolve, reject) {
+                var s = document.createElement('script');
+                s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+                s.onload = resolve;
+                s.onerror = reject;
+                document.head.appendChild(s);
+              });
+            }
+            var canvas = await window.html2canvas(document.body, {
+              width: 1280,
+              height: 720,
+              windowWidth: 1280,
+              windowHeight: 720,
+              scale: 0.5,
+              useCORS: true,
+              backgroundColor: null,
+              logging: false,
+              allowTaint: true,
+            });
+            var dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+            (e.source || window.parent).postMessage(
+              { type: 'PLIA_SHOT', dataUrl: dataUrl },
+              '*'
+            );
+          } catch (err) {
+            console.warn('[PLIA] thumbnail capture fallo:', err && err.message);
+          } finally {
+            capturing = false;
+          }
+        });
+      })();
+    </script>
   </body>
 </html>

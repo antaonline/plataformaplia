@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 export const metadata: Metadata = {
   title: "Cómo Funciona PLIA — Tu Web Lista en 3 Pasos",
   description:
-    "Te contamos tu negocio, la IA crea tu web, nosotros la publicamos. Tu página web profesional con dominio y hosting en menos de 24 horas.",
+    "Nos cuentas de tu negocio y nosotros creamos y publicamos tu web. Tu página profesional con hosting incluido y tu dominio conectado, en menos de 24 horas.",
   keywords: [
     "cómo funciona PLIA",
     "crear página web fácil",
@@ -53,7 +53,7 @@ const faqJsonLd = {
       name: "¿El dominio y el hosting están incluidos?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "Sí. Dominio .pe o .com, hosting profesional, SSL y correos están incluidos en todos los planes.",
+        text: "El hosting profesional, el SSL y el soporte están incluidos en todos los planes, más un subdominio gratis para publicar de inmediato. El dominio propio (.pe o .com) lo registras tú y nosotros lo conectamos sin costo.",
       },
     },
     {
@@ -69,7 +69,7 @@ const faqJsonLd = {
       name: "¿Cuánto cuesta tener una página web con PLIA?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "Nuestros planes van desde S/19/mes para emprendedores hasta planes Agencia para múltiples sitios. Todo incluye diseño, hosting, dominio y soporte 24/7.",
+        text: "Los planes web tienen pago único desde S/390 (con prueba gratis de 30 días), y el hosting puro va desde S/16/mes. Todo incluye diseño, hosting y soporte.",
       },
     },
     {

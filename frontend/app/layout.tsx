@@ -15,8 +15,11 @@ export const metadata: Metadata = {
     default: "PLIA • Tu Web Fácil — Páginas web y hosting en Perú",
     template: "%s • PLIA",
   },
+  // NOTA DE VERACIDAD: PLIA no vende dominios. Incluimos subdominio gratis
+  // y ayudamos a conectar el dominio propio del cliente. Nunca prometer
+  // "dominio incluido" en metadata, copy ni schemas.
   description:
-    "PLIA crea tu página web profesional en 24 horas. Dominio, hosting, diseño y soporte — todo incluido. La plataforma web para emprendedores peruanos.",
+    "PLIA crea tu página web profesional en 24 horas. Hosting, diseño, seguridad y soporte — todo incluido, con subdominio gratis. La plataforma web para emprendedores peruanos.",
   keywords: [
     "PLIA",
     "Tu Web Fácil",
@@ -56,7 +59,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "PLIA • Tu Web Fácil — Páginas web y hosting en Perú",
     description:
-      "Tu página web profesional lista en 24 horas. Dominio, hosting y soporte incluidos. La plataforma para emprendedores peruanos.",
+      "Tu página web profesional lista en 24 horas. Hosting, diseño y soporte incluidos. La plataforma para emprendedores peruanos.",
     url: siteUrl,
     siteName: "PLIA",
     images: [
@@ -74,7 +77,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "PLIA • Tu Web Fácil — Páginas web y hosting en Perú",
     description:
-      "Tu página web lista en 24 horas. Dominio, hosting y soporte incluidos — todo en una sola plataforma.",
+      "Tu página web lista en 24 horas. Hosting, diseño y soporte incluidos — todo en una sola plataforma.",
     images: ["/pliaportadaurl.png"],
     creator: "@plia_pe",
   },
@@ -108,7 +111,7 @@ export default function RootLayout({
     logo: `${siteUrl}/iconblack-plia-cuadrado.svg`,
     image: `${siteUrl}/pliaportadaurl.png`,
     description:
-      "PLIA es la plataforma peruana para crear tu página web profesional. Incluye dominio, hosting, diseño y soporte — tu web lista en 24 horas, todo incluido.",
+      "PLIA es la plataforma peruana para crear tu página web profesional. Incluye hosting, diseño y soporte, con subdominio gratis y ayuda para conectar tu dominio — tu web lista en 24 horas.",
     areaServed: { "@type": "Country", name: "Perú" },
     address: {
       "@type": "PostalAddress",
@@ -125,6 +128,37 @@ export default function RootLayout({
     },
     // sameAs: agregar aquí las URLs de redes oficiales cuando estén confirmadas.
     sameAs: [],
+    // Dos líneas de negocio DISTINTAS: diseño de páginas web (500+ webs
+    // creadas) y web hosting (10,000+ clientes alojados). Declararlas por
+    // separado ayuda a Google a no mezclar las señales de cada servicio.
+    hasOfferCatalog: {
+      "@type": "OfferCatalog",
+      name: "Servicios de PLIA",
+      itemListElement: [
+        {
+          "@type": "Offer",
+          itemOffered: {
+            "@type": "Service",
+            name: "Diseño de páginas web en Perú",
+            serviceType: "Diseño y desarrollo de páginas web",
+            url: `${siteUrl}/diseno-de-paginas-web-peru`,
+            description:
+              "Páginas web profesionales listas en 24 horas con hosting, diseño y soporte incluidos. Más de 500 webs creadas para negocios peruanos.",
+          },
+        },
+        {
+          "@type": "Offer",
+          itemOffered: {
+            "@type": "Service",
+            name: "Web Hosting en Perú",
+            serviceType: "Web Hosting",
+            url: `${siteUrl}/web-hosting`,
+            description:
+              "Hosting web con LiteSpeed, discos NVMe, SSL y soporte 24/7. Más de 10,000 clientes alojados.",
+          },
+        },
+      ],
+    },
   };
   const websiteJsonLd = {
     "@context": "https://schema.org",

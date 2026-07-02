@@ -12,6 +12,8 @@ export const metadata: Metadata = {
   : null,
   title: "Plia",
   description: "Plataforma de soluciones web sin complicaciones",
+  // Páginas privadas (login, dashboard, checkout): fuera del índice de Google.
+  robots: { index: false, follow: false },
   openGraph: {
     title: "Plia Platform",
     description: "Tu Plataforma de soluciones web sin complicaciones",

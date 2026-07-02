@@ -22,6 +22,8 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { path: "/como-funciona", priority: 0.9, changeFrequency: "monthly" },
     { path: "/planes", priority: 0.9, changeFrequency: "weekly" },
     { path: "/web-hosting", priority: 0.9, changeFrequency: "weekly" },
+    { path: "/web-hosting/wordpress", priority: 0.85, changeFrequency: "monthly" },
+    { path: "/web-hosting/migracion", priority: 0.85, changeFrequency: "monthly" },
     ...(IACHAT_LANDING_PUBLIC
       ? [{ path: "/tu-web-con-ia", priority: 0.9, changeFrequency: "monthly" as const }]
       : []),

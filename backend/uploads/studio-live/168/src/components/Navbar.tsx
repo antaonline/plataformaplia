@@ -23,7 +23,7 @@ export default function Navbar() {
             Inicio
           </a>
           <a href="#properties" className="text-text font-body hover:text-primary transition-colors">
-            Propiedades
+            Cacadadez
           </a>
           <a href="#search" className="text-text font-body hover:text-primary transition-colors">
             Búsqueda Avanzada

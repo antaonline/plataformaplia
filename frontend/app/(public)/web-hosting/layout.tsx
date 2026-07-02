@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Hosting Web en Perú con dominio y SSL incluidos",
+  // OJO: el dominio propio NO está incluido en los planes de hosting (solo
+  // subdominio gratis). No prometer "dominio incluido" en ningún metadata.
+  title: "Hosting Web en Perú — LiteSpeed, NVMe, SSL y soporte 24/7",
   description:
-    "Hosting profesional en Perú con dominio, SSL, correos y soporte 24/7 incluidos. Activación inmediata desde S/19/mes. Ideal para emprendedores y pymes.",
+    "Hosting profesional en Perú con servidores LiteSpeed, discos NVMe, SSL, correos y soporte 24/7 incluidos. Migración gratis y activación inmediata desde S/16/mes.",
   keywords: [
     "hosting Peru",
     "hosting con dominio",
@@ -20,9 +22,9 @@ export const metadata: Metadata = {
   ],
   alternates: { canonical: "/web-hosting" },
   openGraph: {
-    title: "Hosting Web en Perú con dominio y SSL incluidos — PLIA",
+    title: "Hosting Web en Perú — LiteSpeed, NVMe y SSL | PLIA",
     description:
-      "Hosting profesional con dominio, SSL, correos y soporte 24/7. Activación inmediata desde S/19/mes.",
+      "Hosting profesional con LiteSpeed, NVMe, SSL, correos y soporte 24/7. Migración gratis, desde S/16/mes.",
     url: "/web-hosting",
     type: "website",
   },
@@ -30,42 +32,15 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Hosting Web en Perú • PLIA",
     description:
-      "Hosting profesional con dominio, SSL, correos y soporte 24/7 incluidos.",
+      "Hosting profesional con LiteSpeed, NVMe, SSL, correos y soporte 24/7 incluidos.",
   },
 };
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://plia.pe";
-
-const serviceJsonLd = {
-  "@context": "https://schema.org",
-  "@type": "Service",
-  serviceType: "Web Hosting",
-  name: "Hosting Web PLIA",
-  provider: {
-    "@type": "Organization",
-    name: "PLIA",
-    url: siteUrl,
-  },
-  areaServed: { "@type": "Country", name: "Peru" },
-  description:
-    "Hosting profesional en Perú con dominio, SSL, correos y soporte 24/7 incluidos.",
-  offers: {
-    "@type": "AggregateOffer",
-    priceCurrency: "PEN",
-    lowPrice: "19",
-    highPrice: "199",
-    offerCount: "3",
-  },
-};
-
+// NOTA: este layout envuelve también a las subpáginas del silo de hosting
+// (/web-hosting/wordpress, /web-hosting/migracion), que definen su propia
+// metadata y su propio JSON-LD. Por eso los schemas del PILAR viven en
+// schema.ts y se renderizan desde page.tsx — si estuvieran aquí se
+// duplicarían en cada subpágina.
 export default function WebHostingLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(serviceJsonLd) }}
-      />
-      {children}
-    </>
-  );
+  return <>{children}</>;
 }

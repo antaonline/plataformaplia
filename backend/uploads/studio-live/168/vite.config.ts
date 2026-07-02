@@ -1,22 +1,21 @@
-import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
-import path from 'path';
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react-swc";
+import path from "path";
 
-export default defineConfig({
-  // base se inyecta via VITE_PROXY_BASE para que todos los paths de assets
-  // apunten al proxy del backend en lugar de a la raiz del dominio.
-  base: process.env.VITE_PROXY_BASE || '/',
+export default defineConfig(() => ({
+  // base: "./" hace que el build genere paths RELATIVOS en index.html y
+  // sus chunks (./assets/...) — asi el SPA funciona tanto en root (/)
+  // como bajo un subpath (/uploads/studio-dist/<id>/). Sin esto Vite
+  // emite paths absolutos (/assets/) que solo funcionan en root.
+  base: "./",
+  server: {
+    host: "::",
+    port: 8080,
+  },
   plugins: [react()],
   resolve: {
-    alias: { '@': path.resolve(process.cwd(), 'src') },
+    alias: {
+      "@": path.resolve(__dirname, "./src"),
+    },
   },
-  server: {
-    host: '127.0.0.1',
-    strictPort: true,
-    allowedHosts: true,
-    // HMR desactivado: el browser no puede hacer WebSocket a 127.0.0.1 directamente.
-    // El refresh se maneja via previewNonce en el Studio cuando hay ediciones.
-    hmr: false,
-  },
-  clearScreen: false,
-});
+}));

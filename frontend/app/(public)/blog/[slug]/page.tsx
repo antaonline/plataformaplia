@@ -108,7 +108,7 @@ export default function BlogPostPage({ params }: { params: { slug: string } }) {
         {/* CTA final */}
         <div className="mt-14 rounded-[2rem] bg-foreground text-background px-8 py-10 text-center">
           <h2 className="text-2xl md:text-3xl font-black tracking-tight">¿Listo para tu página web?</h2>
-          <p className="mt-2 text-background/70">Lista en 24 horas, con dominio, hosting y soporte incluidos.</p>
+          <p className="mt-2 text-background/70">Lista en 24 horas, con hosting, seguridad y soporte incluidos.</p>
           <div className="mt-6 flex flex-wrap justify-center gap-3">
             <Link href="/planes" className="bg-cta text-cta-foreground font-semibold px-7 py-3 rounded-full hover:opacity-90 transition">Ver planes</Link>
             <Link href="/contacto" className="bg-background/10 border border-background/20 font-semibold px-7 py-3 rounded-full hover:bg-background/20 transition">Escríbenos</Link>

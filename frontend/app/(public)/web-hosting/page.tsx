@@ -28,6 +28,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { DeepParticleField } from "@/components/shared/DeepParticleField";
+import { serviceJsonLd, faqJsonLd, breadcrumbJsonLd } from "./schema";
 
 const termOptions = [
   { months: 1, label: "1 mes", note: "Flexibilidad" },
@@ -133,7 +134,11 @@ const faqs = [
   },
   {
     question: "¿Mi hosting viene con dominio gratis?",
-    answer: "El dominio es un servicio aparte, pero si ya tienes uno, te ayudamos a conectarlo sin costo. También puedes adquirir dominios de manera sencilla a través de nosotros.",
+    answer: "Incluye un subdominio gratis para que publiques de inmediato. El dominio propio (.pe o .com) no lo vendemos: lo registras tú con el proveedor que prefieras y nosotros te ayudamos a vincularlo a tu hosting sin costo.",
+  },
+  {
+    question: "¿Qué diferencia hay entre este hosting y el incluido en los planes web?",
+    answer: "Son servicios distintos. Si contratas un plan de diseño web (Landing o Web Institucional), el hosting de tu página va gratis el primer año y luego solo lo renuevas desde tu panel. Esta página describe nuestro servicio de hosting puro: para quienes ya tienen su web o la administran por su cuenta, con un panel enfocado 100% en hosting.",
   },
   {
     question: "¿Qué pasa si supero los límites de mi plan?",
@@ -218,6 +223,13 @@ export default function WebHostingPage() {
 
   return (
     <>
+      {/* JSON-LD del pilar de hosting (Service + FAQPage + Breadcrumb).
+          Se renderiza aquí (SSR) y no en el layout para no duplicarse en
+          las subpáginas /web-hosting/wordpress y /web-hosting/migracion. */}
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(serviceJsonLd) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }} />
+
       {/* HERO SECTION - HOSTINGER STYLE */}
       <section className="relative overflow-hidden bg-[#0d1117] pt-32 pb-24 md:pt-44 md:pb-32">
         {/* Background Gradients & Particles */}
@@ -236,12 +248,12 @@ export default function WebHostingPage() {
                   ))}
                 </div>
                 <span className="text-sm font-medium text-white/90">
-                  <span className="font-bold text-white">4.9/5</span> por más de 10,000 clientes
+                  <span className="font-bold text-white">4.9/5</span> por más de 10,000 clientes de hosting
                 </span>
               </div>
 
               <h1 className="text-5xl font-extrabold leading-[1.05] text-white md:text-6xl lg:text-[72px] tracking-tight">
-                Hosting Web <br />
+                Hosting Web en Perú <br />
                 <span className="text-transparent bg-clip-text bg-gradient-to-r from-cta via-[#d4ff55] to-cta animate-shimmer">
                   Ultra Rápido y Seguro.
                 </span>
@@ -254,7 +266,7 @@ export default function WebHostingPage() {
               {/* Quick Features */}
               <div className="mt-8 grid grid-cols-2 gap-4">
                  {[
-                   "Dominio Gratis (1er año)",
+                   "Subdominio gratis",
                    "Migración Web Gratuita",
                    "Soporte Experto 24/7",
                    "Certificado SSL Ilimitado"
@@ -550,6 +562,25 @@ export default function WebHostingPage() {
                 delay={index * 0.1}
               />
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* SILO INTERNO: enlaces a las subpáginas de hosting y al blog.
+          Mantienen el flujo de autoridad dentro del clúster de hosting. */}
+      <section className="bg-white px-4 pb-16">
+        <div className="mx-auto max-w-3xl text-center">
+          <h2 className="text-xl font-bold mb-4">Explora más sobre nuestro hosting</h2>
+          <div className="flex flex-wrap justify-center gap-3 text-sm">
+            <Link href="/web-hosting/wordpress" className="underline text-cta-foreground font-medium">
+              Hosting WordPress en Perú
+            </Link>
+            <Link href="/web-hosting/migracion" className="underline text-cta-foreground font-medium">
+              Migra tu web gratis a PLIA
+            </Link>
+            <Link href="/blog/cuanto-cuesta-el-hosting-en-peru" className="underline text-cta-foreground font-medium">
+              ¿Cuánto cuesta el hosting en Perú?
+            </Link>
           </div>
         </div>
       </section>

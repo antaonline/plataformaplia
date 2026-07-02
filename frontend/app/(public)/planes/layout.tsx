@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 export const metadata: Metadata = {
   title: "Planes y Precios de Páginas Web en Perú",
   description:
-    "Planes claros y económicos para tu página web en Perú. Diseño, hosting, dominio y soporte 24/7 incluidos desde S/19/mes. Sin sorpresas, sin letra chica.",
+    "Planes claros y económicos para tu página web en Perú. Diseño, hosting y soporte incluidos, con pago único desde S/390 y prueba gratis de 30 días. Sin sorpresas, sin letra chica.",
   keywords: [
     "precios página web Peru",
     "planes web Peru",
@@ -19,14 +19,14 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Planes y Precios — PLIA",
     description:
-      "Planes claros desde S/19/mes con diseño, hosting, dominio y soporte 24/7 incluidos.",
+      "Planes claros con diseño, hosting y soporte incluidos. Pago único desde S/390 y prueba gratis de 30 días.",
     url: "/planes",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
     title: "Planes PLIA",
-    description: "Páginas web desde S/19/mes con todo incluido.",
+    description: "Páginas web con hosting y soporte incluidos, pago único desde S/390.",
   },
 };
 
@@ -37,14 +37,14 @@ const productJsonLd = {
   "@type": "Product",
   name: "Planes PLIA — Página web profesional",
   description:
-    "Páginas web profesionales con diseño, hosting, dominio y soporte 24/7 incluidos.",
+    "Páginas web profesionales con diseño, hosting y soporte incluidos, subdominio gratis y conexión de tu dominio sin costo.",
   brand: { "@type": "Brand", name: "PLIA" },
   offers: {
     "@type": "AggregateOffer",
     priceCurrency: "PEN",
-    lowPrice: "19",
-    highPrice: "299",
-    offerCount: "4",
+    lowPrice: "390",
+    highPrice: "690",
+    offerCount: "2",
     seller: { "@type": "Organization", name: "PLIA", url: siteUrl },
   },
 };
