@@ -352,41 +352,113 @@ function StarField({ count, size, spread, opacity }: StarFieldProps) {
   );
 }
 
-export function DeepParticleField() {
+/** Fondo estático de respaldo cuando el navegador NO tiene WebGL disponible
+ *  (deshabilitado, sandboxed, GPU off, sesiones RDP/VM). Evita que el <Canvas>
+ *  de react-three-fiber lance "Error creating WebGL context" — esa excepción
+ *  no capturada tumbaba TODA la app (pantalla en blanco "Application error"). */
+function ParticleFallback() {
   return (
-    <div className="absolute inset-0 -z-10 pointer-events-none">
-      <Canvas
-        camera={{ position: [0, 0, 9], fov: 55 }}
-        dpr={[1, 1.5]}
-        gl={{ antialias: true, alpha: false }}
-      >
-        <color attach="background" args={["#000000"]} />
-        <StarField count={5200} size={0.012} spread={1.25} opacity={0.28} />
-        <ImageParticleField
-          imageUrl="/particulas22.jpg"
-          size={0.01}
-          spread={1.15}
-          speed={0.42}
-          depth={1}
-          threshold={0.46}
-          step={2}
-          maxPoints={42000}
-          yScale={0.4}
-          opacity={0.7}
-        />
-        <ImageParticleField
-          imageUrl="/particulas22.jpg"
-          size={0.034}
-          spread={1.05}
-          speed={0.4}
-          depth={1.2}
-          threshold={0.55}
-          step={2}
-          maxPoints={16000}
-          yScale={0.26}
-          opacity={1}
-        />
-      </Canvas>
-    </div>
+    <div
+      className="absolute inset-0 -z-10 pointer-events-none"
+      aria-hidden
+      style={{
+        background:
+          "radial-gradient(circle at 50% 35%, #12121c 0%, #05050a 60%, #000 100%)",
+      }}
+    />
+  );
+}
+
+/** Detecta si el navegador puede crear un contexto WebGL. Corre solo en cliente.
+ *  Devuelve null mientras no se sabe (primer render / SSR): en ese estado se
+ *  muestra el fondo estático, así nunca montamos el Canvas sin WebGL. */
+function useWebGLAvailable(): boolean | null {
+  const [available, setAvailable] = React.useState<boolean | null>(null);
+  useEffect(() => {
+    let ok = false;
+    try {
+      const canvas = document.createElement("canvas");
+      ok = !!(
+        window.WebGLRenderingContext &&
+        (canvas.getContext("webgl") || canvas.getContext("experimental-webgl"))
+      );
+    } catch {
+      ok = false;
+    }
+    setAvailable(ok);
+  }, []);
+  return available;
+}
+
+/** Error boundary local: si el Canvas WebGL llega a fallar al crearse (drivers,
+ *  contexto perdido, límite de contextos por dos instancias en la home, etc.),
+ *  mostramos el fondo estático en vez de romper la página entera. */
+class WebGLBoundary extends React.Component<
+  { children: React.ReactNode },
+  { failed: boolean }
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { failed: false };
+  }
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  componentDidCatch() {
+    // Degradación esperada (navegador sin WebGL). No es un error a reportar.
+  }
+  render() {
+    if (this.state.failed) return <ParticleFallback />;
+    return this.props.children as React.ReactElement;
+  }
+}
+
+export function DeepParticleField() {
+  const webglAvailable = useWebGLAvailable();
+
+  // Sin WebGL (o mientras se detecta) → fondo estático. NUNCA montamos el
+  // Canvas sin WebGL: eso lanzaba una excepción no capturada que dejaba toda
+  // la web en blanco en navegadores con WebGL deshabilitado/sandboxed.
+  if (!webglAvailable) {
+    return <ParticleFallback />;
+  }
+
+  return (
+    <WebGLBoundary>
+      <div className="absolute inset-0 -z-10 pointer-events-none">
+        <Canvas
+          camera={{ position: [0, 0, 9], fov: 55 }}
+          dpr={[1, 1.5]}
+          gl={{ antialias: true, alpha: false }}
+        >
+          <color attach="background" args={["#000000"]} />
+          <StarField count={5200} size={0.012} spread={1.25} opacity={0.28} />
+          <ImageParticleField
+            imageUrl="/particulas22.jpg"
+            size={0.01}
+            spread={1.15}
+            speed={0.42}
+            depth={1}
+            threshold={0.46}
+            step={2}
+            maxPoints={42000}
+            yScale={0.4}
+            opacity={0.7}
+          />
+          <ImageParticleField
+            imageUrl="/particulas22.jpg"
+            size={0.034}
+            spread={1.05}
+            speed={0.4}
+            depth={1.2}
+            threshold={0.55}
+            step={2}
+            maxPoints={16000}
+            yScale={0.26}
+            opacity={1}
+          />
+        </Canvas>
+      </div>
+    </WebGLBoundary>
   );
 }
