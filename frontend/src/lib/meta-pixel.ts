@@ -20,7 +20,11 @@
  * - Audiencia de Lookalike: "Similar a mis clientes" (basado en Purchase)
  */
 
-export const META_PIXEL_ID = process.env.NEXT_PUBLIC_META_PIXEL_ID;
+// ID del pixel de Meta de PLIA. Se puede sobrescribir por entorno con
+// NEXT_PUBLIC_META_PIXEL_ID; si no está definido, usa el pixel oficial por
+// defecto (el ID es público — aparece en el HTML de la web de todas formas).
+export const META_PIXEL_ID =
+  process.env.NEXT_PUBLIC_META_PIXEL_ID || '1431835472137167';
 
 // Tipos de eventos estándar de Meta
 export type MetaPixelEvent =
