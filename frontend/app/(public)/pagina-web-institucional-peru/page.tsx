@@ -32,6 +32,36 @@ export const metadata: Metadata = {
   },
 };
 
+// CTA único y CONSTANTE de esta landing: todo el tráfico de ads va al mismo
+// destino de pago. La institucional corresponde al plan Web del checkout.
+const CHECKOUT_HREF = '/checkout?plan=web';
+const CTA_LABEL = 'Crear mi web ahora';
+
+function PrimaryCTA({ className = '' }: { className?: string }) {
+  return (
+    <Link
+      href={CHECKOUT_HREF}
+      className={`bg-cta text-cta-foreground font-semibold px-7 py-3.5 rounded-full hover:opacity-90 transition inline-flex items-center justify-center gap-2 ${className}`}
+    >
+      {CTA_LABEL} <ArrowRight size={18} />
+    </Link>
+  );
+}
+
+// Barra fija en móvil: el CTA siempre visible mientras el visitante hace scroll.
+function MobileCtaBar() {
+  return (
+    <div className="md:hidden fixed bottom-0 inset-x-0 z-40 border-t border-white/10 bg-foreground/95 backdrop-blur px-4 py-3">
+      <Link
+        href={CHECKOUT_HREF}
+        className="flex w-full items-center justify-center gap-2 rounded-full bg-cta text-cta-foreground font-semibold px-6 py-3.5"
+      >
+        {CTA_LABEL} <ArrowRight size={18} />
+      </Link>
+    </div>
+  );
+}
+
 const trust = ['Hasta 5 páginas', 'Hosting incluido', 'Subdominio gratis', 'Lista en 48 horas'];
 
 const porQueNecesitas = [
@@ -168,7 +198,7 @@ export default function PaginaWebInstitucionalPeru() {
   };
 
   return (
-    <div>
+    <div className="pb-20 md:pb-0">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(serviceJsonLd) }} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }} />
@@ -190,17 +220,12 @@ export default function PaginaWebInstitucionalPeru() {
             <strong className="text-background">todo incluido</strong>, lista en 48 horas.
           </p>
           <div className="mt-9 flex flex-wrap justify-center gap-3">
-            <Link
-              href="/planes"
-              className="bg-cta text-cta-foreground font-semibold px-7 py-3.5 rounded-full hover:opacity-90 transition inline-flex items-center gap-2"
-            >
-              Ver planes y precios <ArrowRight size={18} />
-            </Link>
+            <PrimaryCTA />
             <Link
               href="/contacto"
               className="bg-background/10 border border-background/20 font-semibold px-7 py-3.5 rounded-full hover:bg-background/20 transition"
             >
-              Escríbenos ahora
+              Tengo una pregunta
             </Link>
           </div>
           <div className="mt-10 flex flex-wrap justify-center gap-x-6 gap-y-2 text-sm text-background/60">
@@ -284,6 +309,9 @@ export default function PaginaWebInstitucionalPeru() {
                 </div>
               );
             })}
+          </div>
+          <div className="mt-10 text-center">
+            <PrimaryCTA />
           </div>
         </div>
       </section>
@@ -414,22 +442,19 @@ export default function PaginaWebInstitucionalPeru() {
               Web institucional lista en 48 horas, con hosting, seguridad y soporte incluidos.
             </p>
             <div className="mt-8 flex flex-wrap justify-center gap-3">
-              <Link
-                href="/planes"
-                className="bg-cta text-cta-foreground font-semibold px-7 py-3.5 rounded-full hover:opacity-90 transition inline-flex items-center gap-2"
-              >
-                Ver planes y precios <ArrowRight size={18} />
-              </Link>
+              <PrimaryCTA />
               <Link
                 href="/contacto"
                 className="bg-background/10 border border-background/20 font-semibold px-7 py-3.5 rounded-full hover:bg-background/20 transition"
               >
-                Escríbenos
+                Tengo una pregunta
               </Link>
             </div>
           </div>
         </div>
       </section>
+
+      <MobileCtaBar />
     </div>
   );
 }
