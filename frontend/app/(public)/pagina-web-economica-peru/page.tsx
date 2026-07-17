@@ -3,6 +3,7 @@ import Link from 'next/link';
 import {
   Globe, ShieldCheck, Smartphone, Search, Headset, Server,
   Check, ArrowRight, X as XIcon, Zap, Clock, Sparkles,
+  CreditCard, LogIn, Rocket,
 } from 'lucide-react';
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://plia.pe';
@@ -61,7 +62,7 @@ function MobileCtaBar() {
   );
 }
 
-const trust = ['Todo incluido', 'Sin costos ocultos', 'Lista en 24 horas', 'Soporte en español'];
+const trust = ['Hosting gratis 1 año', 'Sin costos ocultos', 'Lista en 24 horas', 'Soporte en español'];
 
 const opciones = [
   {
@@ -107,7 +108,7 @@ const opciones = [
     highlight: true,
     items: [
       { ok: true, t: 'Precio accesible, todo incluido' },
-      { ok: true, t: 'Hosting + SSL + subdominio gratis en el mismo plan' },
+      { ok: true, t: 'Hosting gratis 1 año + SSL + subdominio en el mismo plan' },
       { ok: true, t: 'Lista en 24 horas (48 h web institucional)' },
       { ok: true, t: 'Soporte en español post-entrega' },
       { ok: true, t: 'Diseño profesional adaptado a tu sector' },
@@ -117,7 +118,7 @@ const opciones = [
 
 const incluye = [
   { icon: Globe, t: 'Tu dominio, conectado', d: 'Subdominio gratis al instante, y vinculamos tu dominio propio (.pe o .com) sin costo.' },
-  { icon: Server, t: 'Hosting veloz', d: 'Alojamiento rápido y seguro para que cargue en segundos.' },
+  { icon: Server, t: 'Hosting gratis por 1 año', d: 'Alojamiento rápido y seguro incluido sin costo el primer año. Pasado el año, renuevas solo el hosting.' },
   { icon: ShieldCheck, t: 'Certificado HTTPS', d: 'Seguridad SSL sin costo extra.' },
   { icon: Smartphone, t: 'Diseño responsive', d: 'Perfecta en celular, tablet y computadora.' },
   { icon: Search, t: 'SEO configurado', d: 'Lista para que Google te encuentre desde el primer día.' },
@@ -125,7 +126,7 @@ const incluye = [
 ];
 
 const sinCostosOcultos = [
-  'Sin mensualidad extra por el hosting',
+  'Hosting gratis el primer año (sin mensualidad)',
   'Sin cobro por conectar tu dominio propio',
   'Sin cobro por certificado de seguridad (SSL)',
   'Sin tarifa por "activación" o "configuración"',
@@ -240,9 +241,9 @@ export default function PaginaWebEconomicaPeru() {
             <span className="text-cta">sin pagar precio de agencia</span>
           </h1>
           <p className="mt-6 text-lg md:text-xl text-background/75 max-w-2xl mx-auto">
-            Hosting, diseño, seguridad y soporte{' '}
-            <strong className="text-background">todo incluido en un solo precio accesible</strong>.
-            Sin costos ocultos. Lista en 24 horas.
+            Diseño, seguridad, soporte y{' '}
+            <strong className="text-background">hosting gratis por 1 año</strong>, todo
+            incluido en un solo precio accesible. Sin costos ocultos. Lista en 24 horas.
           </p>
           <div className="mt-9 flex flex-wrap justify-center gap-3">
             <PrimaryCTA />
@@ -316,6 +317,65 @@ export default function PaginaWebEconomicaPeru() {
           </div>
           <div className="mt-10 text-center">
             <PrimaryCTA />
+          </div>
+        </div>
+      </section>
+
+      {/* ── ASÍ FUNCIONA: AUTOMATIZADO / ÚNICO EN PERÚ ───────────────── */}
+      <section className="bg-foreground text-background px-4 py-20 md:py-24 relative overflow-hidden">
+        <div className="absolute -right-24 top-10 w-80 h-80 rounded-full bg-cta/10 blur-3xl pointer-events-none" />
+        <div className="absolute -left-24 bottom-0 w-72 h-72 rounded-full bg-cta/5 blur-3xl pointer-events-none" />
+        <div className="relative max-w-6xl mx-auto">
+          <div className="max-w-3xl mx-auto text-center mb-14">
+            <span className="inline-block text-xs font-bold uppercase tracking-[0.2em] text-cta bg-cta/10 px-3 py-1.5 rounded-full mb-5">
+              No es un servicio convencional
+            </span>
+            <h2 className="text-3xl md:text-5xl font-black tracking-tight leading-[1.05]">
+              Pagas y el sistema hace el resto.{' '}
+              <span className="text-cta">Automático.</span>
+            </h2>
+            <p className="mt-5 text-background/70 text-lg leading-relaxed">
+              Nada de esperar días por correos ni coordinar mil reuniones. Apenas
+              confirmas tu pago, nuestra plataforma configura tu hosting sola, te da
+              acceso al instante, y tu web queda publicada en 24 horas. Tú solo esperas
+              a verla lista.
+            </p>
+          </div>
+
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
+            {[
+              { icon: CreditCard, n: '01', t: 'Pagas una vez', d: 'Eliges tu plan y pagas de forma segura. Un solo paso, sin trámites.' },
+              { icon: Server, n: '02', t: 'El sistema configura tu hosting', d: 'Automáticamente y al instante. Nadie tiene que hacerlo a mano ni hacerte esperar.' },
+              { icon: LogIn, n: '03', t: 'Accedes a tu cuenta', d: 'Entras a tu panel de inmediato y nos cuentas de tu negocio.' },
+              { icon: Rocket, n: '04', t: 'Tu web publicada en 24 h', d: 'La diseñamos y la ponemos online con tu hosting listo. Tú solo esperas a verla.' },
+            ].map((s) => {
+              const Icon = s.icon;
+              return (
+                <div key={s.n} className="rounded-3xl bg-background/5 border border-background/10 p-7">
+                  <div className="flex items-center justify-between mb-5">
+                    <div className="w-12 h-12 rounded-2xl bg-cta/15 text-cta grid place-items-center">
+                      <Icon size={22} />
+                    </div>
+                    <span className="text-4xl font-black text-background/10">{s.n}</span>
+                  </div>
+                  <h3 className="font-bold text-lg mb-1.5">{s.t}</h3>
+                  <p className="text-background/65 text-[14px] leading-relaxed">{s.d}</p>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="mt-12 text-center">
+            <p className="text-xl md:text-3xl font-black tracking-tight">
+              No hay ningún otro servicio igual en todo el Perú.
+            </p>
+            <p className="mt-3 text-background/60 max-w-2xl mx-auto">
+              Pago, configuración de hosting, publicación y soporte — todo automatizado
+              en una sola plataforma peruana. Así de simple, así de rápido.
+            </p>
+            <div className="mt-8">
+              <PrimaryCTA />
+            </div>
           </div>
         </div>
       </section>
