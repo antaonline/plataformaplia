@@ -419,8 +419,11 @@ export default function Home() {
                     Con PLIA es diferente ✨
                   </p>
                   <p className="text-muted-foreground">
-                    Tú nos cuentas qué hace tu negocio, nosotros creamos tu web profesional. 
-                    Sin términos raros, sin complicaciones. Así de simple.
+                    Tú nos cuentas qué hace tu negocio y nosotros nos encargamos del{' '}
+                    <Link href="/diseno-de-paginas-web-peru" className="text-cta-foreground font-semibold underline underline-offset-2 hover:opacity-80">
+                      diseño de páginas web en Perú
+                    </Link>
+                    . Sin términos raros, sin complicaciones. Así de simple.
                   </p>
                 </motion.div>
               </motion.div>

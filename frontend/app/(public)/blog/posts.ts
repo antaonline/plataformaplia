@@ -22,6 +22,131 @@ export interface BlogPost {
 
 export const POSTS: BlogPost[] = [
   {
+    slug: 'cuanto-cuesta-un-dominio-en-peru',
+    title: '¿Cuánto cuesta un dominio en Perú? Precios reales 2026',
+    description:
+      'Precios reales de un dominio en Perú en 2026: cuánto cuesta un .pe, .com.pe y .com, dónde registrarlo, qué incluye y cómo se relaciona con el hosting. Guía clara.',
+    keywords: [
+      'cuánto cuesta un dominio en Perú',
+      'precio dominio Perú',
+      'hosting y dominio precios Perú',
+      'cuánto cuesta un dominio .pe',
+      'registrar dominio Perú precio',
+    ],
+    category: 'Hosting y dominios',
+    date: '2026-07-23',
+    readingMinutes: 6,
+    cover: 'https://images.pexels.com/photos/1181675/pexels-photo-1181675.jpeg?auto=compress&cs=tinysrgb&w=1600',
+    content: `Si estás armando tu página web, seguro te preguntaste **cuánto cuesta un dominio en Perú** y por qué los precios varían tanto de un sitio a otro. Aquí te damos rangos reales del 2026, la diferencia entre las extensiones y cómo se relaciona el dominio con el hosting, para que no pagues de más ni te lleves sorpresas.
+
+## ¿Qué es un dominio y por qué se paga aparte?
+
+El **dominio** es la dirección de tu web (por ejemplo, *tunegocio.pe*). Es lo que la gente escribe para llegar a ti. El **hosting** es el espacio donde vive tu web. Son dos cosas distintas: el dominio se **alquila por año** ante un registrador, y el hosting se paga por su cuenta. Por eso muchas veces verás "hosting y dominio" juntos, pero son cargos separados.
+
+## Precios de dominio en Perú (2026)
+
+Estos son los rangos referenciales de **renovación anual**, según la extensión:
+
+| Extensión | Precio anual referencial | Para quién |
+|---|---|---|
+| **.pe** | S/ 45 – S/ 130 | Marca peruana, la más reconocida localmente |
+| **.com.pe** | S/ 45 – S/ 90 | Empresas peruanas |
+| **.com** | S/ 40 – S/ 75 | Alcance internacional o si el .pe está tomado |
+| **.net / .org** | S/ 45 – S/ 90 | Proyectos, ONGs, servicios |
+
+> El precio del **primer año** a veces es más barato como promoción. Revisa siempre cuánto cuesta la **renovación**, que es lo que pagarás cada año.
+
+## ¿Por qué varía tanto el precio?
+
+- **La extensión:** un .pe no cuesta lo mismo que un .com.
+- **Promociones del primer año:** gancho de entrada; ojo con la renovación.
+- **Servicios agregados:** algunos incluyen privacidad WHOIS, correos o redirecciones.
+- **El registrador:** cada empresa pone su margen sobre el precio base.
+
+## Dominio + hosting: cómo se relaciona con el precio total
+
+Cuando calculas el costo de tener tu web, suma **dos cosas**: el dominio (anual) y el hosting (mensual o anual). En PLIA, nuestros **[planes de hosting en Perú](/web-hosting)** parten desde **S/ 16 al mes** e incluyen un **subdominio gratis** para publicar de inmediato. El dominio propio (.pe o .com) **lo registras tú** con el registrador que prefieras, y nosotros te ayudamos a **vincularlo a tu hosting sin costo** — así tienes el control total de tu dominio y transparencia en lo que pagas.
+
+## ¿Dónde registro mi dominio .pe?
+
+Los dominios .pe se gestionan a través de registradores autorizados. Elige uno con soporte en español y precios de renovación claros. Si ya tienes tu web con nosotros, te guiamos en el proceso de registro y conexión para que no tengas que pelearte con la parte técnica ni con los DNS.
+
+## En resumen
+
+- Un **.pe** cuesta entre **S/ 45 y S/ 130** al año; un **.com**, entre **S/ 40 y S/ 75**.
+- El dominio se paga **aparte del hosting** y se **renueva cada año**.
+- Cuidado con el precio "promo" del primer año: mira siempre la **renovación**.
+- Con PLIA el hosting incluye **subdominio gratis** y te ayudamos a conectar tu dominio propio sin costo.
+
+¿Quieres tener tu web con hosting rápido y todo resuelto? **[Mira los planes de hosting](/web-hosting)** o **[revisa cómo conectamos tu dominio](/consigue-tu-dominio)**.`,
+  },
+  {
+    slug: 'como-vender-por-internet-en-peru',
+    title: 'Cómo vender por internet en Perú: guía paso a paso 2026',
+    description:
+      'Guía práctica para empezar a vender por internet en Perú en 2026: qué necesitas, métodos de pago, envíos, cómo conseguir clientes y los errores que debes evitar.',
+    keywords: [
+      'como vender por internet en peru',
+      'vender por internet Perú',
+      'cómo vender online en Perú',
+      'empezar a vender por internet',
+      'negocio por internet Perú',
+    ],
+    category: 'Vender online',
+    date: '2026-07-22',
+    readingMinutes: 8,
+    cover: 'https://images.pexels.com/photos/230544/pexels-photo-230544.jpeg?auto=compress&cs=tinysrgb&w=1600',
+    content: `Vender por internet en el Perú dejó de ser algo "para grandes empresas". Hoy una pastelería en Lima, un artesano en Cusco o una boutique en Piura pueden llegar a clientes de todo el país desde el celular. Pero entre el "quiero vender online" y las primeras ventas hay pasos concretos que conviene ordenar. Esta es la guía clara, sin humo, para hacerlo en 2026.
+
+## 1. Define qué vas a vender y a quién
+
+Antes de la tecnología, la estrategia. Responde tres preguntas: **qué** vendes (producto físico, digital o servicio), **a quién** (tu cliente ideal: edad, ciudad, qué problema le resuelves) y **qué te diferencia** (precio, calidad, rapidez, atención). Tener esto claro hace que todo lo demás —fotos, textos, precios— tenga dirección.
+
+## 2. Elige dónde vas a vender
+
+En Perú tienes tres caminos, y no son excluyentes:
+
+- **Redes sociales (Instagram, Facebook, TikTok):** ideales para mostrar y atraer, pero no son tuyas y no apareces en Google. Sirven para captar, no como base.
+- **Marketplaces (Mercado Libre, Linio):** te dan tráfico, pero cobran comisión y compites de frente por precio.
+- **Tu propia tienda online:** es tuya, apareces en Google, proyectas más profesionalismo y no pagas comisión por venta. Es la base más sólida a mediano plazo.
+
+Lo más potente es combinar: redes para atraer + tu tienda online como el lugar donde se concreta la venta.
+
+## 3. Resuelve los pagos (clave en Perú)
+
+Aquí muchos negocios se traban. Tu cliente peruano espera pagar como usa a diario:
+
+- **Yape y Plin** para montos pequeños y medianos (imprescindibles).
+- **Tarjeta de crédito/débito** vía una pasarela de pago (Culqi, Izipay, Mercado Pago).
+- **Transferencia bancaria** para clientes que la prefieren.
+
+Mientras más formas de pago aceptes, menos ventas pierdes por fricción.
+
+## 4. Organiza los envíos
+
+Define desde el inicio: ¿envías a todo el Perú o solo a tu ciudad? ¿Cobras el envío aparte o lo incluyes? En Perú lo común es trabajar con couriers (Olva, Shalom, Urbano) para provincias y delivery propio o apps para tu ciudad. Deja las reglas claras en tu tienda para evitar malentendidos.
+
+## 5. Consigue que te encuentren
+
+De nada sirve una tienda que nadie visita. Dos motores:
+
+- **SEO (aparecer en Google):** cuando alguien busca "comprar [tu producto] en Perú", tu tienda debe aparecer. Esto se construye con una web bien hecha y contenido. Te lo explicamos en **[posicionamiento web en Perú](/blog/posicionamiento-web-seo-en-peru-guia)**.
+- **Redes y WhatsApp:** comparte tu tienda, responde rápido y facilita el cierre por chat, que en Perú vende muchísimo.
+
+## Los errores que más cuestan
+
+1. **Vender solo por WhatsApp/DM:** funciona al inicio, pero te frena. Sin tienda pierdes ventas cuando no estás conectado y no apareces en Google.
+2. **Fotos malas y precios escondidos:** el cliente que no ve bien o no sabe el precio, no compra.
+3. **Pocos métodos de pago:** cada forma que falta es una venta que se va.
+4. **No pensar en el celular:** la mayoría de peruanos compra desde el teléfono. Si tu tienda no se ve bien ahí, perdiste.
+
+## ¿Y si no sé de tecnología?
+
+No necesitas saber. En **PLIA** desarrollamos tu **[tienda online en Perú](/tienda-online-peru)** a medida: catálogo, carrito, pagos integrados (Yape, Plin, tarjeta), hosting y soporte incluidos. Tú nos cuentas qué vendes y nosotros resolvemos toda la parte técnica, con un subdominio gratis para publicar y la opción de conectar tu dominio propio.
+
+¿Listo para empezar a vender por internet? **[Conoce cómo hacemos tu tienda online](/tienda-online-peru)** o **[escríbenos](/contacto)** y te asesoramos sin compromiso.`,
+  },
+  {
     slug: 'mejor-hosting-en-peru',
     title: 'Mejor hosting en Perú 2026: comparativa honesta para elegir bien',
     description:

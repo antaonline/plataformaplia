@@ -300,10 +300,12 @@ export default function WebHostingPage() {
         <div className="section-container">
           <div className="text-center max-w-3xl mx-auto mb-16">
             <h2 className="text-4xl md:text-5xl font-extrabold text-foreground tracking-tight mb-6">
-              Elige el plan perfecto para ti
+              Precios de hosting en Perú
             </h2>
             <p className="text-xl text-muted-foreground">
-              Precios transparentes. Ahorra más contratando a largo plazo.
+              Planes de hosting desde <strong className="text-foreground">S/ 16 al mes</strong>, con precios
+              transparentes y sin sorpresas al renovar. Servidores LiteSpeed, discos NVMe y SSL incluidos.
+              Ahorra más contratando a largo plazo.
             </p>
           </div>
 
@@ -577,6 +579,9 @@ export default function WebHostingPage() {
             </Link>
             <Link href="/web-hosting/migracion" className="underline text-cta-foreground font-medium">
               Migra tu web gratis a PLIA
+            </Link>
+            <Link href="/blog/mejor-hosting-en-peru" className="underline text-cta-foreground font-medium">
+              Mejor hosting en Perú 2026: comparativa
             </Link>
             <Link href="/blog/cuanto-cuesta-el-hosting-en-peru" className="underline text-cta-foreground font-medium">
               ¿Cuánto cuesta el hosting en Perú?

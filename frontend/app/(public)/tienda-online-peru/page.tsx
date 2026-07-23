@@ -2,16 +2,25 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import {
   ShoppingCart, Package, CreditCard, Globe, ShieldCheck, Smartphone,
-  Search, Headset, Server, Check, ArrowRight, X as XIcon,
-  Clock, Store,
+  Search, Headset, Server, Check, X as XIcon,
+  Clock, Store, MessageCircle,
 } from 'lucide-react';
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://plia.pe';
 
+// El ecommerce es un servicio a medida (mayor costo, más tiempo que una web
+// estándar) que POR AHORA se cotiza y atiende por WhatsApp — no se vende por el
+// checkout de planes web. Todos los CTA de venta de esta landing apuntan aquí.
+const WHATSAPP_ECOMMERCE =
+  'https://wa.me/51958617185?text=' +
+  encodeURIComponent(
+    'Hola 👋 vengo de la web de PLIA y quiero solicitar el servicio de desarrollo de ecommerce (tienda virtual). ¿Cómo empezamos?'
+  );
+
 export const metadata: Metadata = {
-  title: 'Tienda Online en Perú — Lista para vender en 48 horas | PLIA',
+  title: 'Tienda Online en Perú — Tu ecommerce a medida | PLIA',
   description:
-    'Crea tu tienda online en Perú con catálogo, carrito de compras y pagos integrados. Hosting, seguridad y soporte incluidos. Lista en 48 horas sin saber de tecnología.',
+    'Desarrollamos tu tienda online en Perú a medida: catálogo, carrito de compras y pagos integrados, con hosting y soporte incluidos. Servicio rápido, atendido por WhatsApp.',
   keywords: [
     'tienda online Perú',
     'crear tienda online Perú',
@@ -25,9 +34,9 @@ export const metadata: Metadata = {
   ],
   alternates: { canonical: '/tienda-online-peru' },
   openGraph: {
-    title: 'Tienda Online en Perú — Lista para vender en 48 horas | PLIA',
+    title: 'Tienda Online en Perú — Tu ecommerce a medida | PLIA',
     description:
-      'Catálogo, carrito, pagos y hosting incluidos. Tu tienda online en Perú lista en 48 horas.',
+      'Catálogo, carrito, pagos y hosting incluidos. Tu tienda online en Perú, desarrollada a medida.',
     url: '/tienda-online-peru',
     type: 'website',
   },
@@ -73,8 +82,8 @@ const diferenciadores = [
   },
   {
     icon: Clock,
-    t: 'Lista en 48 horas',
-    d: 'Sin esperar semanas, sin reuniones interminables. Tu tienda funciona antes de que termine la semana.',
+    t: 'Servicio rápido',
+    d: 'Nada de proyectos eternos. Trabajamos tu tienda en tiempo récord para el mercado y te mantenemos al tanto en cada paso.',
   },
   {
     icon: ShieldCheck,
@@ -92,7 +101,7 @@ const sectores = [
 const pasos = [
   { n: '01', t: 'Cuéntanos de tu tienda', d: 'Qué vendes, cuántos productos tienes y cómo quieres que se vea tu negocio online.' },
   { n: '02', t: 'Creamos tu tienda online', d: 'Diseñamos tu catálogo, configuramos los pagos y dejamos todo listo para vender.' },
-  { n: '03', t: 'Publicas en 48 horas', d: 'Con hosting, seguridad y soporte. Tu tienda abierta y lista para recibir pedidos.' },
+  { n: '03', t: 'Publicamos tu tienda', d: 'Con hosting, seguridad y soporte. Coordinamos contigo cada avance hasta dejarla lista para recibir pedidos.' },
 ];
 
 const faqs = [
@@ -118,7 +127,7 @@ const faqs = [
   },
   {
     q: '¿En cuánto tiempo estará lista mi tienda?',
-    a: 'En 48 horas ya tienes tu tienda funcionando con productos, pagos y tu dirección web configurados.',
+    a: 'Al ser un desarrollo a medida, el tiempo depende del tamaño de tu catálogo y las funciones que necesites. Coordinamos un estimado contigo desde el inicio y trabajamos para entregarte una tienda profesional en el menor tiempo posible.',
   },
 ];
 
@@ -132,7 +141,7 @@ export default function TiendaOnlinePeru() {
     areaServed: { '@type': 'Country', name: 'Perú' },
     url: `${siteUrl}/tienda-online-peru`,
     description:
-      'Creación de tiendas online en Perú con catálogo, carrito de compras, pagos integrados, hosting y seguridad incluidos. Lista en 48 horas.',
+      'Creación de tiendas online en Perú con catálogo, carrito de compras, pagos integrados, hosting y seguridad incluidos. Desarrollo a medida atendido por especialistas.',
   };
   const faqJsonLd = {
     '@context': 'https://schema.org',
@@ -168,24 +177,26 @@ export default function TiendaOnlinePeru() {
           </span>
           <h1 className="text-4xl md:text-6xl font-black tracking-tight leading-[1.05]">
             Empieza a vender por internet<br />
-            <span className="text-cta">en 48 horas</span>
+            <span className="text-cta">con tu tienda online</span>
           </h1>
           <p className="mt-6 text-lg md:text-xl text-background/75 max-w-2xl mx-auto">
-            Tu tienda con catálogo, carrito y pagos integrados.
+            Desarrollamos tu tienda a medida con catálogo, carrito y pagos integrados.
             Hosting, seguridad y soporte <strong className="text-background">todo incluido</strong> — sin saber de tecnología.
           </p>
           <div className="mt-9 flex flex-wrap justify-center gap-3">
-            <Link
-              href="/planes"
+            <a
+              href={WHATSAPP_ECOMMERCE}
+              target="_blank"
+              rel="noopener noreferrer"
               className="bg-cta text-cta-foreground font-semibold px-7 py-3.5 rounded-full hover:opacity-90 transition inline-flex items-center gap-2"
             >
-              Ver planes y precios <ArrowRight size={18} />
-            </Link>
+              Solicitar mi tienda online <MessageCircle size={18} />
+            </a>
             <Link
               href="/contacto"
               className="bg-background/10 border border-background/20 font-semibold px-7 py-3.5 rounded-full hover:bg-background/20 transition"
             >
-              Escríbenos ahora
+              Escríbenos
             </Link>
           </div>
           <div className="mt-10 flex flex-wrap justify-center gap-x-6 gap-y-2 text-sm text-background/60">
@@ -394,15 +405,17 @@ export default function TiendaOnlinePeru() {
               Tu tienda online te está esperando
             </h2>
             <p className="mt-3 text-background/70 max-w-xl mx-auto text-lg">
-              Lista en 48 horas, con todo incluido. Empieza a vender por internet hoy mismo.
+              Desarrollo a medida con todo incluido. Escríbenos por WhatsApp y empieza a vender por internet.
             </p>
             <div className="mt-8 flex flex-wrap justify-center gap-3">
-              <Link
-                href="/planes"
+              <a
+                href={WHATSAPP_ECOMMERCE}
+                target="_blank"
+                rel="noopener noreferrer"
                 className="bg-cta text-cta-foreground font-semibold px-7 py-3.5 rounded-full hover:opacity-90 transition inline-flex items-center gap-2"
               >
-                Ver planes y precios <ArrowRight size={18} />
-              </Link>
+                Solicitar mi tienda online <MessageCircle size={18} />
+              </a>
               <Link
                 href="/contacto"
                 className="bg-background/10 border border-background/20 font-semibold px-7 py-3.5 rounded-full hover:bg-background/20 transition"

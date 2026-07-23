@@ -35,9 +35,17 @@ const incluye = [
 ];
 
 const tipos = [
-  { t: 'Landing page', d: 'Una página enfocada en vender o captar contactos. Ideal para empezar.', href: '/planes' },
-  { t: 'Web institucional', d: 'Varias páginas para proyectar tu empresa con profesionalismo.', href: '/planes' },
-  { t: 'Tienda online', d: 'Vende tus productos por internet con pagos y envíos.', href: '/ecommerce' },
+  { t: 'Página web económica', d: 'Una página enfocada en vender o captar contactos. Ideal para empezar.', href: '/pagina-web-economica-peru' },
+  { t: 'Web institucional', d: 'Varias páginas para proyectar tu empresa con profesionalismo.', href: '/pagina-web-institucional-peru' },
+  { t: 'Tienda online', d: 'Vende tus productos por internet con pagos y envíos.', href: '/tienda-online-peru' },
+];
+
+// Testimonios reales de clientes (los mismos que se muestran en el home).
+// Aportan prueba social y señales E-E-A-T a la página bandera.
+const testimonios = [
+  { txt: 'No sabía nada de páginas web y tenía miedo de que fuera muy difícil. PLIA me hizo todo fácil, ahora mis clientes me encuentran en Google y mis pedidos aumentaron.', n: 'María García', r: 'Pastelería Dulce María — Lima' },
+  { txt: 'Pensé que tener una web era solo para empresas grandes. Con PLIA tuve mi página en menos de una semana y el precio fue muy accesible.', n: 'Carlos Mendoza', r: 'Taller Mecánico El Rayo — Arequipa' },
+  { txt: 'El equipo de PLIA entendió exactamente lo que necesitaba. Mi web se ve muy profesional y mis pacientes pueden agendar citas fácilmente.', n: 'Ana Lucía Torres', r: 'Consultorio Dental Sonrisa — Trujillo' },
 ];
 
 const proceso = [
@@ -109,6 +117,33 @@ export default function DisenoWebPeru() {
         </div>
       </section>
 
+      {/* INTRO SEO — contenido rico en keywords para la página bandera */}
+      <section className="px-4 py-16 md:py-20">
+        <div className="max-w-3xl mx-auto">
+          <h2 className="text-2xl md:text-3xl font-black tracking-tight mb-5">
+            Diseño de páginas web profesional para negocios peruanos
+          </h2>
+          <p className="text-muted-foreground text-lg leading-relaxed mb-4">
+            En PLIA hacemos <strong className="text-foreground">diseño de páginas web en Perú</strong> pensado
+            para emprendedores, pymes y empresas que necesitan una presencia online seria sin complicarse con
+            la parte técnica. Nos cuentas de tu negocio y nosotros nos encargamos del diseño, el contenido, el
+            hosting y la publicación — tú solo apruebas y empiezas a recibir clientes.
+          </p>
+          <p className="text-muted-foreground text-lg leading-relaxed mb-4">
+            A diferencia de contratar un freelance por tu cuenta o pelearte con una plantilla de Wix, con
+            nosotros tienes un equipo peruano detrás: diseño a medida de tu rubro, optimización para que
+            aparezcas en Google, versión perfecta para celular y soporte en español cuando lo necesites.
+            Ya sea una <strong className="text-foreground">landing económica</strong>, una{' '}
+            <strong className="text-foreground">web institucional</strong> o una{' '}
+            <strong className="text-foreground">tienda online</strong>, la dejamos lista y funcionando.
+          </p>
+          <p className="text-muted-foreground text-lg leading-relaxed">
+            Todo incluido en un solo lugar: sin coordinar tres proveedores, sin sorpresas de costos y sin
+            tecnicismos. Así es como más de 500 negocios peruanos ya tienen su página web con PLIA.
+          </p>
+        </div>
+      </section>
+
       {/* TODO INCLUIDO */}
       <section className="bg-[#f7f7f5] px-4 py-20 md:py-24">
         <div className="max-w-6xl mx-auto">
@@ -165,6 +200,27 @@ export default function DisenoWebPeru() {
                 <h3 className="text-xl font-bold mt-2 mb-2">{p.t}</h3>
                 <p className="text-muted-foreground">{p.d}</p>
               </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* TESTIMONIOS — prueba social */}
+      <section className="bg-[#f7f7f5] px-4 py-20 md:py-24">
+        <div className="max-w-6xl mx-auto">
+          <div className="max-w-2xl mb-12">
+            <p className="text-xs font-bold uppercase tracking-[0.2em] text-cta-foreground mb-3">Clientes felices</p>
+            <h2 className="text-3xl md:text-4xl font-black tracking-tight">Negocios peruanos que ya confían en PLIA</h2>
+          </div>
+          <div className="grid md:grid-cols-3 gap-5">
+            {testimonios.map((t) => (
+              <figure key={t.n} className="bg-white rounded-3xl border border-border p-7 flex flex-col">
+                <blockquote className="text-[15px] leading-relaxed text-foreground/85 flex-1">“{t.txt}”</blockquote>
+                <figcaption className="mt-5">
+                  <p className="font-bold">{t.n}</p>
+                  <p className="text-sm text-muted-foreground">{t.r}</p>
+                </figcaption>
+              </figure>
             ))}
           </div>
         </div>
