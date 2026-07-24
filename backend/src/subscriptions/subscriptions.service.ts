@@ -12,8 +12,8 @@ export class SubscriptionsService {
     private izipay: IzipayService,
   ) {}
 
-  async createAnnual(projectId: number, type: 'LANDING' | 'WEB', cardToken?: string) {
-    const amount = type === 'LANDING' ? 135 : 165;
+  async createAnnual(projectId: number, type: 'LANDING' | 'WEB' | 'EXPRESS', cardToken?: string) {
+    const amount = type === 'LANDING' ? 135 : type === 'EXPRESS' ? 90 : 165;
 
     const project = await this.prisma.project.findUnique({
       where: { id: projectId },

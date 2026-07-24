@@ -152,11 +152,14 @@ export class PaymentsService {
       });
 
       const isLanding = order.plan?.slug?.toLowerCase().includes('landing') || order.planId === 1;
+      const isExpress =
+        order.plan?.slug?.toLowerCase().includes('express') ||
+        order.plan?.name?.toLowerCase().includes('express');
 
       if (!existingSubscription) {
         await this.subscriptionsService.createAnnual(
           project.id,
-          isLanding ? 'LANDING' : 'WEB',
+          isExpress ? 'EXPRESS' : isLanding ? 'LANDING' : 'WEB',
           cardToken,
         );
       } else {

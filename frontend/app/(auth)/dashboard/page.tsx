@@ -921,6 +921,20 @@ export default function DashboardPage() {
     }));
   }, [project]);
 
+  // Autocompleta el nombre del negocio traido del embudo /tu-web-hoy (plan
+  // express). Se guardo en localStorage en el checkout. Solo rellena si el
+  // brief aun no tiene nombre; la data del proyecto siempre tiene prioridad.
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('plia_express_business');
+      if (stored && stored.trim()) {
+        setFormData((prev) =>
+          prev.businessName?.trim() ? prev : { ...prev, businessName: stored.trim() },
+        );
+      }
+    } catch {}
+  }, []);
+
   const handleSelectProject = (proj: Project) => {
     const normalized = normalizeProject(proj);
     setSelectedProjectId(normalized.id);
@@ -962,14 +976,15 @@ export default function DashboardPage() {
     const diff = Math.max(deadlineMs - now, 0);
     const days = Math.floor(diff / (1000 * 60 * 60 * 24));
     const hours = Math.floor((diff / (1000 * 60 * 60)) % 24);
-    
+    const minutes = Math.floor((diff / (1000 * 60)) % 60);
+
     return {
       progressPercent: Math.round(progress * 100),
       currentStep: step,
       isComplete,
       hasAiError,
       aiErrorMsg: isStuck ? 'El plazo de entrega ha vencido y el sitio aun no esta listo. Esto puede deberse a un error en el servidor de IA.' : aiGeneration.error,
-      timeRemaining: { days, hours },
+      timeRemaining: { days, hours, minutes },
       deadlineMs,
     };
   }, [project?.deadline, project?.startedAt, project?.status, project?.type, project?.onboardingData, now]);
@@ -3296,7 +3311,9 @@ export default function DashboardPage() {
                       <div className="flex items-center justify-between">
                         <span className="text-sm text-muted-foreground">Entrega estimada</span>
                         <span className="text-sm font-semibold">
-                          {(project?.type === 'LANDING' || project?.order?.plan?.name?.toLowerCase().includes('landing')) ? '1 día' : '2 días'}
+                          {project?.order?.plan?.name?.toLowerCase().includes('express')
+                            ? 'Hoy mismo'
+                            : (project?.type === 'LANDING' || project?.order?.plan?.name?.toLowerCase().includes('landing')) ? '1 día' : '2 días'}
                         </span>
                       </div>
                       <div className="rounded-xl border border-border p-3 text-xs text-muted-foreground">
@@ -3574,7 +3591,11 @@ export default function DashboardPage() {
                             <div>
                               <p className="text-sm text-muted-foreground">Tiempo restante</p>
                               <p className="text-xl font-semibold">
-                                {progressInfo.timeRemaining.days}d {progressInfo.timeRemaining.hours}h
+                                {progressInfo.timeRemaining.days > 0
+                                  ? `${progressInfo.timeRemaining.days}d ${progressInfo.timeRemaining.hours}h`
+                                  : progressInfo.timeRemaining.hours > 0
+                                    ? `${progressInfo.timeRemaining.hours}h ${progressInfo.timeRemaining.minutes}m`
+                                    : `${progressInfo.timeRemaining.minutes}m`}
                               </p>
                             </div>
                             <div className="text-sm text-muted-foreground">Entrega estimada</div>

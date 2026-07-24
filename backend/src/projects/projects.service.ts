@@ -15,6 +15,16 @@ import { join } from 'path';
 
 const LANDING_DEVELOPMENT_HOURS = 24;
 const WEB_DEVELOPMENT_DAYS = 2;
+// Plan EXPRESS (S/100): plazo tecnico interno de 1 hora. Publicamente se
+// comunica como "lista hoy mismo". Cambiar solo este valor si se ajusta.
+const EXPRESS_DEVELOPMENT_HOURS = 1;
+
+// Detecta el plan EXPRESS por slug/nombre a partir de un objeto plan.
+export function isExpressPlan(plan?: { slug?: string | null; name?: string | null } | null): boolean {
+  const slug = plan?.slug?.toLowerCase() || '';
+  const name = plan?.name?.toLowerCase() || '';
+  return slug.includes('express') || name.includes('express');
+}
 
 @Injectable()
 export class ProjectsService {
@@ -612,12 +622,15 @@ p{color:#cbd5e1;font-size:1.05rem;line-height:1.7;margin-bottom:28px}
     let deadline = project.deadline ?? null;
 
     if (shouldStart) {
+      const isExpress = isExpressPlan(project.order?.plan);
       const isLanding =
         project.type === 'LANDING' ||
         project.order?.plan?.slug?.toLowerCase().includes('landing') ||
         project.order?.plan?.name?.toLowerCase().includes('landing');
 
-      if (isLanding) {
+      if (isExpress) {
+        deadline = addHours(new Date(), EXPRESS_DEVELOPMENT_HOURS);
+      } else if (isLanding) {
         deadline = addHours(new Date(), LANDING_DEVELOPMENT_HOURS);
       } else {
         deadline = addDays(new Date(), WEB_DEVELOPMENT_DAYS);
@@ -792,8 +805,12 @@ p{color:#cbd5e1;font-size:1.05rem;line-height:1.7;margin-bottom:28px}
     // Determinar tipo por slug o nombre if available
     const planSlug = plan?.slug?.toLowerCase() || '';
     const planName = plan?.name?.toLowerCase() || '';
+    // El plan EXPRESS se trata como LANDING (sitio de una pagina, 1 revision).
     const isLanding =
-      planSlug.includes('landing') || planName.includes('landing') || order.planId === 1;
+      planSlug.includes('landing') ||
+      planName.includes('landing') ||
+      isExpressPlan(plan) ||
+      order.planId === 1;
 
     return this.prisma.project.create({
       data: {

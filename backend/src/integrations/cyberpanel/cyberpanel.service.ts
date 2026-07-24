@@ -643,7 +643,7 @@ export class CyberpanelService {
   async ensureSite(projectId: number): Promise<EnsureSiteResult> {
     const project = await this.prisma.project.findUnique({
       where: { id: projectId },
-      include: { user: true },
+      include: { user: true, order: { include: { plan: true } } },
     });
     if (!project) {
       return {
@@ -732,12 +732,21 @@ export class CyberpanelService {
       '';
     // FREEMIUM: las webs en prueba arrancan con el paquete limitado admin_free.
     // Al pagar, activateTrialForUser hace changePackage al paquete pago (Default).
-    const trialPackage = (project as any).isTrial
+    // EXPRESS (S/100): usa el paquete acotado admin_plia-100 (1GB, 1 sitio).
+    const planForSite = (project as any).order?.plan;
+    const isExpressSite = !!(
+      planForSite &&
+      (String(planForSite.slug || '').toLowerCase().includes('express') ||
+        String(planForSite.name || '').toLowerCase().includes('express'))
+    );
+    const provisionPackage = (project as any).isTrial
       ? (process.env.CYBERPANEL_PACKAGE_FREE || 'admin_free')
-      : undefined;
-    const siteRequest = this.buildWebsiteRequest(domain, account, ownerPassword, trialPackage);
+      : isExpressSite
+        ? (process.env.CYBERPANEL_PACKAGE_EXPRESS || 'admin_plia-100')
+        : undefined;
+    const siteRequest = this.buildWebsiteRequest(domain, account, ownerPassword, provisionPackage);
     try {
-      const response = await this.createSiteForAccount(domain, account, ownerPassword, trialPackage);
+      const response = await this.createSiteForAccount(domain, account, ownerPassword, provisionPackage);
       await this.prisma.project.update({
         where: { id: projectId },
         data: {

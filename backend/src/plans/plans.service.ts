@@ -48,6 +48,29 @@ export class PlansService {
         serviceType: PlanServiceType.WEBSITE_BUILD,
       },
     })
+
+    // Plan EXPRESS (S/100): solo se promociona en anuncios de Facebook a traves
+    // del embudo /tu-web-hoy y del link directo /checkout?plan=express. No se
+    // lista en las paginas publicas de precios.
+    await this.prisma.plan.upsert({
+      where: { slug: 'web-express' },
+      update: {
+        name: 'WEB EXPRESS',
+        description: 'Pagina web express + hosting gratis 1 ano. Lista el mismo dia.',
+        price: 100,
+        hostingYear: true,
+        slug: 'web-express',
+        serviceType: PlanServiceType.WEBSITE_BUILD,
+      },
+      create: {
+        name: 'WEB EXPRESS',
+        description: 'Pagina web express + hosting gratis 1 ano. Lista el mismo dia.',
+        price: 100,
+        hostingYear: true,
+        slug: 'web-express',
+        serviceType: PlanServiceType.WEBSITE_BUILD,
+      },
+    })
   }
 
   async findAll(page = 1, limit = 10) {

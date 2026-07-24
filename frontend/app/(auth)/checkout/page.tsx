@@ -50,6 +50,10 @@ function Content() {
 
   const planParam = (searchParams.get('plan') ?? '').toLowerCase();
   const domainParam = searchParams.get('domain') ?? '';
+  const businessParam = searchParams.get('business') ?? '';
+  // El plan EXPRESS (S/100) llega desde el embudo /tu-web-hoy y muestra la
+  // barra de urgencia con cuenta regresiva.
+  const isExpress = planParam === 'express';
 
   const [step, setStep] = useState<1 | 2>(1);
   const [plans, setPlans] = useState<Plan[]>([]);
@@ -80,6 +84,9 @@ function Content() {
 
   const [useSavedBilling, setUseSavedBilling] = useState(true);
   const [currentUser, setCurrentUser] = useState<any>(null);
+
+  // Cuenta regresiva de la oferta express (3 min). Solo visual/urgencia.
+  const [offerSeconds, setOfferSeconds] = useState(180);
 
   // 2. TODAS tus funciones de lógica (handleNext, etc.) van AQUÍ
 
@@ -144,6 +151,25 @@ function Content() {
       }
     }, [email]);
 
+    // Guarda el nombre del negocio traido del embudo para autocompletar el
+    // brief del dashboard despues del pago.
+    useEffect(() => {
+      if (businessParam.trim()) {
+        try {
+          localStorage.setItem('plia_express_business', businessParam.trim());
+        } catch {}
+      }
+    }, [businessParam]);
+
+    // Tick de la cuenta regresiva de la oferta express.
+    useEffect(() => {
+      if (!isExpress) return;
+      const t = setInterval(() => {
+        setOfferSeconds((s) => (s > 0 ? s - 1 : 0));
+      }, 1000);
+      return () => clearInterval(t);
+    }, [isExpress]);
+
     useEffect(() => {
       if (!plans.length) return;
 
@@ -159,10 +185,12 @@ function Content() {
 
       if (param === 'landing') {
         match = plans.find((p) => normalize(p.name).includes('landing'));
+      } else if (param === 'express') {
+        match = plans.find((p) => normalize(p.name).includes('express'));
       } else if (param === 'web') {
         match = plans.find((p) => {
           const n = normalize(p.name);
-          return n.includes('web') || n.includes('institucional');
+          return n.includes('institucional') || (n.includes('web') && !n.includes('express'));
         });
       }
 
@@ -411,6 +439,44 @@ function Content() {
 
   return (
     <div>
+      {isExpress && (
+        <div className="sticky top-0 z-50 w-full bg-[#0a0a0a] text-white">
+          <div className="max-w-5xl mx-auto px-4 py-2 flex items-center justify-between gap-3">
+            {offerSeconds > 0 ? (
+              <>
+                <div className="flex items-center gap-2 text-left text-xs sm:text-sm leading-snug">
+                  <span className="text-lg shrink-0" aria-hidden>🎁</span>
+                  <span className="font-medium">
+                    Tu oferta de{' '}
+                    <b className="text-cta">S/100 + hosting gratis 1 año</b> está
+                    reservada por
+                  </span>
+                </div>
+                <b className="tabular-nums text-cta font-extrabold leading-none shrink-0 text-3xl md:text-4xl">
+                  {Math.floor(offerSeconds / 60)}:
+                  {String(offerSeconds % 60).padStart(2, '0')}
+                </b>
+              </>
+            ) : (
+              <div className="flex items-center justify-center gap-2 w-full text-center text-xs sm:text-sm">
+                <span className="text-lg" aria-hidden>🎁</span>
+                <span className="font-medium">
+                  <b className="text-cta">¡Últimos momentos!</b> Completa tu pago para
+                  asegurar tu web hoy mismo.
+                </span>
+              </div>
+            )}
+          </div>
+          {offerSeconds > 0 && (
+            <div className="h-1 w-full bg-white/10 overflow-hidden">
+              <div
+                className="h-full bg-cta transition-all duration-1000 ease-linear"
+                style={{ width: `${(offerSeconds / 180) * 100}%` }}
+              />
+            </div>
+          )}
+        </div>
+      )}
       <section className="bg-muted/30 py-10 md:py-16">
         <div className="section-container w-full max-w-5xl mx-auto px-4">
           <div className="flex items-center gap-3 mb-6">
@@ -488,11 +554,13 @@ function Content() {
                             <option value="" disabled>
                               Selecciona un plan
                             </option>
-                            {plans.map((plan) => (
-                              <option key={plan.id} value={plan.id}>
-                                {plan.name}
-                              </option>
-                            ))}
+                            {plans
+                              .filter((plan) => !plan.name.toLowerCase().includes('express'))
+                              .map((plan) => (
+                                <option key={plan.id} value={plan.id}>
+                                  {plan.name}
+                                </option>
+                              ))}
                           </select>
                         </div>
                       )}

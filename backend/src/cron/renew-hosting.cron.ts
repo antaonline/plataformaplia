@@ -58,8 +58,13 @@ export class RenewHostingCron {
       }
 
       if (sub.status === 'ACTIVE' && now >= dueAt) {
-        const isLanding = sub.plan?.slug?.toLowerCase().includes('landing') || sub.planId === 1;
-        const renewalAmount = Number(sub.cycleAmount ?? (isLanding ? 135 : 165));
+        const planSlug = sub.plan?.slug?.toLowerCase() || '';
+        const planName = sub.plan?.name?.toLowerCase() || '';
+        const isExpress = planSlug.includes('express') || planName.includes('express');
+        const isLanding = planSlug.includes('landing') || sub.planId === 1;
+        // EXPRESS renueva a S/90/ano (paquete admin_plia-100, 1GB).
+        const defaultRenewal = isExpress ? 90 : isLanding ? 135 : 165;
+        const renewalAmount = Number(sub.cycleAmount ?? defaultRenewal);
         
         if (sub.cardToken) {
           try {
