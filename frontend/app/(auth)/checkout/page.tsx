@@ -268,20 +268,40 @@ function Content() {
       setPayResult(null);
       setFormToken(null);
       try {
-        const accessToken = localStorage.getItem('access_token');
-        const prepareUrl = accessToken ? `${apiBase}/checkout/prepare-auth` : `${apiBase}/checkout/prepare`;
-        const prepareHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
-        if (accessToken) prepareHeaders.Authorization = `Bearer ${accessToken}`;
-        const prepareRes = await fetch(prepareUrl, {
-          method: 'POST',
-          headers: prepareHeaders,
-          body: JSON.stringify({
-            planId: selectedPlanId,
-            email,
-            domain: selectedDomain?.domain,
-            affiliateCode: readPliaRef() ?? undefined,
-          }),
+        let accessToken = localStorage.getItem('access_token');
+        const buildHeaders = (token: string | null): Record<string, string> => {
+          const h: Record<string, string> = { 'Content-Type': 'application/json' };
+          if (token) h.Authorization = `Bearer ${token}`;
+          return h;
+        };
+        const prepareBody = JSON.stringify({
+          planId: selectedPlanId,
+          email,
+          domain: selectedDomain?.domain,
+          affiliateCode: readPliaRef() ?? undefined,
         });
+
+        let prepareHeaders = buildHeaders(accessToken);
+        let prepareRes = await fetch(
+          accessToken ? `${apiBase}/checkout/prepare-auth` : `${apiBase}/checkout/prepare`,
+          { method: 'POST', headers: prepareHeaders, body: prepareBody },
+        );
+
+        // Si el token guardado esta vencido/invalido, prepare-auth responde 401.
+        // Limpiamos el token muerto y reintentamos como invitado para no bloquear
+        // la venta (la orden se vincula al usuario por su correo en el confirm).
+        if (!prepareRes.ok && accessToken && prepareRes.status === 401) {
+          try {
+            localStorage.removeItem('access_token');
+          } catch {}
+          accessToken = null;
+          prepareHeaders = buildHeaders(null);
+          prepareRes = await fetch(`${apiBase}/checkout/prepare`, {
+            method: 'POST',
+            headers: prepareHeaders,
+            body: prepareBody,
+          });
+        }
 
         if (!prepareRes.ok) {
           throw new Error('No se pudo preparar el checkout');
