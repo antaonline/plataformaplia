@@ -64,7 +64,7 @@ const STEPS: Step[] = [
     id: 'contact',
     kind: 'contact',
     question: 'Casi listo 🙌',
-    subtitle: '¿A dónde te enviamos los detalles de tu oferta?',
+    subtitle: 'Déjanos tus datos para asegurar tu oferta.',
     cta: 'Continuar',
   },
   {
@@ -359,7 +359,7 @@ export default function TuWebHoyPage() {
                     className="w-full h-14 rounded-xl bg-white/5 border border-white/15 px-4 text-lg text-white placeholder:text-white/30 focus:border-cta focus:outline-none focus:ring-2 focus:ring-cta/30 transition"
                   />
                   <p className="text-xs text-white/40 pt-1">
-                    Usamos tu WhatsApp solo para enviarte los detalles de tu web. Sin spam.
+                    Sin esperas: aseguras tu web y pagas al final. Tus datos van seguros, sin spam.
                   </p>
                 </div>
               ) : (
