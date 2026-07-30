@@ -183,7 +183,7 @@ export default function TuWebHoyPage() {
     step?.kind === 'text'
       ? businessName.trim().length >= 2
       : step?.kind === 'contact'
-        ? contactName.trim().length >= 2 && whatsapp.replace(/\D/g, '').length >= 6
+        ? contactName.trim().length >= 2 && whatsapp.replace(/\D/g, '').length === 9
         : selected !== null;
 
   const handleSelect = (opt: Option) => {
@@ -204,7 +204,7 @@ export default function TuWebHoyPage() {
     const payload = {
       businessName: businessName.trim() || undefined,
       contactName: contactName.trim() || undefined,
-      whatsapp: whatsapp.trim() || undefined,
+      whatsapp: whatsapp ? `+51 ${whatsapp}` : undefined,
       email: email.trim() || undefined,
       outcome,
       disqualifier,
@@ -339,14 +339,28 @@ export default function TuWebHoyPage() {
                     placeholder="Tu nombre"
                     className="w-full h-14 rounded-xl bg-white/5 border border-white/15 px-4 text-lg text-white placeholder:text-white/30 focus:border-cta focus:outline-none focus:ring-2 focus:ring-cta/30 transition"
                   />
-                  <input
-                    type="tel"
-                    inputMode="tel"
-                    value={whatsapp}
-                    onChange={(e) => setWhatsapp(e.target.value)}
-                    placeholder="WhatsApp (ej: 987 654 321)"
-                    className="w-full h-14 rounded-xl bg-white/5 border border-white/15 px-4 text-lg text-white placeholder:text-white/30 focus:border-cta focus:outline-none focus:ring-2 focus:ring-cta/30 transition"
-                  />
+                  <div className="flex items-stretch rounded-xl bg-white/5 border border-white/15 focus-within:border-cta focus-within:ring-2 focus-within:ring-cta/30 transition overflow-hidden">
+                    <span className="flex items-center gap-2 px-3.5 border-r border-white/15 text-white/85 text-lg font-medium select-none shrink-0">
+                      <svg width="18" height="12" viewBox="0 0 18 12" aria-hidden className="rounded-[2px]">
+                        <rect width="6" height="12" fill="#D91023" />
+                        <rect x="6" width="6" height="12" fill="#fff" />
+                        <rect x="12" width="6" height="12" fill="#D91023" />
+                      </svg>
+                      +51
+                    </span>
+                    <input
+                      type="tel"
+                      inputMode="numeric"
+                      value={whatsapp}
+                      onChange={(e) => setWhatsapp(e.target.value.replace(/\D/g, '').slice(0, 9))}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && canContinue) advance();
+                      }}
+                      placeholder="987 654 321"
+                      maxLength={9}
+                      className="flex-1 h-14 bg-transparent px-3.5 text-lg text-white placeholder:text-white/30 focus:outline-none"
+                    />
+                  </div>
                   <input
                     type="email"
                     inputMode="email"
