@@ -2,7 +2,7 @@
 
 export const dynamic = 'force-dynamic';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 
@@ -32,7 +32,7 @@ type Option = {
 
 type Step = {
   id: string;
-  kind: 'single' | 'text';
+  kind: 'single' | 'text' | 'contact';
   /** {business} se reemplaza por el nombre del negocio capturado. */
   question: string;
   subtitle?: string;
@@ -58,6 +58,13 @@ const STEPS: Step[] = [
     question: 'Empecemos por lo importante 👇',
     subtitle: '¿Cómo se llama tu negocio o proyecto?',
     placeholder: 'Ej: Panadería La Espiga',
+    cta: 'Continuar',
+  },
+  {
+    id: 'contact',
+    kind: 'contact',
+    question: 'Casi listo 🙌',
+    subtitle: '¿A dónde te enviamos los detalles de tu oferta?',
     cta: 'Continuar',
   },
   {
@@ -142,6 +149,27 @@ export default function TuWebHoyPage() {
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [selected, setSelected] = useState<string | null>(null);
   const [businessName, setBusinessName] = useState('');
+  const [contactName, setContactName] = useState('');
+  const [whatsapp, setWhatsapp] = useState('');
+  const [email, setEmail] = useState('');
+
+  // Origen de la visita (para saber quién llegó por el anuncio de Facebook).
+  const source = useRef<Record<string, string | undefined>>({});
+  const sentRef = useRef(false);
+
+  useEffect(() => {
+    try {
+      const p = new URLSearchParams(window.location.search);
+      source.current = {
+        utmSource: p.get('utm_source') || undefined,
+        utmMedium: p.get('utm_medium') || undefined,
+        utmCampaign: p.get('utm_campaign') || undefined,
+        fbclid: p.get('fbclid') || undefined,
+        referrer: document.referrer || undefined,
+        landingPath: window.location.pathname + window.location.search,
+      };
+    } catch {}
+  }, []);
 
   const step = STEPS[index];
   const business = businessName;
@@ -152,32 +180,75 @@ export default function TuWebHoyPage() {
   );
 
   const canContinue =
-    step?.kind === 'text' ? businessName.trim().length >= 2 : selected !== null;
+    step?.kind === 'text'
+      ? businessName.trim().length >= 2
+      : step?.kind === 'contact'
+        ? contactName.trim().length >= 2 && whatsapp.replace(/\D/g, '').length >= 6
+        : selected !== null;
 
   const handleSelect = (opt: Option) => {
     setSelected(opt.value);
   };
 
+  // Envía el lead al backend UNA sola vez, con la foto de respuestas del
+  // momento de decisión. Fire-and-forget (keepalive): nunca bloquea la UX,
+  // y sobrevive aunque la persona navegue al checkout enseguida.
+  const submitLead = (
+    outcome: 'APTO' | 'NOAPTO',
+    disqualifier: string | undefined,
+    answersSnapshot: Record<string, string>,
+  ) => {
+    if (sentRef.current) return;
+    sentRef.current = true;
+    const apiBase = (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3002').replace(/\/$/, '');
+    const payload = {
+      businessName: businessName.trim() || undefined,
+      contactName: contactName.trim() || undefined,
+      whatsapp: whatsapp.trim() || undefined,
+      email: email.trim() || undefined,
+      outcome,
+      disqualifier,
+      answers: answersSnapshot,
+      ...source.current,
+    };
+    try {
+      fetch(`${apiBase}/api/funnel-leads`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        keepalive: true,
+      }).catch(() => {});
+    } catch {}
+  };
+
   const advance = () => {
     if (!step) return;
 
-    // Registrar respuesta.
-    const value = step.kind === 'text' ? businessName.trim() : (selected ?? '');
-    const nextAnswers = { ...answers, [step.id]: value };
+    // Registrar respuesta (el paso de contacto no va al mapa de answers).
+    const value =
+      step.kind === 'text'
+        ? businessName.trim()
+        : step.kind === 'contact'
+          ? ''
+          : (selected ?? '');
+    const nextAnswers =
+      step.kind === 'contact' ? { ...answers } : { ...answers, [step.id]: value };
     setAnswers(nextAnswers);
 
-    // ¿La opción elegida descalifica?
+    // ¿La opción elegida descalifica? → no apto (se registra el lead igual).
     if (step.kind === 'single') {
       const chosen = step.options?.find((o) => o.value === selected);
       if (chosen?.disqualify) {
         setPhase('noapto');
+        submitLead('NOAPTO', step.id, nextAnswers);
         return;
       }
     }
 
-    // ¿Última pregunta? → apto.
+    // ¿Última pregunta? → apto (se registra el lead).
     if (index >= TOTAL - 1) {
       setPhase('apto');
+      submitLead('APTO', undefined, nextAnswers);
       return;
     }
 
@@ -258,6 +329,39 @@ export default function TuWebHoyPage() {
                   placeholder={step.placeholder}
                   className="w-full h-14 rounded-xl bg-white/5 border border-white/15 px-4 text-lg text-white placeholder:text-white/30 focus:border-cta focus:outline-none focus:ring-2 focus:ring-cta/30 transition"
                 />
+              ) : step.kind === 'contact' ? (
+                <div className="space-y-3">
+                  <input
+                    autoFocus
+                    type="text"
+                    value={contactName}
+                    onChange={(e) => setContactName(e.target.value)}
+                    placeholder="Tu nombre"
+                    className="w-full h-14 rounded-xl bg-white/5 border border-white/15 px-4 text-lg text-white placeholder:text-white/30 focus:border-cta focus:outline-none focus:ring-2 focus:ring-cta/30 transition"
+                  />
+                  <input
+                    type="tel"
+                    inputMode="tel"
+                    value={whatsapp}
+                    onChange={(e) => setWhatsapp(e.target.value)}
+                    placeholder="WhatsApp (ej: 987 654 321)"
+                    className="w-full h-14 rounded-xl bg-white/5 border border-white/15 px-4 text-lg text-white placeholder:text-white/30 focus:border-cta focus:outline-none focus:ring-2 focus:ring-cta/30 transition"
+                  />
+                  <input
+                    type="email"
+                    inputMode="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && canContinue) advance();
+                    }}
+                    placeholder="Correo (opcional)"
+                    className="w-full h-14 rounded-xl bg-white/5 border border-white/15 px-4 text-lg text-white placeholder:text-white/30 focus:border-cta focus:outline-none focus:ring-2 focus:ring-cta/30 transition"
+                  />
+                  <p className="text-xs text-white/40 pt-1">
+                    Usamos tu WhatsApp solo para enviarte los detalles de tu web. Sin spam.
+                  </p>
+                </div>
               ) : (
                 step.options?.map((opt) => {
                   const active = selected === opt.value;

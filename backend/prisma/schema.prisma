@@ -573,3 +573,31 @@ enum user_role {
   USER
   ADMIN
 }
+
+// Leads capturados por el embudo /tu-web-hoy (anuncios de Facebook).
+// Guarda las respuestas del quiz + el resultado (apto/no apto) + contacto +
+// el origen de la campaña, para verlos en el panel de admin. outcome:
+// 'APTO' (pasó al checkout) | 'NOAPTO' (descalificado). answers = JSON string.
+model FunnelLead {
+  id           Int      @id @default(autoincrement())
+  businessName String?  @db.Text
+  contactName  String?
+  whatsapp     String?
+  email        String?
+  outcome      String
+  disqualifier String?
+  answers      String   @db.Text
+  utmSource    String?
+  utmMedium    String?
+  utmCampaign  String?
+  fbclid       String?  @db.Text
+  referrer     String?  @db.Text
+  landingPath  String?  @db.Text
+  ipHash       String?
+  userAgent    String?  @db.Text
+  createdAt    DateTime @default(now())
+
+  @@index([outcome])
+  @@index([createdAt])
+  @@map("funnellead")
+}

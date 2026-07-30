@@ -32,6 +32,7 @@ import { SandboxModule } from './experimental/sandbox/sandbox.module';
 import { PreviewModule } from './experimental/preview/preview.module';
 import { SiteContactModule } from './site-contact/site-contact.module';
 import { AffiliatesModule } from './affiliates/affiliates.module';
+import { FunnelLeadsModule } from './funnel-leads/funnel-leads.module';
 
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler'
 import { APP_GUARD } from '@nestjs/core'
@@ -73,6 +74,7 @@ import { APP_GUARD } from '@nestjs/core'
     PreviewModule,
     SiteContactModule,
     AffiliatesModule,
+    FunnelLeadsModule,
   ],
   controllers: [AppController, OrdersController],
   providers: [
