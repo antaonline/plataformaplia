@@ -1,12 +1,12 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Download, Users, CheckCircle2, XCircle } from 'lucide-react';
+import { Loader2, Download, Users, CheckCircle2, XCircle, ChevronDown } from 'lucide-react';
 
 const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3002';
 const apiBase = apiUrl.endsWith('/api') ? apiUrl : `${apiUrl}/api`;
@@ -73,6 +73,27 @@ const ANSWER_LABELS: Record<string, string> = {
   budget: 'Presupuesto',
 };
 
+// Valores de cada pregunta → texto legible (los mismos del embudo).
+const VALUE_LABELS: Record<string, Record<string, string>> = {
+  intro: { si: 'Sí, lo sabía', no: 'No lo sabía' },
+  type: {
+    negocio: 'Para mi negocio', personal: 'Marca personal', tienda: 'Tienda online',
+    servicios: 'Servicios profesionales', otro: 'Otro',
+  },
+  process: { si: 'Sí, me encanta', no: 'No' },
+  urgency: { hoy: 'La necesita hoy', '24h': 'En 24 horas', pronto: 'Lo antes posible', consultando: 'Solo consultando' },
+  readiness: { lista: 'Sí, la tiene lista', hoy: 'La prepara hoy', no: 'No, pero puede conseguirla' },
+  identity: {
+    emprendedor: 'Emprendedor', independiente: 'Profesional independiente',
+    negocio: 'Persona con negocio', empresario: 'Empresario', otro: 'Otro',
+  },
+  budget: { si: 'Sí, quiere empezar hoy', consultando: 'Sí, pero consultando', no: 'No por ahora' },
+};
+
+function answerLabel(key: string, value: string): string {
+  return VALUE_LABELS[key]?.[value] ?? value;
+}
+
 function isFacebook(l: Lead): boolean {
   const u = (l.utmSource || '').toLowerCase();
   return !!l.fbclid || u.includes('facebook') || u.includes('fb') || u.includes('ig');
@@ -112,6 +133,7 @@ export function AdminFunnelLeadsPanel() {
   const [source, setSource] = useState<'ALL' | 'facebook'>('ALL');
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
 
   const range = useMemo(() => computeRange(preset, customFrom, customTo), [preset, customFrom, customTo]);
 
@@ -261,48 +283,106 @@ export function AdminFunnelLeadsPanel() {
               </tr>
             </thead>
             <tbody>
-              {leads.map((l) => (
-                <tr key={l.id} className="border-t border-border/60 align-top">
-                  <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">{fmtDate(l.createdAt)}</td>
-                  <td className="px-4 py-3 font-medium">{l.businessName || '—'}</td>
-                  <td className="px-4 py-3">
-                    <p className="font-medium">{l.contactName || '—'}</p>
-                    {l.whatsapp && (
-                      <a
-                        href={`https://wa.me/${l.whatsapp.replace(/\D/g, '')}`}
-                        target="_blank" rel="noopener noreferrer"
-                        className="text-xs text-emerald-600 font-medium hover:underline"
-                      >
-                        {l.whatsapp}
-                      </a>
+              {leads.map((l) => {
+                const answerEntries = Object.entries(l.answers || {}).filter(
+                  ([k]) => k !== 'business' && k !== 'contact',
+                );
+                const open = expandedId === l.id;
+                const detailRows: [string, string | null | undefined][] = [
+                  ['Negocio', l.businessName],
+                  ['Nombre', l.contactName],
+                  ['WhatsApp', l.whatsapp],
+                  ['Correo', l.email],
+                  [
+                    'Resultado',
+                    l.outcome === 'APTO'
+                      ? 'Apto'
+                      : `No apto — se cayó en: ${ANSWER_LABELS[l.disqualifier ?? ''] ?? l.disqualifier ?? '—'}`,
+                  ],
+                  ['Origen', sourceLabel(l)],
+                  ['Campaña', l.utmCampaign],
+                  ['utm_source', l.utmSource],
+                  ['Landing', l.landingPath],
+                ];
+                return (
+                  <Fragment key={l.id}>
+                    <tr
+                      className="border-t border-border/60 align-top cursor-pointer hover:bg-muted/30"
+                      onClick={() => setExpandedId(open ? null : l.id)}
+                    >
+                      <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">
+                        <span className="inline-flex items-center gap-1.5">
+                          <ChevronDown className={cn('w-3.5 h-3.5 shrink-0 transition-transform', open && 'rotate-180')} />
+                          {fmtDate(l.createdAt)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 font-medium">{l.businessName || '—'}</td>
+                      <td className="px-4 py-3">
+                        <p className="font-medium">{l.contactName || '—'}</p>
+                        {l.whatsapp && (
+                          <a
+                            href={`https://wa.me/${l.whatsapp.replace(/\D/g, '')}`}
+                            target="_blank" rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="text-xs text-emerald-600 font-medium hover:underline"
+                          >
+                            {l.whatsapp}
+                          </a>
+                        )}
+                        {l.email && <p className="text-xs text-muted-foreground">{l.email}</p>}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={cn(
+                          'text-xs font-semibold px-2 py-0.5 rounded-full',
+                          l.outcome === 'APTO' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700',
+                        )}>
+                          {l.outcome === 'APTO' ? 'Apto' : 'No apto'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-xs">{sourceLabel(l)}</td>
+                      <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">
+                        {answerEntries.length
+                          ? `${answerEntries.length} ${answerEntries.length === 1 ? 'respuesta' : 'respuestas'} · ver`
+                          : '—'}
+                      </td>
+                    </tr>
+                    {open && (
+                      <tr className="bg-muted/20">
+                        <td colSpan={6} className="px-4 py-5">
+                          <div className="grid gap-6 md:grid-cols-2">
+                            <div>
+                              <p className="text-xs font-bold uppercase text-muted-foreground mb-3">Respuestas del quiz</p>
+                              {answerEntries.length ? (
+                                <dl className="space-y-2">
+                                  {answerEntries.map(([k, v]) => (
+                                    <div key={k} className="flex gap-3 text-sm">
+                                      <dt className="text-muted-foreground min-w-[140px] shrink-0">{ANSWER_LABELS[k] ?? k}</dt>
+                                      <dd className="font-medium">{answerLabel(k, v)}</dd>
+                                    </div>
+                                  ))}
+                                </dl>
+                              ) : (
+                                <p className="text-sm text-muted-foreground">Sin respuestas registradas.</p>
+                              )}
+                            </div>
+                            <div>
+                              <p className="text-xs font-bold uppercase text-muted-foreground mb-3">Contacto y origen</p>
+                              <dl className="space-y-2 text-sm">
+                                {detailRows.filter(([, v]) => v).map(([label, v]) => (
+                                  <div key={label} className="flex gap-3">
+                                    <dt className="text-muted-foreground min-w-[110px] shrink-0">{label}</dt>
+                                    <dd className="font-medium break-all">{v}</dd>
+                                  </div>
+                                ))}
+                              </dl>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
                     )}
-                    {l.email && <p className="text-xs text-muted-foreground">{l.email}</p>}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={cn(
-                      'text-xs font-semibold px-2 py-0.5 rounded-full',
-                      l.outcome === 'APTO' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700',
-                    )}>
-                      {l.outcome === 'APTO' ? 'Apto' : 'No apto'}
-                    </span>
-                    {l.outcome === 'NOAPTO' && l.disqualifier && (
-                      <p className="text-[11px] text-muted-foreground mt-1">se cayó en: {ANSWER_LABELS[l.disqualifier] ?? l.disqualifier}</p>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-xs">{sourceLabel(l)}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-wrap gap-1 max-w-xs">
-                      {Object.entries(l.answers || {})
-                        .filter(([k]) => k !== 'business' && k !== 'contact')
-                        .map(([k, v]) => (
-                          <span key={k} className="text-[11px] bg-muted rounded px-1.5 py-0.5">
-                            <span className="text-muted-foreground">{ANSWER_LABELS[k] ?? k}:</span> {v}
-                          </span>
-                        ))}
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                  </Fragment>
+                );
+              })}
             </tbody>
           </table>
         </div>
