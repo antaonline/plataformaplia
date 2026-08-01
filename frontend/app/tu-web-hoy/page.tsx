@@ -46,31 +46,23 @@ const STEPS: Step[] = [
     id: 'intro',
     kind: 'single',
     question: '¿Sabías que puedes tener tu página web lista hoy mismo, 100% online y sin reuniones?',
-    subtitle: 'Responde unas preguntas rápidas y descubre si califico para la oferta.',
+    subtitle: 'Cuéntanos sobre ti y comenzamos hoy mismo.',
     options: [
       { label: 'Sí, lo sabía', value: 'si' },
       { label: 'No, no lo sabía', value: 'no' },
     ],
   },
   {
-    id: 'business',
-    kind: 'text',
-    question: 'Empecemos por lo importante 👇',
-    subtitle: '¿Cómo se llama tu negocio o proyecto?',
-    placeholder: 'Ej: Panadería La Espiga',
-    cta: 'Continuar',
-  },
-  {
     id: 'contact',
     kind: 'contact',
-    question: 'Casi listo 🙌',
-    subtitle: 'Déjanos tus datos para asegurar tu oferta.',
+    question: '¡Genial! ¿Cómo te llamas?',
+    subtitle: 'Ingresa tus datos para reservar tu web.',
     cta: 'Continuar',
   },
   {
     id: 'type',
     kind: 'single',
-    question: '¿Qué tipo de web necesitas para {business}?',
+    question: '¿Qué tipo de web necesitas, {name}?',
     options: [
       { label: 'Para mi negocio', value: 'negocio' },
       { label: 'Marca personal', value: 'personal' },
@@ -80,66 +72,23 @@ const STEPS: Step[] = [
     ],
   },
   {
-    id: 'process',
-    kind: 'single',
-    question:
-      'En PLIA no hay reuniones. Después del pago completas un formulario corto con los datos de {business} y comenzamos el diseño de inmediato. ¿Te gustaría continuar?',
-    options: [
-      { label: 'Sí, me encanta', value: 'si', emoji: '🚀' },
-      { label: 'No', value: 'no', disqualify: true },
-    ],
-  },
-  {
     id: 'urgency',
     kind: 'single',
-    question: '¿Para cuándo necesitas la web de {business}?',
+    question: '¿Para cuándo la necesitas, {name}?',
     options: [
-      { label: 'La necesito hoy', value: 'hoy' },
-      { label: 'En 24 horas', value: '24h' },
+      { label: 'La necesito hoy', value: 'hoy', emoji: '🚀' },
+      { label: 'Esta semana', value: 'semana' },
       { label: 'Lo antes posible', value: 'pronto' },
-      { label: 'Solo estoy consultando', value: 'consultando', disqualify: true },
-    ],
-  },
-  {
-    id: 'readiness',
-    kind: 'single',
-    question: '¿Ya tienes la información de {business} (logo, textos, fotos)?',
-    options: [
-      { label: 'Sí, la tengo lista', value: 'lista' },
-      { label: 'La preparo hoy', value: 'hoy' },
-      { label: 'No, pero puedo conseguirla', value: 'no' },
-    ],
-  },
-  {
-    id: 'identity',
-    kind: 'single',
-    question: 'Para conocerte mejor, tú eres...',
-    options: [
-      { label: 'Emprendedor', value: 'emprendedor' },
-      { label: 'Profesional independiente', value: 'independiente' },
-      { label: 'Persona con negocio', value: 'negocio' },
-      { label: 'Empresario', value: 'empresario' },
-      { label: 'Otro', value: 'otro' },
-    ],
-  },
-  {
-    id: 'budget',
-    kind: 'single',
-    question:
-      'El plan WEB EXPRESS cuesta S/100 (pago único) e incluye hosting gratis por 1 año. ¿Cuentas con ese presupuesto para empezar ahora?',
-    options: [
-      { label: 'Sí, quiero empezar hoy', value: 'si', emoji: '✅' },
-      { label: 'Sí, pero solo estoy consultando', value: 'consultando', disqualify: true },
-      { label: 'No por ahora', value: 'no', disqualify: true },
+      { label: 'Todavía estoy evaluando', value: 'evaluando', disqualify: true },
     ],
   },
 ];
 
 const TOTAL = STEPS.length;
 
-function fill(text: string, business: string): string {
-  const name = business.trim() || 'tu negocio';
-  return text.replace(/\{business\}/g, name);
+function fill(text: string, firstName: string): string {
+  const name = firstName.trim() || 'tú';
+  return text.replace(/\{name\}/g, name);
 }
 
 export default function TuWebHoyPage() {
@@ -172,7 +121,8 @@ export default function TuWebHoyPage() {
   }, []);
 
   const step = STEPS[index];
-  const business = businessName;
+  // Primer nombre del cliente para personalizar las preguntas
+  const firstName = contactName.trim().split(/\s+/)[0] || '';
 
   const progress = useMemo(
     () => Math.round(((index + (phase === 'quiz' ? 0 : 1)) / TOTAL) * 100),
@@ -259,13 +209,8 @@ export default function TuWebHoyPage() {
 
   const goToCheckout = () => {
     const params = new URLSearchParams({ plan: 'express' });
-    if (business.trim()) params.set('business', business.trim());
-    // Persistimos el nombre para autocompletar el brief tras el pago.
-    try {
-      if (business.trim()) {
-        localStorage.setItem('plia_express_business', business.trim());
-      }
-    } catch {}
+    // Pasamos el primer nombre para personalizar el checkout.
+    if (firstName) params.set('name', firstName);
     router.push(`/checkout?${params.toString()}`);
   };
 
@@ -305,14 +250,14 @@ export default function TuWebHoyPage() {
         {phase === 'quiz' && step && (
           <div key={step.id} className="flex-1 flex flex-col animate-fadein">
             <p className="text-xs font-semibold uppercase tracking-widest text-cta mt-6 mb-3">
-              Pregunta {index + 1} de {TOTAL}
+              Paso {index + 1} de {TOTAL}
             </p>
             <h1 className="text-2xl md:text-3xl font-bold leading-tight">
-              {fill(step.question, business)}
+              {fill(step.question, firstName)}
             </h1>
             {step.subtitle && (
               <p className="text-white/60 mt-3 text-base">
-                {fill(step.subtitle, business)}
+                {fill(step.subtitle, firstName)}
               </p>
             )}
 
@@ -415,14 +360,14 @@ export default function TuWebHoyPage() {
           <div className="flex-1 flex flex-col justify-center animate-fadein py-10">
             <div className="text-5xl mb-4">🎉</div>
             <h1 className="text-3xl md:text-4xl font-extrabold leading-tight">
-              ¡Felicitaciones{business.trim() ? `, ${business.trim()}` : ''}!
+              {firstName ? `¡Todo listo, ${firstName}!` : '¡Todo listo!'}
               <br />
-              <span className="text-cta">Eres apto para la oferta.</span>
+              <span className="text-cta">Tu web empieza hoy.</span>
             </h1>
             <p className="text-white/70 mt-5 text-lg">
-              Tu página web está a un solo paso. A continuación aseguras tu plan{' '}
+              Un solo paso más y comenzamos. Asegura tu plan{' '}
               <b className="text-white">WEB EXPRESS por S/100</b> (pago único, hosting
-              gratis 1 año) y comenzamos de inmediato:{' '}
+              gratis 1 año) y tendrás tu web{' '}
               <b className="text-white">lista hoy mismo</b>.
             </p>
 
@@ -432,9 +377,9 @@ export default function TuWebHoyPage() {
               </p>
               <ul className="space-y-2 text-sm">
                 <li className="flex justify-between gap-4">
-                  <span className="text-white/60">Negocio</span>
+                  <span className="text-white/60">Cliente</span>
                   <span className="font-semibold text-right">
-                    {business.trim() || '—'}
+                    {contactName.trim() || '—'}
                   </span>
                 </li>
                 <li className="flex justify-between gap-4">
@@ -456,21 +401,31 @@ export default function TuWebHoyPage() {
 
         {phase === 'noapto' && (
           <div className="flex-1 flex flex-col justify-center animate-fadein py-10">
-            <div className="text-5xl mb-4">🙌</div>
+            <div className="text-5xl mb-4">📌</div>
             <h1 className="text-3xl md:text-4xl font-extrabold leading-tight">
-              ¡Gracias por tu interés!
+              {firstName ? `Tu lugar está reservado, ${firstName}.` : 'Tu lugar está reservado.'}
+              <br />
+              <span className="text-cta">La oferta te espera.</span>
             </h1>
             <p className="text-white/70 mt-5 text-lg">
-              Por ahora el plan express no es para ti, pero en PLIA tenemos otras
-              formas de tener tu web profesional. Mira todo lo que podemos hacer por{' '}
-              {business.trim() || 'tu proyecto'}.
+              Cuando estés listo, escríbenos y empezamos ese mismo día.
+              El plan WEB EXPRESS a{' '}
+              <b className="text-white">S/100</b> sigue disponible para ti.
             </p>
+
+            {/* Recordatorio visual de la oferta */}
+            <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-5 flex items-center gap-4">
+              <span className="text-3xl">🚀</span>
+              <div>
+                <p className="font-bold text-white">Web Express — S/100</p>
+                <p className="text-sm text-white/50">Hosting gratis 1 año · Lista el mismo día · Pago único</p>
+              </div>
+            </div>
+
             <div className="mt-8 flex flex-col gap-3">
               <a
                 href={`https://wa.me/51958617185?text=${encodeURIComponent(
-                  `Hola PLIA, busco un servicio personalizado de desarrollo web${
-                    business.trim() ? ` para ${business.trim()}` : ''
-                  }.`,
+                  `Hola PLIA, quiero retomar mi solicitud de web${firstName ? `. Soy ${firstName}` : ''}.`,
                 )}`}
                 target="_blank"
                 rel="noopener noreferrer"
@@ -479,20 +434,15 @@ export default function TuWebHoyPage() {
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
                   <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51l-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.71.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
                 </svg>
-                Consultar por WhatsApp
+                Escríbenos cuando estés listo
               </a>
-              <a
-                href="/planes"
-                className="w-full h-14 rounded-xl bg-cta text-cta-foreground font-bold text-lg flex items-center justify-center hover:bg-cta-hover transition"
+              <button
+                type="button"
+                onClick={goToCheckout}
+                className="w-full h-12 rounded-xl border border-cta/40 text-cta font-medium flex items-center justify-center hover:bg-cta/10 transition"
               >
-                Ver nuestros servicios
-              </a>
-              <a
-                href="/"
-                className="w-full h-12 rounded-xl border border-white/15 text-white/80 font-medium flex items-center justify-center hover:bg-white/5 transition"
-              >
-                Ir al inicio
-              </a>
+                Empezar ahora de todas formas →
+              </button>
             </div>
           </div>
         )}

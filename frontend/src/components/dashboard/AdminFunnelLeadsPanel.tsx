@@ -81,7 +81,12 @@ const VALUE_LABELS: Record<string, Record<string, string>> = {
     servicios: 'Servicios profesionales', otro: 'Otro',
   },
   process: { si: 'Sí, me encanta', no: 'No' },
-  urgency: { hoy: 'La necesita hoy', '24h': 'En 24 horas', pronto: 'Lo antes posible', consultando: 'Solo consultando' },
+  urgency: {
+    hoy: 'La necesita hoy', semana: 'Esta semana', pronto: 'Lo antes posible',
+    evaluando: 'Todavía estoy evaluando',
+    // valores del embudo anterior (para leads históricos):
+    '24h': 'En 24 horas', consultando: 'Solo consultando',
+  },
   readiness: { lista: 'Sí, la tiene lista', hoy: 'La prepara hoy', no: 'No, pero puede conseguirla' },
   identity: {
     emprendedor: 'Emprendedor', independiente: 'Profesional independiente',
@@ -275,7 +280,6 @@ export function AdminFunnelLeadsPanel() {
             <thead className="bg-muted/50 text-muted-foreground">
               <tr className="text-left">
                 <th className="px-4 py-2 font-medium">Fecha</th>
-                <th className="px-4 py-2 font-medium">Negocio</th>
                 <th className="px-4 py-2 font-medium">Contacto</th>
                 <th className="px-4 py-2 font-medium">Resultado</th>
                 <th className="px-4 py-2 font-medium">Origen</th>
@@ -316,7 +320,6 @@ export function AdminFunnelLeadsPanel() {
                           {fmtDate(l.createdAt)}
                         </span>
                       </td>
-                      <td className="px-4 py-3 font-medium">{l.businessName || '—'}</td>
                       <td className="px-4 py-3">
                         <p className="font-medium">{l.contactName || '—'}</p>
                         {l.whatsapp && (
@@ -348,7 +351,7 @@ export function AdminFunnelLeadsPanel() {
                     </tr>
                     {open && (
                       <tr className="bg-muted/20">
-                        <td colSpan={6} className="px-4 py-5">
+                        <td colSpan={5} className="px-4 py-5">
                           <div className="grid gap-6 md:grid-cols-2">
                             <div>
                               <p className="text-xs font-bold uppercase text-muted-foreground mb-3">Respuestas del quiz</p>
