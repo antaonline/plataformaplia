@@ -77,8 +77,9 @@ const ANSWER_LABELS: Record<string, string> = {
 const VALUE_LABELS: Record<string, Record<string, string>> = {
   intro: { si: 'Sí, lo sabía', no: 'No lo sabía' },
   type: {
-    negocio: 'Para mi negocio', personal: 'Marca personal', tienda: 'Tienda online',
+    negocio: 'Para mi negocio', personal: 'Marca personal', catalogo: 'Catálogo de productos',
     servicios: 'Servicios profesionales', otro: 'Otro',
+    tienda: 'Tienda online', // valor del embudo anterior (leads históricos)
   },
   process: { si: 'Sí, me encanta', no: 'No' },
   urgency: {

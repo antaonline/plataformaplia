@@ -66,7 +66,7 @@ const STEPS: Step[] = [
     options: [
       { label: 'Para mi negocio', value: 'negocio' },
       { label: 'Marca personal', value: 'personal' },
-      { label: 'Tienda online', value: 'tienda' },
+      { label: 'Catálogo de productos', value: 'catalogo' },
       { label: 'Servicios profesionales', value: 'servicios' },
       { label: 'Otro', value: 'otro' },
     ],
