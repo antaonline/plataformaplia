@@ -520,7 +520,7 @@ function Content() {
           </div>
           <p className="text-muted-foreground mt-2">
             {step === 1
-              ? 'Configura tu plan y asegura tu dominio antes de pagar.'
+              ? 'Revisa tu plan y continúa para asegurar tu web hoy.'
               : 'Un ultimo paso: ingresa tus datos y activa tu servicio ahora!'}
           </p>
 
@@ -588,22 +588,34 @@ function Content() {
                   </Card>
 
                   {!domainParam && (
-                    <Card className="rounded-2xl">
+                    <Card className="rounded-2xl border-dashed">
                       <CardHeader className="pb-3">
-                        <CardTitle className="text-xl">Asegura tu dominio</CardTitle>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <CardTitle className="text-xl">Asegura tu dominio</CardTitle>
+                          <span className="rounded-full bg-cta/10 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-cta-foreground">
+                            Próximamente
+                          </span>
+                        </div>
                       </CardHeader>
                       <CardContent className="space-y-4">
                         <p className="text-sm text-muted-foreground">
-                          Busca un dominio disponible y agregalo a tu pedido.
+                          Tu web incluye un <b className="text-foreground">subdominio gratis</b> para
+                          publicarla al instante. ¿Quieres tu dominio propio (.com o .pe)?{' '}
+                          <b className="text-foreground">Lo conectamos sin costo</b> — la compra de
+                          dominios desde aquí estará disponible muy pronto.
                         </p>
 
-                        <div className="flex flex-col md:flex-row gap-3">
+                        {/* Buscador deshabilitado por ahora (la compra de dominios aún no
+                            está habilitada). Se mantiene visible en gris para que el cliente
+                            sepa que vendrá, sin bloquear la compra. */}
+                        <div className="flex flex-col gap-3 opacity-50 pointer-events-none select-none md:flex-row">
                           <Input
                             placeholder="tudominio.com"
                             value={domainQuery}
                             onChange={(e) => setDomainQuery(e.target.value)}
+                            disabled
                           />
-                          <Button variant="cta" onClick={searchDomain} disabled={domainLoading}>
+                          <Button variant="cta" onClick={searchDomain} disabled>
                             {domainLoading ? 'Buscando...' : 'Buscar'}
                           </Button>
                         </div>
@@ -611,34 +623,18 @@ function Content() {
                         {domainError && (
                           <p className="text-sm text-destructive">{domainError}</p>
                         )}
+                        {domainResults.map((result) => (
+                          <span key={result.domain} className="hidden" onClick={() => setSelectedDomain(result)} />
+                        ))}
 
-                        <div className="space-y-3">
-                          {domainResults.map((result) => (
-                            <div
-                              key={result.domain}
-                              className="flex items-center justify-between rounded-xl border border-border bg-background px-4 py-3"
-                            >
-                              <div>
-                                <p className="font-medium">{result.domain}</p>
-                                <p className="text-xs text-muted-foreground">
-                                  {result.available ? 'Disponible' : 'No disponible'}
-                                </p>
-                              </div>
-                              <div className="flex items-center gap-3">
-                                <span className="text-sm font-semibold">
-                                  {result.currency} {result.price}
-                                </span>
-                                <Button
-                                  variant="cta"
-                                  size="sm"
-                                  disabled={!result.available}
-                                  onClick={() => setSelectedDomain(result)}
-                                >
-                                  Agregar
-                                </Button>
-                              </div>
-                            </div>
-                          ))}
+                        <div className="flex items-start gap-2 rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-3 text-sm text-emerald-700">
+                          <svg className="mt-0.5 h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="20 6 9 17 4 12" />
+                          </svg>
+                          <span>
+                            No necesitas hacer nada ahora — <b>continúa y asegura tu web hoy</b>. Del
+                            dominio nos encargamos contigo después, sin costo.
+                          </span>
                         </div>
                       </CardContent>
                     </Card>
